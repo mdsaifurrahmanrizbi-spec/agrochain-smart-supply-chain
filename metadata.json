@@ -1,0 +1,6 @@
+{
+  "name": "AgroChain - Smart Agricultural Supply Chain & Traceability Platform",
+  "description": "Smart Bangladesh-based agricultural supply chain and traceability platform connecting farmers, customers, delivery partners, warehouses, quality inspectors, and administrators.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
