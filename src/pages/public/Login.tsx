@@ -1,5 +1,5 @@
 ﻿import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
 import { UserRole } from '../../types';
@@ -8,7 +8,14 @@ import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react'
 export const Login: React.FC = () => {
   const { login, switchDemoRole } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@agrochain.gov.bd');
+  const location = useLocation();
+  const availableRoles: UserRole[] = location.pathname.startsWith('/admin-portal')
+    ? ['admin']
+    : location.pathname.startsWith('/warehouse-portal')
+      ? ['warehouse', 'inspector']
+      : ['farmer', 'buyer', 'delivery'];
+  const [selectedRole, setSelectedRole] = useState<UserRole>(availableRoles[0]);
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -28,7 +35,7 @@ export const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      const authenticatedUser = await login(email, password);
+      const authenticatedUser = await login(email, password, selectedRole);
       const rolePaths: Record<UserRole, string> = {
         admin: '/admin/dashboard',
         farmer: '/farmer/dashboard',
@@ -84,6 +91,21 @@ export const Login: React.FC = () => {
               </div>
             </div>
 
+            <div>
+              <label className="block text-slate-700 font-semibold mb-1">Sign in as</label>
+              <select
+                required
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value as UserRole)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600 text-slate-900"
+              >
+                {availableRoles.map((role) => (
+                  <option key={role} value={role}>
+                    {{ admin: 'Admin', farmer: 'Farmer / Seller', buyer: 'Customer / Buyer', delivery: 'Delivery Partner', warehouse: 'Warehouse Staff', inspector: 'Quality Inspector' }[role]}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-slate-700 font-semibold">Password</label>
@@ -152,11 +174,18 @@ export const Login: React.FC = () => {
           )}
         </div>
 
+        {location.pathname === '/login' && (
+          <div className="text-center text-xs text-slate-500 space-y-2">
+            <p>Staff access: <Link to="/warehouse-portal/login" className="text-emerald-700 font-bold hover:underline">Warehouse / Inspector</Link> · <Link to="/admin-portal/login" className="text-emerald-700 font-bold hover:underline">Admin Portal</Link></p>
+          </div>
+        )}
         <div className="text-center text-xs text-slate-500">
           Need an account?{' '}
+          {availableRoles.some((role) => ['farmer', 'buyer', 'delivery'].includes(role)) && (
           <Link to="/register" className="text-emerald-700 font-bold hover:underline">
             Register as Farmer, Buyer, or Delivery Partner
           </Link>
+          )}
         </div>
       </div>
     </div>
