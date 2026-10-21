@@ -449,7 +449,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
         id: `trk-${Date.now()}-1`,
         orderId: newOrder.id,
         title: 'ORDER CONFIRMED',
-        description: `Order successfully placed for Ã Â§Â³${newOrder.totalAmount.toLocaleString()} via ${newOrder.paymentMethod}.`,
+        description: `Order successfully placed for ৳${newOrder.totalAmount.toLocaleString()} via ${newOrder.paymentMethod}.`,
         location: newOrder.buyerCity,
         timestamp: newOrder.createdAt,
         actorRole: 'Customer',
