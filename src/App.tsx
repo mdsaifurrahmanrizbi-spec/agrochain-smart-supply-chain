@@ -96,6 +96,10 @@ export default function App() {
               <Route path="/contact" element={<Contact />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/warehouse-portal" element={<Navigate to="/warehouse-portal/login" replace />} />
+              <Route path="/warehouse-portal/login" element={<Login />} />
+              <Route path="/admin-portal" element={<Navigate to="/admin-portal/login" replace />} />
+              <Route path="/admin-portal/login" element={<Login />} />
             </Route>
 
             {/* Farmer Portal with DashboardLayout */}
