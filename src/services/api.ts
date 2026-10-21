@@ -233,11 +233,11 @@ export const agroApi = {
   },
 
   // Authenticate only against the backend; never silently fall back to a mock user.
-  async login(email: string, password: string): Promise<{ token: string; user: User }> {
+  async login(email: string, password: string, role: User['role']): Promise<{ token: string; user: User }> {
     const res = await fetch(`${API_BASE_URL}/login/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, role }),
     });
 
     const data = await res.json().catch(() => ({}));
