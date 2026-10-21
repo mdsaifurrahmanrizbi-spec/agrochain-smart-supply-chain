@@ -249,7 +249,7 @@ export const BuyerCheckout: React.FC = () => {
                 >
                   {savedAddresses.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.label}{item.isDefault ? ' (Default)' : ''} â€” {item.area}, {item.district}
+                      {item.label}{item.isDefault ? ' (Default)' : ''} — {item.area}, {item.district}
                     </option>
                   ))}
                   <option value="">Enter a different address manually</option>
@@ -280,7 +280,7 @@ export const BuyerCheckout: React.FC = () => {
                   }`}
                 >
                   Inside Dhaka
-                  <span className="block text-[10px] font-normal">Base Charge: à§³70</span>
+                  <span className="block text-[10px] font-normal">Base Charge: ৳70</span>
                 </button>
 
                 <button
@@ -293,7 +293,7 @@ export const BuyerCheckout: React.FC = () => {
                   }`}
                 >
                   Outside Dhaka
-                  <span className="block text-[10px] font-normal">Base Charge: à§³130</span>
+                  <span className="block text-[10px] font-normal">Base Charge: ৳130</span>
                 </button>
               </div>
             </div>
@@ -440,11 +440,11 @@ export const BuyerCheckout: React.FC = () => {
                   <div className="min-w-0">
                     <div className="font-semibold text-slate-900 truncate">{item.product.name}</div>
                     <div className="text-[11px] text-slate-500">
-                      {item.quantity} {item.product.unit} Ã— à§³{item.product.pricePerUnit}
+                      {item.quantity} {item.product.unit} × ৳{item.product.pricePerUnit}
                     </div>
                   </div>
                   <span className="font-bold shrink-0">
-                    à§³{(item.product.pricePerUnit * item.quantity).toLocaleString()}
+                    ৳{(item.product.pricePerUnit * item.quantity).toLocaleString()}
                   </span>
                 </div>
               ))}
@@ -453,7 +453,7 @@ export const BuyerCheckout: React.FC = () => {
             <div className="pt-3 border-t border-slate-100 space-y-3 text-slate-600">
               <div className="flex justify-between">
                 <span>Product Subtotal</span>
-                <span className="font-bold text-slate-900">à§³{subtotal.toLocaleString()}</span>
+                <span className="font-bold text-slate-900">৳{subtotal.toLocaleString()}</span>
               </div>
 
               <div className="flex justify-between items-center text-[11px]">
@@ -467,21 +467,21 @@ export const BuyerCheckout: React.FC = () => {
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-2">
                 <div className="flex justify-between font-medium text-slate-800">
                   <span>Freight Charge</span>
-                  <span className="font-bold text-emerald-800">à§³{deliveryFee}</span>
+                  <span className="font-bold text-emerald-800">৳{deliveryFee}</span>
                 </div>
                 <div className="text-[10px] text-slate-500 flex justify-between">
                   <span>Base fee ({isDhaka ? 'Inside Dhaka' : 'Outside Dhaka'})</span>
-                  <span>à§³{feeCalculation.baseFee}</span>
+                  <span>৳{feeCalculation.baseFee}</span>
                 </div>
                 <div className="text-[10px] text-slate-500 flex justify-between">
                   <span>Weight surcharge</span>
-                  <span>à§³{feeCalculation.weightFee}</span>
+                  <span>৳{feeCalculation.weightFee}</span>
                 </div>
               </div>
 
               <div className="flex justify-between pt-3 border-t border-slate-100 text-sm font-bold text-slate-900">
                 <span>Grand Total</span>
-                <span className="text-emerald-700 text-base">à§³{grandTotal.toLocaleString()}</span>
+                <span className="text-emerald-700 text-base">৳{grandTotal.toLocaleString()}</span>
               </div>
             </div>
 
