@@ -185,7 +185,7 @@ export const InspectorWorkspace: React.FC = () => {
                   <div className="text-xs font-bold text-slate-800">{c.cropName}</div>
                   <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
                     <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
-                    <span>{c.farmerName} Â· {c.farmLocation}</span>
+                    <span>{c.farmerName} · {c.farmLocation}</span>
                   </div>
                 </div>
               );
@@ -202,10 +202,10 @@ export const InspectorWorkspace: React.FC = () => {
                   Field Inspection Station
                 </span>
                 <h2 className="text-base font-bold text-slate-900 mt-0.5">
-                  {selected.cropName} â€” Batch {selected.batchCode}
+                  {selected.cropName} — Batch {selected.batchCode}
                 </h2>
                 <p className="text-slate-500 mt-0.5">
-                  Farm: <strong>{selected.farmLocation}</strong> Â· Grower: {selected.farmerName}
+                  Farm: <strong>{selected.farmLocation}</strong> · Grower: {selected.farmerName}
                 </p>
               </div>
 
@@ -339,7 +339,7 @@ export const InspectorWorkspace: React.FC = () => {
             {/* Decision Buttons with Workflow Logic */}
             <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
               <span className="text-slate-500 text-[11px]">
-                Auditor: <strong>{user?.name || 'Dr. Farzana Akter'}</strong> Â· Location: Farm Origin Gate
+                Auditor: <strong>{user?.name || 'Dr. Farzana Akter'}</strong> · Location: Farm Origin Gate
               </span>
 
               <div className="flex flex-wrap items-center gap-2">
