@@ -73,7 +73,7 @@ app.post('/api/register/', async (req, res) => {
     ? req.body.role.trim().toLowerCase()
     : '';
 
-  const allowedRegistrationRoles = new Set(['farmer', 'buyer']);
+  const allowedRegistrationRoles = new Set(['farmer', 'buyer', 'delivery']);
 
   if (!name || name.length > 120) {
     return res.status(400).json({ message: 'Name is required and must be at most 120 characters' });
@@ -91,7 +91,7 @@ app.post('/api/register/', async (req, res) => {
     return res.status(400).json({ message: 'This role cannot be registered publicly' });
   }
 
-  const status = 'ACTIVE';
+  const status = requestedRole === 'delivery' ? 'PENDING' : 'ACTIVE';
 
   try {
     const existing = await pool.query(
@@ -116,7 +116,9 @@ app.post('/api/register/', async (req, res) => {
     const account = result.rows[0];
 
     return res.status(201).json({
-      message: 'Account created successfully. You can now log in.',
+      message: requestedRole === 'delivery'
+        ? 'Delivery Partner application submitted. You can log in after an administrator approves your account.'
+        : 'Account created successfully. You can now log in.',
       user: {
         id: account.id,
         name: account.name,
@@ -144,9 +146,17 @@ app.post('/api/login/', async (req, res) => {
   const password = typeof req.body?.password === 'string'
     ? req.body.password
     : '';
+  const requestedRole = typeof req.body?.role === 'string'
+    ? req.body.role.trim().toLowerCase()
+    : '';
 
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Email and password are required' });
+  if (!email || !password || !requestedRole) {
+    return res.status(400).json({ message: 'Email, password, and role are required' });
+  }
+
+  const validRoles = new Set(['admin', 'farmer', 'buyer', 'delivery', 'warehouse', 'inspector']);
+  if (!validRoles.has(requestedRole)) {
+    return res.status(400).json({ message: 'Select a valid account role' });
   }
 
   try {
@@ -157,13 +167,18 @@ app.post('/api/login/', async (req, res) => {
     );
     const account = result.rows[0];
 
-    // Use the same response for unknown accounts and incorrect passwords.
-    if (
-      !account ||
-      account.status !== 'ACTIVE' ||
-      !(await bcrypt.compare(password, account.password_hash))
-    ) {
+    // Do not disclose whether an account exists until its password is verified.
+    if (!account || !(await bcrypt.compare(password, account.password_hash))) {
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+    if (account.role !== requestedRole) {
+      return res.status(403).json({ message: 'This account is not registered for the selected role. Choose the correct role and try again.' });
+    }
+    if (account.status === 'PENDING') {
+      return res.status(403).json({ message: 'Your account is awaiting administrator approval.' });
+    }
+    if (account.status !== 'ACTIVE') {
+      return res.status(403).json({ message: 'This account is not active. Contact an administrator.' });
     }
 
     const user = {
