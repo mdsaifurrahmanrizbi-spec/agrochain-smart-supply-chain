@@ -10,12 +10,16 @@ const PORT = Number(process.env.PORT || 8000);
 
 app.use(express.json({ limit: '1mb' }));
 
-// Allow the local Vite frontend on ports 3000 and 3001.
+// Set CORS_ORIGINS to comma-separated deployed frontend origins in production.
 const allowedOrigins = new Set([
   'http://localhost:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
+  ...(process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
 ]);
 
 app.use((req, res, next) => {
@@ -542,6 +546,41 @@ app.get('/', (req, res) => {
 });
 
 async function startServer() {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+    throw new Error('Set JWT_SECRET to a random secret of at least 32 characters');
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS auth_users (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (
+        role IN ('admin', 'farmer', 'buyer', 'delivery', 'warehouse', 'inspector')
+      ),
+      status TEXT NOT NULL DEFAULT 'ACTIVE'
+        CHECK (status IN ('ACTIVE', 'PENDING', 'SUSPENDED')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS agrochain_records (
+      resource TEXT NOT NULL,
+      id TEXT NOT NULL,
+      data JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (resource, id)
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_agrochain_records_resource
+    ON agrochain_records(resource)
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS farms (
       id TEXT PRIMARY KEY,
@@ -551,8 +590,8 @@ async function startServer() {
     )
   `);
 
-  app.listen(PORT, '127.0.0.1', () => {
-    console.log(`AgroChain API running at http://localhost:${PORT}`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`AgroChain API listening on port ${PORT}`);
   });
 }
 
