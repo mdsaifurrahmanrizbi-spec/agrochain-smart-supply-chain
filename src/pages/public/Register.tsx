@@ -12,7 +12,7 @@ export const Register: React.FC = () => {
   // Public registration creates accounts through the backend, not demo roles.
 
   const [selectedRole, setSelectedRole] = useState<'farmer' | 'buyer' | 'delivery'>(
-    initialRole as 'farmer' | 'buyer' | 'delivery'
+    (['farmer', 'buyer', 'delivery'].includes(initialRole) ? initialRole : 'farmer') as 'farmer' | 'buyer' | 'delivery'
   );
 
   const [formData, setFormData] = useState({
@@ -40,13 +40,6 @@ export const Register: React.FC = () => {
 
     if (formData.password.length < 12) {
       setRegistrationError('Password must be at least 12 characters long.');
-      return;
-    }
-
-    if (selectedRole === 'delivery') {
-      setRegistrationError(
-        'Delivery Partner registration is temporarily unavailable while secure document storage and administrator approval are being connected. No account or application was submitted.'
-      );
       return;
     }
 
@@ -130,13 +123,6 @@ export const Register: React.FC = () => {
             <span>Delivery Partner</span>
           </button>
         </div>
-
-        {selectedRole === 'delivery' && (
-          <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-            <strong>Delivery Partner registration is temporarily unavailable.</strong>
-            <p className="mt-1">Secure document storage and administrator approval are not connected yet. Please choose Farmer / Seller or Customer / Buyer to register. No delivery application or account will be submitted.</p>
-          </div>
-        )}
 
         {/* Form Card */}
         <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-xs">
@@ -315,10 +301,10 @@ export const Register: React.FC = () => {
 
               <button
                 type="submit"
-                disabled={isSubmitting || selectedRole === 'delivery'}
+                disabled={isSubmitting}
                 className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2 shadow-xs"
               >
-                <span>{selectedRole === "delivery" ? "Registration Unavailable" : isSubmitting ? "Creating Account..." : "Complete Registration"}</span>
+                <span>{isSubmitting ? "Creating Account..." : selectedRole === 'delivery' ? "Submit for Approval" : "Complete Registration"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
