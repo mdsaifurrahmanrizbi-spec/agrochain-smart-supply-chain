@@ -9,7 +9,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   authLoading: boolean;
   isBackendConnected: boolean;
-  login: (email: string, password: string) => Promise<User>;
+  login: (email: string, password: string, role: UserRole) => Promise<User>;
   logout: () => void;
   switchDemoRole: (targetRole: UserRole) => void;
   updateProfile: (updated: Partial<User>) => void;
@@ -63,8 +63,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const login = async (email: string, password: string): Promise<User> => {
-    const res = await agroApi.login(email, password);
+  const login = async (email: string, password: string, role: UserRole): Promise<User> => {
+    const res = await agroApi.login(email, password, role);
     localStorage.setItem('agro_auth_token', res.token);
     localStorage.setItem('agro_active_user', JSON.stringify(res.user));
     setUser(res.user);
