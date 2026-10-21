@@ -18,6 +18,14 @@ import {
   ArrowRight,
 } from 'lucide-react';
 
+const normalizeDisplayText = (value: string) =>
+  value
+    .replace(/Ã Â§Â³/g, '৳')
+    .replace(/à§³/g, '৳')
+    .replace(/Ã—/g, '×')
+    .replace(/â€”/g, '—')
+    .replace(/Â·/g, '·');
+
 interface TrackingTimelineProps {
   events: TrackingEvent[];
   orderNumber?: string;
@@ -255,7 +263,7 @@ export const TrackingTimeline: React.FC<TrackingTimelineProps> = ({
                       </div>
 
                       <p className="mt-1.5 text-xs text-slate-700 leading-relaxed font-normal">
-                        {event.description}
+                        {normalizeDisplayText(event.description)}
                       </p>
 
                       <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center gap-4 text-xs text-slate-500">
