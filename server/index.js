@@ -95,8 +95,8 @@ app.post('/api/register/', async (req, res) => {
 
   try {
     const existing = await pool.query(
-      'SELECT id FROM auth_users WHERE email = $1',
-      [email]
+      'SELECT id FROM auth_users WHERE email = $1 AND role = $2',
+      [email, requestedRole]
     );
 
     if (existing.rowCount > 0) {
@@ -162,8 +162,8 @@ app.post('/api/login/', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, name, email, password_hash, role, status, created_at
-       FROM auth_users WHERE email = $1`,
-      [email]
+       FROM auth_users WHERE email = $1 AND role = $2`,
+      [email, requestedRole]
     );
     const account = result.rows[0];
 
@@ -578,6 +578,14 @@ async function startServer() {
         CHECK (status IN ('ACTIVE', 'PENDING', 'SUSPENDED')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  // Allow the same email to have separate role-specific accounts/passwords.
+  // Migrate existing databases away from the legacy email-only unique constraint.
+  await pool.query(`
+    ALTER TABLE auth_users DROP CONSTRAINT IF EXISTS auth_users_email_key;
+    CREATE UNIQUE INDEX IF NOT EXISTS auth_users_email_role_unique
+      ON auth_users(email, role)
   `);
 
   await pool.query(`
