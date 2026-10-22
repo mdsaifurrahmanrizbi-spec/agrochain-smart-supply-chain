@@ -291,7 +291,7 @@ app.post('/api/admin/users/', requireAuth, async (req, res) => {
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
   const role = typeof req.body?.role === 'string' ? req.body.role.trim().toLowerCase() : '';
   if (!name || name.length > 120) return res.status(400).json({ message: 'Name is required and must be at most 120 characters' });
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ message: 'Enter a valid email address' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ message: 'Enter a valid email address' });
   if (password.length < 12 || password.length > 128) return res.status(400).json({ message: 'Password must be 12 to 128 characters long' });
   if (!['warehouse', 'inspector'].includes(role)) return res.status(400).json({ message: 'Only Warehouse and Inspector staff can be created here' });
   try {
