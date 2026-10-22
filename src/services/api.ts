@@ -2054,6 +2054,8 @@ const events =
 
     localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+    await saveBackendRecord('godownShipments', shipment);
+    if (order) await saveBackendRecord('orders', order);
     return shipment;
   },
 
@@ -2066,8 +2068,8 @@ const events =
     if (!shipment.assignedPartnerId || shipment.assignedPartnerId !== partnerId) {
       throw new Error('Only the specifically assigned delivery partner can collect this shipment.');
     }
-    if (!job || job.partnerId !== partnerId || job.status !== 'ACCEPTED') {
-      throw new Error('The assigned delivery job must be accepted by this partner before collection.');
+    if (!job || job.partnerId !== partnerId || !['ACCEPTED', 'ARRIVED_AT_GODOWN'].includes(job.status)) {
+      throw new Error('The assigned delivery job must be accepted by this partner and the partner must arrive at the godown before collection.');
     }
     if (shipment.transferStatus !== 'DELIVERY_ACCEPTED' || !shipment.handoverInitiatedAt) {
       throw new Error('The godown manager must initiate handover after the delivery partner accepts the job.');
