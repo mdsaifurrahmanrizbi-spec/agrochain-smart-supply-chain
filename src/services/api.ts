@@ -655,7 +655,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
         batchCode: relatedBatch?.batchCode || 'BATCH-PENDING-ASSIGNMENT',
         cropName: newOrder.items.map((item) => item.productName).join(', '),
         farmerName: newOrder.items.map((item) => item.farmerName).filter(Boolean).join(', ') || 'Farmer not assigned',
-        farmLocation: relatedBatch?.farmLocation || 'Farm location pending verification',
+        farmLocation: store.products.find((product) => product.batchId === relatedBatch?.id || product.id === firstItem?.productId)?.farmLocation || 'Farm location pending verification',
         inspectorId: '',
         inspectorName: 'Unassigned Inspector',
         inspectionDate: '',
