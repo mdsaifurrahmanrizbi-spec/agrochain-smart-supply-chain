@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { store } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import { ShoppingBag, Search, Eye, Truck, KeyRound, ShieldCheck } from 'lucide-react';
+import { Search, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const AdminOrders: React.FC = () => {
