@@ -1186,11 +1186,49 @@ localStorage.setItem(
 await saveBackendRecord('qualityChecks', qc);
 
 if (order && update.status) {
+  if (update.status === 'REJECTED') {
+    order.orderStatus = 'CANCELLED';
+    order.updatedAt = now;
+  }
+
   await saveBackendRecord('orders', order);
 
   const latestEvent = store.trackingEvents[order.id]?.[0];
   if (latestEvent) {
     await saveBackendRecord('trackingEvents', latestEvent);
+  }
+
+  // Only QC-approved orders may enter the farm-pickup queue.
+  if (update.status === 'APPROVED') {
+    const existingPickup = store.jobs.find((job) => job.orderId === order.id && job.type === 'PICKUP');
+    if (!existingPickup) {
+      const partner = store.deliveryPartners.find(
+        (candidate) => candidate.approvalStatus === 'APPROVED' && candidate.canPickup
+      );
+      if (partner) {
+        const pickupJob: LogisticsJob = {
+          id: `job-${Date.now()}`,
+          jobCode: `JOB-PKP-${Math.floor(1000 + Math.random() * 9000)}`,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          partnerId: partner.id,
+          partnerName: partner.name,
+          type: 'PICKUP',
+          productSummary: order.items.map((item) => `${item.quantity} ${item.unit} ${item.productName}`).join(', '),
+          originAddress: qc.farmLocation || 'Farm location pending verification',
+          destinationAddress: order.warehouseName || 'Origin warehouse intake',
+          assignedDate: now,
+          status: 'ASSIGNED',
+          codAmount: 0,
+          updatedAt: now,
+        };
+        await saveBackendRecord('jobs', pickupJob);
+        store.jobs.unshift(pickupJob);
+        localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
+      } else {
+        console.warn(`QC approved order ${order.orderNumber}, but no approved pickup partner is available.`);
+      }
+    }
   }
 }
 
