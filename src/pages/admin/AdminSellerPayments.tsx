@@ -18,7 +18,8 @@ export const AdminSellerPayments: React.FC = () => {
   const [notice, setNotice] = useState<string | null>(null);
   
   useEffect(() => {
-    agroApi.getSettlements().then((loaded) => setSettlements(loaded))
+    Promise.all([agroApi.getSettlements(), agroApi.getCODRecords()])
+      .then(([loaded]) => setSettlements(loaded))
       .catch((error) => console.warn('Could not refresh farmer payout ledger.', error));
   }, []);
 
