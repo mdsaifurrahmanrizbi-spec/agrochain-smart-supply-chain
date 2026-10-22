@@ -180,13 +180,101 @@ router.post('/rupantorpay/verify', requireAuth, async (req, res) => {
 });
 
 router.post('/rupantorpay/webhook', async (req, res) => {
-  // Treat gateway notifications as a signal only; the transaction must still be
-  // verified server-to-server before any order can be marked paid.
+  // Never trust webhook status fields. Verify the transaction directly with
+  // RupantorPay, then bind the verified amount and metadata to one order.
   const transactionId = typeof req.body?.transactionId === 'string'
-    ? req.body.transactionId
-    : typeof req.body?.transaction_id === 'string' ? req.body.transaction_id : '';
+    ? req.body.transactionId.trim()
+    : typeof req.body?.transaction_id === 'string' ? req.body.transaction_id.trim() : '';
   if (!transactionId) return res.status(400).json({ message: 'transaction ID is required' });
-  return res.status(202).json({ received: true, message: 'Use the authenticated verification flow to confirm the order' });
+
+  let client;
+  try {
+    const response = await fetch(`${GATEWAY_URL}/verify-payment`, {
+      method: 'POST',
+      headers: gatewayHeaders(),
+      body: JSON.stringify({ transaction_id: transactionId }),
+    });
+    const verified = await response.json().catch(() => ({}));
+    if (!response.ok || String(verified.status || '').toUpperCase() !== 'COMPLETED') {
+      return res.status(202).json({ received: true, status: 'PENDING' });
+    }
+
+    const orderId = typeof verified.metadata?.order_id === 'string'
+      ? verified.metadata.order_id
+      : '';
+    const verifiedTransactionId = typeof verified.transaction_id === 'string'
+      ? verified.transaction_id
+      : '';
+    if (!orderId || (verifiedTransactionId && verifiedTransactionId !== transactionId)) {
+      return res.status(409).json({ message: 'Verified transaction metadata is invalid' });
+    }
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const locked = await client.query(
+      "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+      [orderId]
+    );
+    const order = locked.rows[0]?.data;
+    if (!order || order.paymentMethod !== 'ONLINE') {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Matching online order was not found' });
+    }
+    if (order.orderStatus === 'CANCELLED') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Cancelled orders cannot be marked paid' });
+    }
+
+    const verifiedAmount = Number(verified.amount);
+    const expectedAmount = Number(order.totalAmount);
+    if (!Number.isFinite(verifiedAmount) || !Number.isFinite(expectedAmount) ||
+        Math.abs(verifiedAmount - expectedAmount) > 0.01) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Verified payment amount does not match the order' });
+    }
+
+    if (order.paymentStatus === 'PAID') {
+      await client.query('ROLLBACK');
+      return order.transactionId === transactionId
+        ? res.status(200).json({ received: true, status: 'PAID', orderId })
+        : res.status(409).json({ message: 'Order is already paid with another transaction' });
+    }
+
+    const usedByAnotherOrder = await client.query(
+      `SELECT id FROM agrochain_records
+       WHERE resource = 'orders' AND id <> $1
+         AND (data->>'transactionId' = $2 OR data->>'gatewayTransactionId' = $2)
+       LIMIT 1`,
+      [orderId, transactionId]
+    );
+    if (usedByAnotherOrder.rowCount > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Transaction has already been applied to another order' });
+    }
+
+    const updated = {
+      ...order,
+      paymentStatus: 'PAID',
+      paymentMethod: 'ONLINE',
+      paymentGateway: 'RUPANTORPAY',
+      transactionId,
+      gatewayTransactionId: verified.trx_id || transactionId,
+      paymentCurrency: verified.currency || 'BDT',
+      paymentVerifiedAt: new Date().toISOString(),
+    };
+    await client.query(
+      "UPDATE agrochain_records SET data = $1::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $2',
+      [JSON.stringify(updated), orderId]
+    );
+    await client.query('COMMIT');
+    return res.status(200).json({ received: true, status: 'PAID', orderId });
+  } catch (error) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    console.error('RupantorPay webhook verification failed:', error.message);
+    return res.status(500).json({ message: 'Could not verify payment notification' });
+  } finally {
+    client?.release();
+  }
 });
 
 export default router;
