@@ -574,6 +574,16 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     return store.orders;
   },
 
+  async cancelOrder(id: string): Promise<Order> {
+    const response = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(id)}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() } });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.order) throw new Error(data.message || `Could not cancel order (${response.status})`);
+    const updatedOrder = data.order as Order;
+    const index = store.orders.findIndex((order) => order.id === updatedOrder.id);
+    if (index >= 0) store.orders[index] = updatedOrder; else store.orders.unshift(updatedOrder);
+    localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+    return updatedOrder;
+  },
   async getOrder(id: string): Promise<Order | undefined> {
     return store.orders.find((o) => o.id === id || o.orderNumber === id);
   },
