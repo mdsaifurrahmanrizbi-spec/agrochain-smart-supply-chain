@@ -113,7 +113,7 @@ export const PasswordReset: React.FC = () => {
           )}
           {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
           {message && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{message}</p>}
-          <button type="submit" disabled={loading || (token && isSuccess)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 font-bold text-white hover:bg-emerald-800 disabled:opacity-60">
+          <button type="submit" disabled={loading || (!!token && isSuccess)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 font-bold text-white hover:bg-emerald-800 disabled:opacity-60">
             <span>{loading ? 'Please wait…' : token ? 'Reset Password' : 'Send Reset Link'}</span>
             <ArrowRight className="h-4 w-4" />
           </button>
