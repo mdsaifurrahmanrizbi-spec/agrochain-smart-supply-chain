@@ -1178,11 +1178,13 @@ return qc;
     order.isDeliveryVerified = true;
     order.orderStatus = 'DELIVERED';
 
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    // Persist delivery verification on the server because payout authorization
+    // re-checks delivery state against the authoritative backend order record.
+    await saveBackendRecord('orders', order);
+    localStorage.setItem('agro_orders', JSON.stringify(store.orders));
 
     // Delivery confirmation is not a farmer payout. Keep the settlement pending
     // until an authorized admin records an actual transfer and its reference.
-    localStorage.setItem('agro_orders', JSON.stringify(store.orders));
   },
 
   async releaseSellerSettlementPayout(settlementId: string, payoutReference: string): Promise<SellerSettlement> {
