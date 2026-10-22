@@ -121,17 +121,6 @@ router.post('/rupantorpay/verify', requireAuth, async (req, res) => {
     if (metadataOrderId !== orderId) {
       return res.status(409).json({ message: 'Verified transaction is not linked to this order' });
     }
-    const usedByAnotherOrder = await client.query(
-      `SELECT id FROM agrochain_records
-       WHERE resource = 'orders' AND id <> $1
-         AND (data->>'transactionId' = $2 OR data->>'gatewayTransactionId' = $2)
-       LIMIT 1`,
-      [orderId, transactionId]
-    );
-    if (usedByAnotherOrder.rowCount > 0) {
-      return res.status(409).json({ message: 'This transaction has already been applied to another order' });
-    }
-
     await client.query('BEGIN');
     const locked = await client.query(
       "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
@@ -141,6 +130,27 @@ router.post('/rupantorpay/verify', requireAuth, async (req, res) => {
     if (!latest || latest.buyerId !== req.auth.sub) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Order not found' });
+    }
+    if (latest.paymentMethod !== 'ONLINE') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'This order is not an online payment order' });
+    }
+    if (latest.paymentStatus === 'PAID') {
+      await client.query('ROLLBACK');
+      return latest.transactionId === transactionId
+        ? res.json({ status: 'PAID', orderId, transactionId })
+        : res.status(409).json({ message: 'This order was paid with a different transaction' });
+    }
+    const usedByAnotherOrder = await client.query(
+      `SELECT id FROM agrochain_records
+       WHERE resource = 'orders' AND id <> $1
+         AND (data->>'transactionId' = $2 OR data->>'gatewayTransactionId' = $2)
+       LIMIT 1`,
+      [orderId, transactionId]
+    );
+    if (usedByAnotherOrder.rowCount > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'This transaction has already been applied to another order' });
     }
     if (latest.paymentStatus !== 'PAID') {
       const updated = {
