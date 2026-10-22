@@ -597,6 +597,19 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       }
     }
 
+    // Delivery verification is an authorization gate for farmer payouts.
+    // Non-admin clients must not be able to self-confirm delivery via generic writes.
+    if (resource === 'orders' && role !== 'admin') {
+      const wasDeliveryVerified = existing?.isDeliveryVerified === true;
+      const isDeliveryVerified = data.isDeliveryVerified === true;
+      if (isDeliveryVerified !== wasDeliveryVerified) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          message: 'Only an administrator may change verified-delivery authorization',
+        });
+      }
+    }
+
     // Payment fields must only be changed by a dedicated server-side payment flow.
     if (resource === 'orders') {
       const protectedPaymentFields = [
