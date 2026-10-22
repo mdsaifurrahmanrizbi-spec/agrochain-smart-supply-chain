@@ -870,7 +870,10 @@ const pickupJob: LogisticsJob = {
       }
     );
 
-    // If COD, register / update COD record
+    // Persist delivery confirmation before recording COD collection.
+    await saveBackendRecord('orders', order);
+
+    // If COD, register the collected cash in the role-checked backend.
     if (order.paymentMethod === 'COD') {
       let codRec = store.codRecords.find((c) => c.orderId === order.id);
       if (!codRec) {
@@ -885,7 +888,8 @@ const pickupJob: LogisticsJob = {
           depositStatus: 'CASH_COLLECTED',
         };
         store.codRecords.unshift(codRec);
-      } else {
+        await saveBackendRecord('codRecords', codRec);
+      } else if (codRec.depositStatus !== 'CASH_DEPOSIT_VERIFIED') {
         codRec.depositStatus = 'CASH_COLLECTED';
         codRec.collectedAt = now;
       }
