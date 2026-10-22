@@ -1,10 +1,10 @@
 import React from 'react';
 import { store } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import { ShieldCheck, FileCheck, Award } from 'lucide-react';
 
 export const AdminQualityChecks: React.FC = () => {
   const checks = store.qualityChecks;
+  const orders = store.orders;
 
   return (
     <div className="space-y-6">
@@ -21,6 +21,7 @@ export const AdminQualityChecks: React.FC = () => {
             <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
               <tr>
                 <th className="py-3 px-4">QC Code</th>
+                <th className="py-3 px-4">Related Order ID</th>
                 <th className="py-3 px-4">Commodity</th>
                 <th className="py-3 px-4">Harvest Batch Code</th>
                 <th className="py-3 px-4">Origin Farmer</th>
@@ -35,6 +36,7 @@ export const AdminQualityChecks: React.FC = () => {
               {checks.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
                   <td className="py-3 px-4 font-mono font-bold text-slate-900">{c.id}</td>
+                  <td className="py-3 px-4 font-mono font-semibold text-blue-700">{c.orderId ? (orders.find((order) => order.id === c.orderId || order.orderNumber === c.orderId)?.orderNumber || c.orderId) : 'Not linked'}</td>
                   <td className="py-3 px-4 font-bold text-slate-900">{c.cropName}</td>
                   <td className="py-3 px-4 font-mono text-emerald-800 font-semibold">{c.batchCode}</td>
                   <td className="py-3 px-4">{c.farmerName} ({c.farmLocation})</td>
