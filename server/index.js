@@ -164,7 +164,7 @@ app.post('/api/admin/bootstrap/', async (req, res) => {
   if (!name || name.length > 120) {
     return res.status(400).json({ message: 'Name is required and must be at most 120 characters' });
   }
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
     return res.status(400).json({ message: 'Enter a valid email address' });
   }
   if (password.length < 12 || password.length > 128) {
@@ -211,6 +211,50 @@ app.post('/api/admin/bootstrap/', async (req, res) => {
     return res.status(500).json({ message: 'Admin account could not be created' });
   } finally {
     client.release();
+  }
+});
+
+// Temporary admin recovery. Enable only during recovery, then disable the env flag.
+app.post('/api/admin/recover-password/', async (req, res) => {
+  if (process.env.ADMIN_RECOVERY_ENABLED !== 'true') {
+    return res.status(404).json({ message: 'Admin recovery is disabled' });
+  }
+
+  const configuredToken = process.env.ADMIN_BOOTSTRAP_TOKEN || '';
+  const suppliedToken = typeof req.headers['x-admin-bootstrap-token'] === 'string'
+    ? req.headers['x-admin-bootstrap-token']
+    : '';
+  const crypto = await import('node:crypto');
+  const configuredBytes = Buffer.from(configuredToken);
+  const suppliedBytes = Buffer.from(suppliedToken);
+
+  if (configuredBytes.length < 32 || suppliedBytes.length !== configuredBytes.length ||
+      !crypto.timingSafeEqual(suppliedBytes, configuredBytes)) {
+    return res.status(403).json({ message: 'Recovery token is invalid or not configured' });
+  }
+
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    return res.status(400).json({ message: 'Enter a valid email address' });
+  }
+  if (password.length < 12 || password.length > 128) {
+    return res.status(400).json({ message: 'Password must be 12 to 128 characters long' });
+  }
+
+  try {
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await pool.query(
+      "UPDATE auth_users SET password_hash = $1 WHERE email = $2 AND role = 'admin' RETURNING id",
+      [passwordHash, email]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'No admin account was found for that email' });
+    }
+    return res.json({ message: 'Admin password updated. Disable ADMIN_RECOVERY_ENABLED in hosting settings now, then sign in.' });
+  } catch (error) {
+    console.error('Admin password recovery failed:', error.message);
+    return res.status(500).json({ message: 'Admin password could not be updated' });
   }
 });
 
