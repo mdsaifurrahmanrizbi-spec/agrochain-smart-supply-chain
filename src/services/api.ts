@@ -1122,7 +1122,7 @@ async getQualityChecks(): Promise<QualityCheck[]> {
         inspectorName: 'Not assigned',
         inspectionDate: now,
         inspectionLocation: 'FARM',
-        grade: 'Grade C - Commercial',
+        grade: 'Not graded',
         moistureContentPercent: 0,
         pesticideResiduePpm: 0,
         foreignMatterPercent: 0,
