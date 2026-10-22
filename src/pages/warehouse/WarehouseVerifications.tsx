@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -18,6 +18,13 @@ export const WarehouseVerifications: React.FC = () => {
   const [orders, setOrders] = useState(store.orders);
   const [codRecords, setCodRecords] = useState(store.codRecords);
   const [notice, setNotice] = useState<string | null>(null);
+  
+  useEffect(() => {
+    Promise.all([agroApi.getOrders(), agroApi.getCODRecords()]).then(([loadedOrders, loadedCod]) => {
+      setOrders(loadedOrders.filter((order) => order.paymentMethod === 'COD'));
+      setCodRecords(loadedCod);
+    }).catch((error) => console.warn('Could not refresh warehouse COD verification data.', error));
+  }, []);
 
   const otpVerifiedOrders = orders.filter((o) => o.isDeliveryVerified);
   const pendingCodDeposits = codRecords.filter(
