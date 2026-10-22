@@ -1215,9 +1215,17 @@ return qc;
     record.verifiedByAdmin = adminName;
     record.depositDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
-    // Persist the warehouse audit through the role-checked backend endpoint.
-    // Cash audit does not itself mark the farmer payout as successful.
+    // The backend atomically verifies the COD deposit and marks the customer's
+    // COD payment PAID. This does not mark the farmer's separate payout as paid.
     await saveBackendRecord('codRecords', record);
+
+    const order = store.orders.find((item) => item.id === record.orderId);
+    if (order) {
+      order.paymentStatus = 'PAID';
+      order.paymentVerifiedAt = record.depositDate;
+      order.updatedAt = record.depositDate || order.updatedAt;
+      localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+    }
 
     localStorage.setItem('agro_cod_records', JSON.stringify(store.codRecords));
     return record;
