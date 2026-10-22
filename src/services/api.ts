@@ -1078,19 +1078,70 @@ async getQualityChecks(): Promise<QualityCheck[]> {
 
     if (backendChecks.length > 0) {
       store.qualityChecks = backendChecks;
-      localStorage.setItem(
-        'agro_quality_checks',
-        JSON.stringify(store.qualityChecks)
-      );
     } else {
-      // First-time migration: preserve existing local QC records
+      // First-time migration: preserve existing local QC records.
       for (const qc of store.qualityChecks) {
         await saveBackendRecord('qualityChecks', qc);
       }
     }
+
+    // Reconcile confirmed orders created before the QC queue was introduced.
+    // Create only a PENDING inspection record; never invent inspection results.
+    const backendOrders = await getBackendRecords<Order>('orders');
+    store.orders = backendOrders;
+    for (const order of backendOrders) {
+      if (order.orderStatus !== 'CONFIRMED') continue;
+
+      const existing = store.qualityChecks.find((check) =>
+        check.orderId === order.id ||
+        check.orderId === order.orderNumber ||
+        check.id === order.qualityCheckId
+      );
+      if (existing) {
+        if (!order.qualityCheckId) {
+          order.qualityCheckId = existing.id;
+          order.qualityStatus = existing.status;
+          await saveBackendRecord('orders', order);
+        }
+        continue;
+      }
+
+      const firstItem = order.items[0];
+      if (!firstItem) continue;
+      const product = store.products.find((item) => item.id === firstItem.productId);
+      const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+      const pendingQc: QualityCheck = {
+        id: `qc-order-${order.id}`,
+        orderId: order.id,
+        batchId: product?.batchId || 'PENDING_BATCH_LINK',
+        batchCode: store.batches.find((batch) => batch.id === product?.batchId)?.batchCode || 'Pending batch verification',
+        cropName: firstItem.productName,
+        farmerName: firstItem.farmerName,
+        farmLocation: product?.farmLocation || 'Farm location pending verification',
+        inspectorId: '',
+        inspectorName: 'Not assigned',
+        inspectionDate: now,
+        inspectionLocation: 'FARM',
+        grade: 'Grade C - Commercial',
+        moistureContentPercent: 0,
+        pesticideResiduePpm: 0,
+        foreignMatterPercent: 0,
+        status: 'PENDING',
+        remarks: 'Inspection not performed yet. Measurements and grade must be entered by the inspector.',
+      };
+      await saveBackendRecord('qualityChecks', pendingQc);
+      store.qualityChecks.unshift(pendingQc);
+      order.qualityCheckId = pendingQc.id;
+      order.qualityStatus = 'PENDING';
+      order.updatedAt = now;
+      await saveBackendRecord('orders', order);
+    }
+
+    localStorage.setItem('agro_quality_checks', JSON.stringify(store.qualityChecks));
+    localStorage.setItem('agro_orders', JSON.stringify(store.orders));
   } catch (error) {
     console.error('Failed to sync quality checks:', error);
-    // Keep local records available if backend is unavailable
+    // Keep local records available if backend is unavailable.
   }
 
   return store.qualityChecks;
