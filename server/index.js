@@ -836,6 +836,35 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
   }
 });
 
+// Customer cancellation is server-authoritative and only allowed before physical pickup.
+app.post('/api/orders/:id/cancel', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'buyer') return res.status(403).json({ message: 'Only customers can cancel their own orders' });
+  const { id } = req.params;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const found = await client.query("SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND (id = $1 OR data->>'orderNumber' = $1) LIMIT 1 FOR UPDATE", [id]);
+    const row = found.rows[0];
+    const order = row?.data;
+    if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Order not found' }); }
+    if (order.buyerId !== req.auth.sub) { await client.query('ROLLBACK'); return res.status(403).json({ message: 'You can only cancel your own orders' }); }
+    if (order.orderStatus === 'CANCELLED') { await client.query('ROLLBACK'); return res.status(409).json({ message: 'This order has already been cancelled' }); }
+    if (order.orderStatus === 'DELIVERED' || order.isDeliveryVerified === true) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Delivered orders cannot be cancelled' }); }
+    const pickupStarted = new Set(['PICKED_UP','IN_TRANSIT','IN_TRANSIT_CENTRAL','WAREHOUSE_RECEIVED','IN_WAREHOUSE','GODOWN_ASSIGNED','GODOWN_TRANSFER_IN_TRANSIT','ARRIVED_LOCAL_GODOWN','GODOWN_RECEIVED','ARRIVED_REGIONAL_GODOWN','DELIVERY_PARTNER_ASSIGNED','DELIVERY_ASSIGNMENT_PENDING','MANUAL_ROUTING_REQUIRED','DELIVERY_ACCEPTED','DELIVERY_PARTNER_COLLECTED','OUT_FOR_DELIVERY']);
+    if (pickupStarted.has(String(order.orderStatus || '').toUpperCase()) || order.partnerCollectedAt || order.handoverInitiatedAt || order.outForDeliveryAt) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'This order can no longer be cancelled because pickup or shipment processing has started' });
+    }
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    order.orderStatus = 'CANCELLED'; order.cancelledAt = now; order.cancelledBy = 'buyer'; order.updatedAt = now;
+    await client.query("UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1", [row.id, JSON.stringify(order)]);
+    const event = { id: `trk-cancel-${row.id}-${Date.now()}`, orderId: row.id, title: 'ORDER CANCELLED', description: 'Customer cancelled the order before pickup.', location: order.buyerCity || '', timestamp: now, actorRole: 'Customer', actorName: order.buyerName || 'Customer', status: 'COMPLETED' };
+    await client.query("INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('trackingEvents', $1, $2::jsonb, NOW(), NOW())", [event.id, JSON.stringify(event)]);
+    await client.query('COMMIT');
+    return res.json({ success: true, order, event, message: 'Order cancelled successfully' });
+  } catch (error) { await client.query('ROLLBACK').catch(() => {}); console.error('Order cancellation failed:', error.message); return res.status(500).json({ message: 'Could not cancel this order' }); }
+  finally { client.release(); }
+});
 // Read records for a resource.
 app.get('/api/records/:resource', requireAuth, async (req, res) => {
   const { resource } = req.params;
