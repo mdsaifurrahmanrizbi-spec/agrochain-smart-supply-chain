@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { store } from '../../services/api';
+import { agroApi, store } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { MetricCard } from '../../components/common/MetricCard';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -10,7 +10,17 @@ export const InspectorDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const checks = store.qualityChecks;
+  const [checks, setChecks] = useState(store.qualityChecks);
+
+  useEffect(() => {
+    let active = true;
+    agroApi.getQualityChecks().then((freshChecks) => {
+      if (active) setChecks([...freshChecks]);
+    }).catch((error) => {
+      console.error('Could not load inspector QC queue:', error);
+    });
+    return () => { active = false; };
+  }, []);
   const pendingChecks = checks.filter((c) => c.status === 'PENDING' || c.status === 'RECHECK_REQUIRED');
   const approvedChecks = checks.filter((c) => c.status === 'APPROVED');
   const rejectedChecks = checks.filter((c) => c.status === 'REJECTED');
