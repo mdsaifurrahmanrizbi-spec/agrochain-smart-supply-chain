@@ -269,6 +269,67 @@ app.post('/api/login/', async (req, res) => {
   }
 });
 
+// Admin-only account management for staff creation and delivery-partner approval.
+app.get('/api/admin/users/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  try {
+    const result = await pool.query(
+      `SELECT id, name, email, role, status, created_at
+       FROM auth_users ORDER BY created_at DESC`
+    );
+    return res.json(result.rows.map((row) => ({ ...row, createdAt: row.created_at })));
+  } catch (error) {
+    console.error('Could not list accounts:', error.message);
+    return res.status(500).json({ message: 'Could not load accounts' });
+  }
+});
+
+app.post('/api/admin/users/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  const role = typeof req.body?.role === 'string' ? req.body.role.trim().toLowerCase() : '';
+  if (!name || name.length > 120) return res.status(400).json({ message: 'Name is required and must be at most 120 characters' });
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ message: 'Enter a valid email address' });
+  if (password.length < 12 || password.length > 128) return res.status(400).json({ message: 'Password must be 12 to 128 characters long' });
+  if (!['warehouse', 'inspector'].includes(role)) return res.status(400).json({ message: 'Only Warehouse and Inspector staff can be created here' });
+  try {
+    const id = 'usr_' + (await import('node:crypto')).randomUUID();
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await pool.query(
+      `INSERT INTO auth_users (id, name, email, password_hash, role, status)
+       VALUES ($1, $2, $3, $4, $5, 'ACTIVE')
+       RETURNING id, name, email, role, status, created_at`,
+      [id, name, email, passwordHash, role]
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    if (error.code === '23505') return res.status(409).json({ message: 'An account with this email and role already exists' });
+    console.error('Could not create staff account:', error.message);
+    return res.status(500).json({ message: 'Could not create staff account' });
+  }
+});
+
+app.patch('/api/admin/users/:id/status/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  const status = typeof req.body?.status === 'string' ? req.body.status.trim().toUpperCase() : '';
+  if (!['ACTIVE', 'PENDING', 'SUSPENDED'].includes(status)) return res.status(400).json({ message: 'Invalid account status' });
+  if (req.params.id === req.auth.sub) return res.status(400).json({ message: 'You cannot change your own account status' });
+  try {
+    const result = await pool.query(
+      `UPDATE auth_users SET status = $1 WHERE id = $2 AND role <> 'admin'
+       RETURNING id, name, email, role, status, created_at`,
+      [status, req.params.id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ message: 'Non-admin account not found' });
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Could not update account status:', error.message);
+    return res.status(500).json({ message: 'Could not update account status' });
+  }
+});
+
 // Return the authenticated account from the database.
 app.get('/api/me', requireAuth, async (req, res) => {
   try {
