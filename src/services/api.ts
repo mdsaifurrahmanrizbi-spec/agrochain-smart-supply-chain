@@ -1153,14 +1153,11 @@ return qc;
     record.verifiedByAdmin = adminName;
     record.depositDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
-    // If there is an associated seller settlement waiting on COD verification, advance it to PROCESSING or PAID
-    const stl = store.settlements.find((s) => s.orderId === record.orderId);
-    if (stl && (stl.settlementStatus === 'PENDING' || (stl.settlementStatus as any) === 'ELIGIBLE')) {
-      stl.settlementStatus = 'PROCESSING';
-    }
+    // Persist the warehouse audit through the role-checked backend endpoint.
+    // Cash audit does not itself mark the farmer payout as successful.
+    await saveBackendRecord('codRecords', record);
 
     localStorage.setItem('agro_cod_records', JSON.stringify(store.codRecords));
-    localStorage.setItem('agro_settlements', JSON.stringify(store.settlements));
     return record;
   },
 
