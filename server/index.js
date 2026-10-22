@@ -387,7 +387,7 @@ const resourceWriteRoles = {
   orders: ['admin', 'buyer', 'farmer', 'delivery', 'warehouse', 'inspector'],
   jobs: ['admin', 'buyer', 'delivery', 'warehouse'],
   qualityChecks: ['admin', 'inspector', 'warehouse'],
-  codRecords: ['admin'],
+  codRecords: ['admin', 'warehouse'],
   settlements: ['admin'],
   trackingEvents: ['admin', 'buyer', 'delivery', 'warehouse', 'inspector'],
   godowns: ['admin', 'warehouse'],
@@ -395,7 +395,8 @@ const resourceWriteRoles = {
 };
 
 function canReadResource(role, resource) {
-  if (['users', 'codRecords', 'settlements'].includes(resource)) return role === 'admin';
+  if (['users', 'settlements'].includes(resource)) return role === 'admin';
+  if (resource === 'codRecords') return ['admin', 'warehouse'].includes(role);
   return allowedResources.has(resource);
 }
 
@@ -425,7 +426,27 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       [resource]
     );
 
-    res.json(result.rows);
+    let rows = result.rows;
+    if (resource === 'orders') {
+      const role = req.auth.role;
+      if (role === 'buyer') {
+        rows = rows.filter((row) => row.data?.buyerId === req.auth.sub);
+      } else if (role === 'farmer') {
+        rows = rows.filter((row) =>
+          Array.isArray(row.data?.items) &&
+          row.data.items.some((item) => item?.farmerId === req.auth.sub)
+        );
+      } else if (role === 'warehouse') {
+        // Warehouse staff only access COD orders; online orders are not exposed.
+        rows = rows.filter((row) => row.data?.paymentMethod === 'COD');
+      } else if (role === 'delivery') {
+        rows = rows.filter((row) =>
+          row.data?.deliveryPartnerId === req.auth.sub ||
+          row.data?.pickupPartnerId === req.auth.sub
+        );
+      }
+    }
+    res.json(rows);
   } catch (error) {
     console.error('Could not read records:', error.message);
     res.status(500).json({ message: 'Could not read records' });
@@ -444,6 +465,10 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
   if (!canWriteResource(role, resource)) {
     return res.status(403).json({ message: 'You do not have permission to write this resource' });
+  }
+
+  if (resource === 'orders' && role === 'warehouse' && data?.paymentMethod !== 'COD') {
+    return res.status(403).json({ message: 'Warehouse managers may only process COD orders' });
   }
 
   if (!id || !data || typeof data !== 'object' || Array.isArray(data)) {
