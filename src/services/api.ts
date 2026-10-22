@@ -1712,6 +1712,15 @@ const events =
   async markArrivedAtLocalGodown(shipmentId: string): Promise<GodownShipment> {
     const shipment = store.godownShipments.find((s) => s.id === shipmentId || s.orderId === shipmentId);
     if (!shipment) throw new Error('Shipment not found');
+    if (shipment.transferStatus !== 'GODOWN_TRANSFER_IN_TRANSIT') {
+      throw new Error('A shipment must be dispatched and in transit before it can be marked arrived.');
+    }
+    const destinationGodown = store.godowns.find(
+      (g) => g.id === shipment.destinationGodownId || g.code === shipment.destinationGodownId
+    );
+    if (!destinationGodown || destinationGodown.status !== 'ACTIVE') {
+      throw new Error('Arrival cannot be recorded because the destination godown is missing or inactive.');
+    }
 
     const order = store.orders.find((o) => o.id === shipment.orderId);
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
@@ -1739,6 +1748,12 @@ const events =
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
     localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
+
+    await saveBackendRecord('godownShipments', shipment);
+    if (order) await saveBackendRecord('orders', order);
+    for (const event of events) {
+      await saveBackendRecord('trackingEvents', event);
+    }
 
     return shipment;
   },
