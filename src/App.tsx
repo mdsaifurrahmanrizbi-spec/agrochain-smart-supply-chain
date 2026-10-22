@@ -52,6 +52,7 @@ import { DeliveryProfile } from './pages/delivery/DeliveryProfile';
 // Warehouse & Godown Pages
 import { WarehouseDashboard } from './pages/warehouse/WarehouseDashboard';
 import { WarehouseIncoming } from './pages/warehouse/WarehouseIncoming';
+import { WarehouseOrders } from './pages/warehouse/WarehouseOrders';
 import { WarehouseInventory } from './pages/warehouse/WarehouseInventory';
 import { WarehouseTransfers } from './pages/warehouse/WarehouseTransfers';
 import { WarehouseDispatch } from './pages/warehouse/WarehouseDispatch';
@@ -159,6 +160,7 @@ export default function App() {
             <Route path="/warehouse" element={<DashboardLayout />}>
               <Route path="dashboard" element={<WarehouseDashboard />} />
               <Route path="incoming" element={<WarehouseIncoming />} />
+              <Route path="orders" element={<WarehouseOrders />} />
               <Route path="inventory" element={<WarehouseInventory />} />
               <Route path="transfers" element={<WarehouseTransfers />} />
               <Route path="dispatch" element={<WarehouseDispatch />} />
