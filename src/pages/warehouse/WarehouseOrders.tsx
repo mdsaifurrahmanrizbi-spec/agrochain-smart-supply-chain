@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { agroApi, store } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -11,8 +11,19 @@ export const WarehouseOrders: React.FC = () => {
   const [, setRevision] = useState(0);
 
   // Warehouse staff intentionally receive COD orders only. Online orders are not rendered here.
-  const orders = useMemo(() => store.orders.filter((order) => order.paymentMethod === 'COD'), []);
+  const [orders, setOrders] = useState(store.orders.filter((order) => order.paymentMethod === 'COD'));
+  const [settlements, setSettlements] = useState(store.settlements);
   const [payoutAccounts, setPayoutAccounts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([agroApi.getOrders(), agroApi.getSettlements()]).then(([loadedOrders, loadedSettlements]) => {
+      if (!mounted) return;
+      setOrders(loadedOrders.filter((order) => order.paymentMethod === 'COD'));
+      setSettlements(loadedSettlements);
+    }).catch((error) => console.warn('Could not refresh warehouse COD orders and payouts.', error));
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     const farmerIds = [...new Set(orders.flatMap((order) => order.items.map((item) => item.farmerId)))];
@@ -25,7 +36,7 @@ export const WarehouseOrders: React.FC = () => {
   }, [orders]);
 
   const handleFarmerPayout = async (orderId: string) => {
-    const settlement = store.settlements.find((item) => item.orderId === orderId);
+    const settlement = settlements.find((item) => item.orderId === orderId);
     if (!settlement) {
       window.alert('Farmer payout record is not available yet. Refresh orders after delivery confirmation.');
       return;
@@ -34,6 +45,7 @@ export const WarehouseOrders: React.FC = () => {
     if (reference === null) return;
     try {
       await agroApi.releaseSellerSettlementPayout(settlement.id, reference);
+      setSettlements([...store.settlements]);
       setRevision((value) => value + 1);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'Could not record farmer payout.');
@@ -123,7 +135,7 @@ export const WarehouseOrders: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       {(() => {
-                        const settlement = store.settlements.find((item) => item.orderId === order.id);
+                        const settlement = settlements.find((item) => item.orderId === order.id);
                         const paid = settlement && ['PAID', 'COMPLETED'].includes(settlement.settlementStatus);
                         return <><StatusBadge status={settlement?.settlementStatus || 'PENDING'} size="sm" />
                           {settlement?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Ref: {settlement.payoutReference}</span>}
