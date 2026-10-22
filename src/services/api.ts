@@ -2062,15 +2062,21 @@ const events =
     const shipment = store.godownShipments.find((s) => s.id === shipmentIdOrJobId || s.orderId === shipmentIdOrJobId);
     if (!shipment) throw new Error('Shipment not found');
 
-    if (shipment.assignedPartnerId && shipment.assignedPartnerId !== partnerId) {
-      throw new Error('Only the specifically assigned delivery partner can confirm collection of this shipment.');
+    const job = store.jobs.find((j) => j.orderId === shipment.orderId && j.type === 'DELIVERY');
+    if (!shipment.assignedPartnerId || shipment.assignedPartnerId !== partnerId) {
+      throw new Error('Only the specifically assigned delivery partner can collect this shipment.');
+    }
+    if (!job || job.partnerId !== partnerId || job.status !== 'ACCEPTED') {
+      throw new Error('The assigned delivery job must be accepted by this partner before collection.');
+    }
+    if (shipment.transferStatus !== 'DELIVERY_ACCEPTED' || !shipment.handoverInitiatedAt) {
+      throw new Error('The godown manager must initiate handover after the delivery partner accepts the job.');
     }
 
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
     shipment.handoverConfirmedAt = now;
     shipment.transferStatus = 'DELIVERY_PARTNER_COLLECTED';
 
-    const job = store.jobs.find((j) => j.orderId === shipment.orderId && j.type === 'DELIVERY');
     if (job) {
       job.status = 'COLLECTED';
       job.handoverConfirmed = true;
