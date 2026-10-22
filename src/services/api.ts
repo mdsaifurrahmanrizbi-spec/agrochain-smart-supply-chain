@@ -1076,12 +1076,17 @@ async getQualityChecks(): Promise<QualityCheck[]> {
   try {
     const backendChecks = await getBackendRecords<QualityCheck>('qualityChecks');
 
-    if (backendChecks.length > 0) {
-      store.qualityChecks = backendChecks;
-    } else {
-      // First-time migration: preserve existing local QC records.
-      for (const qc of store.qualityChecks) {
-        await saveBackendRecord('qualityChecks', qc);
+    // Keep backend records authoritative, but do not discard locally-created records
+    // when the backend collection is temporarily empty (e.g. first-time migration).
+    const checksById = new Map<string, QualityCheck>();
+    for (const qc of [...store.qualityChecks, ...backendChecks]) checksById.set(qc.id, qc);
+    store.qualityChecks = [...checksById.values()];
+
+    // Migrate local-only QC records without blocking the whole queue if one write fails.
+    for (const qc of store.qualityChecks) {
+      if (!backendChecks.some((backendQc) => backendQc.id === qc.id)) {
+        try { await saveBackendRecord('qualityChecks', qc); }
+        catch (error) { console.warn('Could not migrate QC record:', qc.id, error); }
       }
     }
 
@@ -1090,7 +1095,7 @@ async getQualityChecks(): Promise<QualityCheck[]> {
     const backendOrders = await getBackendRecords<Order>('orders');
     store.orders = backendOrders;
     for (const order of backendOrders) {
-      if (order.orderStatus !== 'CONFIRMED') continue;
+      if (String(order.orderStatus || '').toUpperCase() !== 'CONFIRMED') continue;
 
       const existing = store.qualityChecks.find((check) =>
         check.orderId === order.id ||
@@ -1129,12 +1134,19 @@ async getQualityChecks(): Promise<QualityCheck[]> {
         status: 'PENDING',
         remarks: 'Inspection not performed yet. Measurements and grade must be entered by the inspector.',
       };
-      await saveBackendRecord('qualityChecks', pendingQc);
-      store.qualityChecks.unshift(pendingQc);
+      // Keep the pending QC visible in this session even if a backend write fails;
+      // log the failure so it can be diagnosed instead of silently losing the queue item.
+      const alreadyAdded = store.qualityChecks.some((check) => check.id === pendingQc.id);
+      if (!alreadyAdded) store.qualityChecks.unshift(pendingQc);
       order.qualityCheckId = pendingQc.id;
       order.qualityStatus = 'PENDING';
       order.updatedAt = now;
-      await saveBackendRecord('orders', order);
+      try {
+        await saveBackendRecord('qualityChecks', pendingQc);
+        await saveBackendRecord('orders', order);
+      } catch (error) {
+        console.error('Could not persist reconciled pending QC record:', pendingQc.id, error);
+      }
     }
 
     localStorage.setItem('agro_quality_checks', JSON.stringify(store.qualityChecks));
