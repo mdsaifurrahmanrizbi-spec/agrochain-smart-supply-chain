@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 
@@ -82,6 +82,14 @@ import { AdminSellerPayments } from './pages/admin/AdminSellerPayments';
 import { AdminReports } from './pages/admin/AdminReports';
 import { AdminSettings } from './pages/admin/AdminSettings';
 
+function HomeRoute() {
+  const [searchParams] = useSearchParams();
+  const batchCode = searchParams.get('batch');
+  return batchCode
+    ? <Navigate to={`/traceability/${encodeURIComponent(batchCode)}`} replace />
+    : <Home />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -90,7 +98,7 @@ export default function App() {
           <Routes>
             {/* Public Routes with PublicLayout */}
             <Route element={<PublicLayout />}>
-              <Route path="/" element={<Home />} />
+              <Route path="/" element={<HomeRoute />} />
               <Route path="/products" element={<Products />} />
               <Route path="/products/:id" element={<ProductDetail />} />
               <Route path="/traceability/:batchCode" element={<BatchTraceability />} />
