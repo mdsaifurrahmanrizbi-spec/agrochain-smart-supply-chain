@@ -263,7 +263,7 @@ router.post('/rupantorpay/webhook', async (req, res) => {
       paymentVerifiedAt: new Date().toISOString(),
     };
     await client.query(
-      "UPDATE agrochain_records SET data = $1::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $2',
+      "UPDATE agrochain_records SET data = $1::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $2",
       [JSON.stringify(updated), orderId]
     );
     await client.query('COMMIT');
