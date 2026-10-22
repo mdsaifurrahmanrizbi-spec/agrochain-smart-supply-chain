@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -8,6 +8,11 @@ export const AdminCOD: React.FC = () => {
   const { user } = useAuth();
   const [records, setRecords] = useState(store.codRecords);
   const [notice, setNotice] = useState<string | null>(null);
+  
+  useEffect(() => {
+    agroApi.getCODRecords().then((loaded) => setRecords(loaded))
+      .catch((error) => console.warn('Could not refresh COD ledger.', error));
+  }, []);
 
   const totalCollected = records.reduce((s, r) => s + r.amount, 0);
   const pendingDeposit = records.filter((r) => r.depositStatus !== 'CASH_DEPOSIT_VERIFIED').reduce((s, r) => s + r.amount, 0);
