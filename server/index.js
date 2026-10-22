@@ -138,6 +138,68 @@ app.post('/api/register/', async (req, res) => {
   }
 });
 
+// One-time first-admin bootstrap. Requires a secret configured in the hosting environment.
+app.post('/api/admin/bootstrap/', async (req, res) => {
+  const configuredToken = process.env.ADMIN_BOOTSTRAP_TOKEN || '';
+  const suppliedToken = typeof req.headers['x-admin-bootstrap-token'] === 'string'
+    ? req.headers['x-admin-bootstrap-token']
+    : '';
+  const crypto = await import('node:crypto');
+
+  if (configuredToken.length < 32 || suppliedToken.length !== configuredToken.length ||
+      !crypto.timingSafeEqual(Buffer.from(suppliedToken), Buffer.from(configuredToken))) {
+    return res.status(403).json({ message: 'Admin setup token is invalid or not configured' });
+  }
+
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+  if (!name || name.length > 120) {
+    return res.status(400).json({ message: 'Name is required and must be at most 120 characters' });
+  }
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254) {
+    return res.status(400).json({ message: 'Enter a valid email address' });
+  }
+  if (password.length < 12 || password.length > 128) {
+    return res.status(400).json({ message: 'Password must be 12 to 128 characters long' });
+  }
+
+  try {
+    const existingAdmin = await pool.query("SELECT id FROM auth_users WHERE role = 'admin' LIMIT 1");
+    if (existingAdmin.rowCount > 0) {
+      return res.status(409).json({ message: 'An admin account already exists. Bootstrap is permanently closed.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const id = 'usr_' + crypto.randomUUID();
+    const result = await pool.query(
+      `INSERT INTO auth_users (id, name, email, password_hash, role, status)
+       VALUES ($1, $2, $3, $4, 'admin', 'ACTIVE')
+       RETURNING id, name, email, role, status, created_at`,
+      [id, name, email, passwordHash]
+    );
+    const account = result.rows[0];
+    return res.status(201).json({
+      message: 'Initial admin account created. You can now sign in.',
+      user: {
+        id: account.id,
+        name: account.name,
+        email: account.email,
+        role: account.role,
+        status: account.status,
+        createdAt: account.created_at,
+      },
+    });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ message: 'An account already exists for this email and role' });
+    }
+    console.error('Admin bootstrap failed:', error.message);
+    return res.status(500).json({ message: 'Admin account could not be created' });
+  }
+});
+
 // Password-verified login. Demo accounts must be created explicitly.
 app.post('/api/login/', async (req, res) => {
   const email = String(req.body?.email || req.body?.username || '')
