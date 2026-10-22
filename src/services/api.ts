@@ -660,7 +660,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
         inspectorName: 'Unassigned Inspector',
         inspectionDate: '',
         inspectionLocation: 'FARM',
-        grade: 'Grade C - Commercial',
+        grade: 'Not graded',
         moistureContentPercent: 0,
         pesticideResiduePpm: 0,
         foreignMatterPercent: 0,
@@ -1253,9 +1253,16 @@ if (order && update.status) {
   if (update.status === 'APPROVED') {
     const existingPickup = store.jobs.find((job) => job.orderId === order.id && job.type === 'PICKUP');
     if (!existingPickup) {
-      const partner = store.deliveryPartners.find(
-        (candidate) => candidate.approvalStatus === 'APPROVED' && candidate.canPickup
-      );
+      const originArea = (qc.farmLocation || '').trim().toLowerCase();
+      const partner = store.deliveryPartners.find((candidate) => {
+        if (candidate.approvalStatus !== 'APPROVED' || !candidate.canPickup) return false;
+        // Do not assign a pickup to a partner explicitly restricted to other areas.
+        const areas = [...(candidate.assignedAreas || []), candidate.preferredArea || '']
+          .map((area) => area.trim().toLowerCase())
+          .filter(Boolean);
+        if (!areas.length || !originArea || originArea.includes('pending verification')) return false;
+        return areas.some((area) => originArea.includes(area) || area.includes(originArea));
+      });
       if (partner) {
         const pickupJob: LogisticsJob = {
           id: `job-${Date.now()}`,
