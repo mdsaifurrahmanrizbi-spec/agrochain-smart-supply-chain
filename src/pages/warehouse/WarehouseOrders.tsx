@@ -59,6 +59,7 @@ export const WarehouseOrders: React.FC = () => {
                 <th className="px-4 py-3">Order Amount</th>
                 <th className="px-4 py-3">Delivery</th>
                 <th className="px-4 py-3">COD Cash</th>
+                <th className="px-4 py-3">Customer Payment</th>
                 <th className="px-4 py-3 text-right">Action</th>
               </tr>
             </thead>
@@ -86,13 +87,17 @@ export const WarehouseOrders: React.FC = () => {
                       <span className={verified ? 'font-bold text-emerald-700' : 'font-bold text-amber-700'}>{verified ? 'CASH VERIFIED' : record ? 'CASH PENDING' : 'AWAITING COLLECTION'}</span>
                       {record && <span className="mt-1 block text-[10px] text-slate-500">৳{record.amount.toLocaleString()}</span>}
                     </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={order.paymentStatus} size="sm" />
+                      {order.paymentStatus === 'PAID' && <span className="mt-1 block text-[10px] font-semibold text-emerald-700">Cash deposit verified</span>}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       {!verified && delivered && record ? <button onClick={() => navigate('/warehouse/verifications')} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 font-bold text-white"><ShieldCheck className="h-3.5 w-3.5" /> Audit cash</button> : verified ? <span className="inline-flex items-center gap-1 font-bold text-emerald-700"><Banknote className="h-3.5 w-3.5" /> Verified</span> : <span className="text-[10px] text-slate-400">After delivery</span>}
                     </td>
                   </tr>
                 );
               })}
-              {filtered.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">No COD orders match this search/filter.</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">No COD orders match this search/filter.</td></tr>}
             </tbody>
           </table>
         </div>
