@@ -83,6 +83,7 @@ export const DashboardLayout: React.FC = () => {
           { label: 'Dashboard', path: '/warehouse/dashboard', icon: LayoutDashboard },
           { label: 'Local Godown Hub', path: '/warehouse/godown', icon: Building },
           { label: 'Incoming Shipments', path: '/warehouse/incoming', icon: Truck },
+          { label: 'COD Orders & Cash Audit', path: '/warehouse/orders', icon: ShoppingBag },
           { label: 'Godown Inventory', path: '/warehouse/inventory', icon: Warehouse },
           { label: 'Warehouse Transfers', path: '/warehouse/transfers', icon: Compass },
           { label: 'Dispatch Management', path: '/warehouse/dispatch', icon: Package },
