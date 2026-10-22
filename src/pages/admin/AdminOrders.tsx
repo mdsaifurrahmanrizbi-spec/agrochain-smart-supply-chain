@@ -7,13 +7,24 @@ import { Link } from 'react-router-dom';
 export const AdminOrders: React.FC = () => {
   const [orders] = useState(store.orders);
   const [search, setSearch] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'COD' | 'ONLINE' | 'PENDING' | 'PAID'>('ALL');
+  const [view, setView] = useState<'ACTIVE' | 'SUCCESSFUL'>('ACTIVE');
 
-  const filtered = orders.filter(
-    (o) =>
-      o.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
-      o.buyerName.toLowerCase().includes(search.toLowerCase()) ||
-      o.buyerCity.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = orders.filter((o) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || [
+      o.id, o.orderNumber, o.buyerName, o.buyerPhone, o.buyerCity,
+      ...o.items.flatMap((item) => [item.productName, item.farmerName, item.farmerId]),
+    ].some((value) => String(value || '').toLowerCase().includes(query));
+    const matchesPayment = paymentFilter === 'ALL' ||
+      (paymentFilter === 'COD' && o.paymentMethod === 'COD') ||
+      (paymentFilter === 'ONLINE' && o.paymentMethod === 'ONLINE') ||
+      (paymentFilter === 'PENDING' && o.paymentStatus === 'PENDING') ||
+      (paymentFilter === 'PAID' && o.paymentStatus === 'PAID');
+    const settlements = store.settlements.filter((settlement) => settlement.orderId === o.id || settlement.orderNumber === o.orderNumber);
+    const successful = settlements.length > 0 && settlements.every((settlement) => ['PAID', 'COMPLETED'].includes(settlement.settlementStatus));
+    return matchesSearch && matchesPayment && (view === 'SUCCESSFUL' ? successful : !successful);
+  });
 
   return (
     <div className="space-y-6">
@@ -24,11 +35,21 @@ export const AdminOrders: React.FC = () => {
         </p>
       </div>
 
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="bg-white p-1 rounded-xl border border-slate-200 flex gap-1">
+          <button onClick={() => setView('ACTIVE')} className={`px-3 py-2 rounded-lg text-xs font-bold ${view === 'ACTIVE' ? 'bg-emerald-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Active Orders</button>
+          <button onClick={() => setView('SUCCESSFUL')} className={`px-3 py-2 rounded-lg text-xs font-bold ${view === 'SUCCESSFUL' ? 'bg-emerald-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Successful Orders</button>
+        </div>
+        <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value as typeof paymentFilter)} className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-700">
+          <option value="ALL">All payment methods/statuses</option><option value="COD">COD</option><option value="ONLINE">RupantorPay Online</option><option value="PENDING">Payment Pending / Unpaid</option><option value="PAID">Customer Payment Paid</option>
+        </select>
+      </div>
+
       <div className="bg-white p-3 rounded-xl border border-slate-200 flex items-center gap-3">
         <Search className="w-4 h-4 text-slate-400 ml-2" />
         <input
           type="text"
-          placeholder="Filter by consignment order number, customer name, or district..."
+          placeholder="Search order ID, customer, farmer, product, phone, or district..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full text-xs bg-transparent focus:outline-hidden text-slate-800"
@@ -42,14 +63,15 @@ export const AdminOrders: React.FC = () => {
               <tr>
                 <th className="py-3 px-4">Order Ref</th>
                 <th className="py-3 px-4">Customer & City</th>
+                <th className="py-3 px-4">Product / Farmer</th>
                 <th className="py-3 px-4">Produce Subtotal</th>
                 <th className="py-3 px-4">Delivery Fee</th>
                 <th className="py-3 px-4">Grand Total</th>
                 <th className="py-3 px-4">Commission (10%)</th>
                 <th className="py-3 px-4">Seller Net</th>
-                <th className="py-3 px-4">Payment & OTP</th>
-                <th className="py-3 px-4">Logistics Status</th>
-                <th className="py-3 px-4 text-right">OTP Verification</th>
+                <th className="py-3 px-4">Payment Method / Status</th>
+                <th className="py-3 px-4">Delivery Status</th>
+                <th className="py-3 px-4 text-right">Payout Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -71,6 +93,9 @@ export const AdminOrders: React.FC = () => {
                         {ord.buyerCity} · {isDhaka ? 'Dhaka Hub' : 'Regional'}
                       </div>
                     </td>
+                    <td className="py-3 px-4">
+                      {ord.items.map((item) => <div key={`${ord.id}-${item.productId}`} className="mb-1"><div className="font-semibold text-slate-900">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div></div>)}
+                    </td>
                     <td className="py-3 px-4 font-bold text-slate-900 tabular-nums">
                       ৳{gross.toLocaleString()}
                     </td>
@@ -88,23 +113,19 @@ export const AdminOrders: React.FC = () => {
                       ৳{net.toLocaleString()}
                     </td>
                     <td className="py-3 px-4">
-                      <span className="font-medium text-slate-800">{ord.paymentMethod}</span>
-                      <span className="text-[10px] font-mono text-slate-500 block">
-                        OTP: <strong className="text-slate-800">{ord.deliveryOtp}</strong>
-                      </span>
+                      <span className="font-medium text-slate-800">{ord.paymentMethod === 'ONLINE' ? 'RupantorPay Online' : 'Cash on Delivery'}</span>
+                      <span className={`block mt-1 text-[10px] font-bold ${ord.paymentStatus === 'PAID' ? 'text-emerald-700' : 'text-amber-700'}`}>{ord.paymentStatus === 'PAID' ? 'Customer payment: PAID' : 'Customer payment: UNPAID'}</span>
+                      {ord.transactionId && <span className="block text-[10px] font-mono text-slate-500">Txn: {ord.transactionId}</span>}
                     </td>
                     <td className="py-3 px-4">
                       <StatusBadge status={ord.orderStatus} size="sm" />
                     </td>
                     <td className="py-3 px-4 text-right">
-                      {ord.isDeliveryVerified ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                          <KeyRound className="w-3 h-3 text-emerald-600" />
-                          <span>OTP Confirmed</span>
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 text-[11px]">Pending OTP</span>
-                      )}
+                      {ord.isDeliveryVerified && ord.orderStatus === 'DELIVERED' ? (
+                        <Link to="/admin/seller-payments" className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                          <ShieldCheck className="w-3 h-3" /> Manage farmer payout
+                        </Link>
+                      ) : <span className="text-slate-400 text-[11px]">Available after delivery</span>}
                     </td>
                   </tr>
                 );
