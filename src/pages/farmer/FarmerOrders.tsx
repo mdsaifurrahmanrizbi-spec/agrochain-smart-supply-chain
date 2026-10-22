@@ -44,7 +44,7 @@ export const FarmerOrders: React.FC = () => {
 
       <div className="flex gap-2 rounded-xl border border-slate-200 bg-white p-1 w-fit">
         <button onClick={() => setView('ACTIVE')} className={`px-3 py-2 rounded-lg text-xs font-bold ${view === 'ACTIVE' ? 'bg-emerald-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Orders ({farmerOrders.filter((order) => !settlements.some((s) => (s.orderId === order.id || s.orderNumber === order.orderNumber) && ['PAID', 'COMPLETED'].includes(s.settlementStatus))).length})</button>
-        <button onClick={() => setView('SUCCESSFUL')} className={`px-3 py-2 rounded-lg text-xs font-bold ${view === 'SUCCESSFUL' ? 'bg-emerald-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Successful Orders ({farmerOrders.filter((order) => settlements.some((s) => (s.orderId === order.id || s.orderNumber === order.orderNumber) && ['PAID', 'COMPLETED'].includes(s.settlementStatus)).length})</button>
+        <button onClick={() => setView('SUCCESSFUL')} className={`px-3 py-2 rounded-lg text-xs font-bold ${view === 'SUCCESSFUL' ? 'bg-emerald-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Successful Orders ({farmerOrders.filter((order) => settlements.some((s) => (s.orderId === order.id || s.orderNumber === order.orderNumber) && ['PAID', 'COMPLETED'].includes(s.settlementStatus))).length})</button>
       </div>
 
       {/* 10% Commission Guidance */}
