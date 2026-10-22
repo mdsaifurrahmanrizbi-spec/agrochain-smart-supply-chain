@@ -16,6 +16,7 @@ const allowedOrigins = new Set([
   'http://localhost:3001',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
+  'https://bucolic-llama-369eaf.netlify.app',
   ...(process.env.CORS_ORIGINS || '')
     .split(',')
     .map((origin) => origin.trim())
