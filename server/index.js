@@ -503,6 +503,57 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     const existing = existingResult.rows[0]?.data;
 
+    // Farmer payout completion is a financial transition, so enforce its
+    // prerequisites on the server rather than trusting the admin UI.
+    if (resource === 'settlements') {
+      const paidStatuses = ['PAID', 'COMPLETED'];
+      const isPaidNow = paidStatuses.includes(data.settlementStatus);
+      const wasPaid = paidStatuses.includes(existing?.settlementStatus);
+
+      if (wasPaid && (!isPaidNow ||
+          data.payoutReference !== existing.payoutReference ||
+          data.payoutDate !== existing.payoutDate)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'A completed farmer payout is immutable' });
+      }
+
+      if (isPaidNow && !wasPaid) {
+        if (typeof data.payoutReference !== 'string' || !data.payoutReference.trim()) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'A real bank/MFS payout reference is required' });
+        }
+        const relatedOrderId = typeof data.orderId === 'string' ? data.orderId : '';
+        const relatedOrderNumber = typeof data.orderNumber === 'string' ? data.orderNumber : '';
+        const orderResult = relatedOrderId
+          ? await client.query(
+              "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+              [relatedOrderId]
+            )
+          : await client.query(
+              "SELECT data FROM agrochain_records WHERE resource = 'orders' AND data->>'orderNumber' = $1 LIMIT 1 FOR UPDATE",
+              [relatedOrderNumber]
+            );
+        const relatedOrder = orderResult.rows[0]?.data;
+        if (!relatedOrder || relatedOrder.orderStatus !== 'DELIVERED' ||
+            relatedOrder.isDeliveryVerified !== true) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'Farmer payout requires server-verified delivery' });
+        }
+
+        if (relatedOrder.paymentMethod === 'COD') {
+          const cashResult = await client.query(
+            "SELECT data FROM agrochain_records WHERE resource = 'codRecords' AND data->>'orderId' = $1 LIMIT 1",
+            [relatedOrder.id]
+          );
+          const cashRecord = cashResult.rows[0]?.data;
+          if (!cashRecord || cashRecord.depositStatus !== 'CASH_DEPOSIT_VERIFIED') {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ message: 'COD farmer payout requires warehouse-verified cash deposit' });
+          }
+        }
+      }
+    }
+
     if (resource === 'codRecords' && role === 'delivery') {
       if (existing || data.depositStatus !== 'CASH_COLLECTED') {
         await client.query('ROLLBACK');
