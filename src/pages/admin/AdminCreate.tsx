@@ -4,7 +4,7 @@ import { KeyRound, ArrowRight } from 'lucide-react';
 import { Logo } from '../../components/common/Logo';
 import { agroApi } from '../../services/api';
 
-export const AdminRecovery: React.FC = () => {
+export const AdminCreate: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -45,7 +45,11 @@ export const AdminRecovery: React.FC = () => {
         <form onSubmit={submit} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">New admin name</label>
-            <input required type="text" maxLength={120} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900" />\n          </div>\n          <div>\n            <label className="mb-1 block text-sm font-semibold text-slate-700">New admin email</label>\n            <input required type="email" maxLength={254} autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900" />
+            <input required type="text" maxLength={120} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900" />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-semibold text-slate-700">New admin email</label>
+            <input required type="email" maxLength={254} autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900" />
           </div>
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">New password (at least 12 characters)</label>
