@@ -158,7 +158,7 @@ app.post('/api/admin/bootstrap/', async (req, res) => {
   if (!name || name.length > 120) {
     return res.status(400).json({ message: 'Name is required and must be at most 120 characters' });
   }
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
     return res.status(400).json({ message: 'Enter a valid email address' });
   }
   if (password.length < 12 || password.length > 128) {
