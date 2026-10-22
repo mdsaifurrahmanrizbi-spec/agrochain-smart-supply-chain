@@ -36,7 +36,7 @@ app.use((req, res, next) => {
 );
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'Content-Type, Authorization'
+    'Content-Type, Authorization, X-Admin-Bootstrap-Token'
   );
 
   if (req.method === 'OPTIONS') {
@@ -144,10 +144,12 @@ app.post('/api/admin/bootstrap/', async (req, res) => {
   const suppliedToken = typeof req.headers['x-admin-bootstrap-token'] === 'string'
     ? req.headers['x-admin-bootstrap-token']
     : '';
+  const configuredBytes = Buffer.from(configuredToken);
+  const suppliedBytes = Buffer.from(suppliedToken);
   const crypto = await import('node:crypto');
 
-  if (configuredToken.length < 32 || suppliedToken.length !== configuredToken.length ||
-      !crypto.timingSafeEqual(Buffer.from(suppliedToken), Buffer.from(configuredToken))) {
+  if (configuredBytes.length < 32 || suppliedBytes.length !== configuredBytes.length ||
+      !crypto.timingSafeEqual(suppliedBytes, configuredBytes)) {
     return res.status(403).json({ message: 'Admin setup token is invalid or not configured' });
   }
 
@@ -158,27 +160,32 @@ app.post('/api/admin/bootstrap/', async (req, res) => {
   if (!name || name.length > 120) {
     return res.status(400).json({ message: 'Name is required and must be at most 120 characters' });
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254) {
     return res.status(400).json({ message: 'Enter a valid email address' });
   }
   if (password.length < 12 || password.length > 128) {
     return res.status(400).json({ message: 'Password must be 12 to 128 characters long' });
   }
 
+  const client = await pool.connect();
   try {
-    const existingAdmin = await pool.query("SELECT id FROM auth_users WHERE role = 'admin' LIMIT 1");
+    await client.query('BEGIN');
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('agrochain_first_admin_bootstrap'))");
+    const existingAdmin = await client.query("SELECT id FROM auth_users WHERE role = 'admin' LIMIT 1");
     if (existingAdmin.rowCount > 0) {
+      await client.query('ROLLBACK');
       return res.status(409).json({ message: 'An admin account already exists. Bootstrap is permanently closed.' });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
     const id = 'usr_' + crypto.randomUUID();
-    const result = await pool.query(
+    const result = await client.query(
       `INSERT INTO auth_users (id, name, email, password_hash, role, status)
        VALUES ($1, $2, $3, $4, 'admin', 'ACTIVE')
        RETURNING id, name, email, role, status, created_at`,
       [id, name, email, passwordHash]
     );
+    await client.query('COMMIT');
     const account = result.rows[0];
     return res.status(201).json({
       message: 'Initial admin account created. You can now sign in.',
@@ -192,11 +199,14 @@ app.post('/api/admin/bootstrap/', async (req, res) => {
       },
     });
   } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
     if (error.code === '23505') {
       return res.status(409).json({ message: 'An account already exists for this email and role' });
     }
     console.error('Admin bootstrap failed:', error.message);
     return res.status(500).json({ message: 'Admin account could not be created' });
+  } finally {
+    client.release();
   }
 });
 
