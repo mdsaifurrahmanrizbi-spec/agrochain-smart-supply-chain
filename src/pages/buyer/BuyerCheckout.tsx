@@ -202,6 +202,12 @@ export const BuyerCheckout: React.FC = () => {
         notes: address.notes,
       });
 
+      if (paymentMethod === 'ONLINE') {
+        const paymentUrl = await agroApi.createRupantorPayCheckout(created.id);
+        window.location.assign(paymentUrl);
+        return;
+      }
+
       clearCart();
       navigate(`/buyer/tracking/${created.id}`);
     } catch (err) {
