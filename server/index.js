@@ -261,7 +261,8 @@ app.post('/api/password-reset/request/', async (req, res) => {
       );
 
       const frontend = process.env.FRONTEND_URL.replace(/\/$/, '');
-      const resetUrl = frontend + '/password-reset?token=' + encodeURIComponent(rawToken);
+      const resetPath = account.role === 'admin' ? '/admin-portal/reset-password' : '/password-reset';
+      const resetUrl = frontend + resetPath + '?token=' + encodeURIComponent(rawToken);
       const safeName = String(account.name).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       const emailResponse = await fetch('https://api.resend.com/emails', {
         method: 'POST',
