@@ -977,6 +977,19 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     const existing = existingResult.rows[0]?.data;
 
+    // Buyers may create only their own orders. Existing order state changes must
+    // use dedicated server-authoritative workflows (cancellation/payment/delivery).
+    if (resource === 'orders' && role === 'buyer') {
+      if (!existing && data.buyerId !== req.auth.sub) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'You can only create orders for your own customer account' });
+      }
+      if (existing) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Existing orders can only be changed through dedicated order workflows' });
+      }
+    }
+
     // Warehouse may only complete COD farmer payouts. Online payouts remain admin-only.
     if (resource === 'settlements' && role === 'warehouse') {
       const relatedId = typeof data.orderId === 'string' ? data.orderId : '';
