@@ -497,6 +497,9 @@ app.post('/api/login/', async (req, res) => {
       email: account.email,
       role: account.role,
       status: account.status,
+      payoutMethod: account.payout_method || undefined,
+      payoutAccountNumber: account.payout_account_number || undefined,
+      payoutBankName: account.payout_bank_name || undefined,
       createdAt: account.created_at,
     };
 
@@ -568,10 +571,66 @@ app.patch('/api/admin/users/:id/status/', requireAuth, async (req, res) => {
   }
 });
 
+// Farmer payout accounts are private: farmers may edit only their own account;
+// only Admin and Warehouse Manager can view account details for payout processing.
+app.patch('/api/farmer/payout-account/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'farmer') return res.status(403).json({ message: 'Only farmers can update their own payout account' });
+  const payoutMethod = typeof req.body?.payoutMethod === 'string' ? req.body.payoutMethod.trim() : '';
+  const payoutAccountNumber = typeof req.body?.payoutAccountNumber === 'string' ? req.body.payoutAccountNumber.trim() : '';
+  const payoutBankName = typeof req.body?.payoutBankName === 'string' ? req.body.payoutBankName.trim() : '';
+  if (!['bKash', 'Nagad', 'Bank Transfer'].includes(payoutMethod)) return res.status(400).json({ message: 'Choose bKash, Nagad, or Bank Transfer' });
+  if (payoutAccountNumber.length < 5 || payoutAccountNumber.length > 50) return res.status(400).json({ message: 'Enter a valid payout account number' });
+  if (payoutBankName.length > 120) return res.status(400).json({ message: 'Bank name is too long' });
+  try {
+    const result = await pool.query(
+      `UPDATE auth_users
+       SET payout_method = $1, payout_account_number = $2, payout_bank_name = $3
+       WHERE id = $4 AND role = 'farmer'
+       RETURNING id, name, email, role, status, payout_method, payout_account_number, payout_bank_name, created_at`,
+      [payoutMethod, payoutAccountNumber, payoutBankName || null, req.auth.sub]
+    );
+    if (!result.rows[0]) return res.status(404).json({ message: 'Farmer account not found' });
+    const row = result.rows[0];
+    return res.json({ id: row.id, name: row.name, email: row.email, role: row.role, status: row.status, payoutMethod: row.payout_method, payoutAccountNumber: row.payout_account_number, payoutBankName: row.payout_bank_name, createdAt: row.created_at });
+  } catch (error) {
+    console.error('Could not save farmer payout account:', error.message);
+    return res.status(500).json({ message: 'Could not save payout account' });
+  }
+});
+
+app.get('/api/farmers/payout-accounts/', requireAuth, async (req, res) => {
+  if (!['admin', 'warehouse'].includes(req.auth.role)) return res.status(403).json({ message: 'Admin or Warehouse Manager access required' });
+  const requestedIds = typeof req.query.farmerIds === 'string'
+    ? req.query.farmerIds.split(',').map((value) => value.trim()).filter(Boolean).slice(0, 100)
+    : [];
+  try {
+    const result = requestedIds.length
+      ? await pool.query(
+          `SELECT id, name, payout_method, payout_account_number, payout_bank_name
+           FROM auth_users WHERE role = 'farmer' AND id = ANY($1::text[]) ORDER BY name`,
+          [requestedIds]
+        )
+      : await pool.query(
+          `SELECT id, name, payout_method, payout_account_number, payout_bank_name
+           FROM auth_users WHERE role = 'farmer' ORDER BY name`
+        );
+    return res.json(result.rows.map((row) => ({
+      farmerId: row.id,
+      farmerName: row.name,
+      payoutMethod: row.payout_method || null,
+      payoutAccountNumber: row.payout_account_number || null,
+      payoutBankName: row.payout_bank_name || null,
+    })));
+  } catch (error) {
+    console.error('Could not load farmer payout accounts:', error.message);
+    return res.status(500).json({ message: 'Could not load payout accounts' });
+  }
+});
+
 // Return the authenticated account from the database.
 app.get('/api/me', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, email, role, status, created_at FROM auth_users WHERE id = $1', [req.auth.sub]);
+    const result = await pool.query('SELECT id, name, email, role, status, payout_method, payout_account_number, payout_bank_name, created_at FROM auth_users WHERE id = $1', [req.auth.sub]);
     const account = result.rows[0];
     if (!account || account.status !== 'ACTIVE') {
       return res.status(401).json({ message: 'Account is inactive or unavailable' });
@@ -1252,6 +1311,13 @@ async function startServer() {
         CHECK (status IN ('ACTIVE', 'PENDING', 'SUSPENDED')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE auth_users
+      ADD COLUMN IF NOT EXISTS payout_method TEXT,
+      ADD COLUMN IF NOT EXISTS payout_account_number TEXT,
+      ADD COLUMN IF NOT EXISTS payout_bank_name TEXT
   `);
 
   // Allow the same email to have separate role-specific accounts/passwords.
