@@ -232,6 +232,28 @@ export const agroApi = {
     return data as { message: string; user: User };
   },
 
+  // Create the first administrator using a one-time hosting secret.
+  async bootstrapAdmin(input: {
+    name: string;
+    email: string;
+    password: string;
+    bootstrapToken: string;
+  }): Promise<{ message: string }> {
+    const { bootstrapToken, ...body } = input;
+    const res = await fetch(`${API_BASE_URL}/admin/bootstrap/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Bootstrap-Token': bootstrapToken,
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Admin setup failed (${res.status})`);
+    if (typeof data.message !== 'string') throw new Error('The server returned an invalid setup response');
+    return data as { message: string };
+  },
+
   // Authenticate only against the backend; never silently fall back to a mock user.
   async login(email: string, password: string, role: User['role']): Promise<{ token: string; user: User }> {
     const res = await fetch(`${API_BASE_URL}/login/`, {
