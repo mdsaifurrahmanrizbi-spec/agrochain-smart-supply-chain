@@ -5,9 +5,20 @@ import { Search, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const AdminOrders: React.FC = () => {
-  const [orders] = useState(store.orders);
+  const [orders, setOrders] = useState(store.orders);
+  const [settlements, setSettlements] = useState(store.settlements);
   const [payoutAccounts, setPayoutAccounts] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([agroApi.getOrders(), agroApi.getSettlements()]).then(([loadedOrders, loadedSettlements]) => {
+      if (!mounted) return;
+      setOrders(loadedOrders);
+      setSettlements(loadedSettlements);
+    }).catch((error) => console.warn('Could not refresh admin orders and payouts.', error));
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     const farmerIds = [...new Set(orders.flatMap((order) => order.items.map((item) => item.farmerId)))];
@@ -32,8 +43,8 @@ export const AdminOrders: React.FC = () => {
       (paymentFilter === 'ONLINE' && o.paymentMethod === 'ONLINE') ||
       (paymentFilter === 'PENDING' && o.paymentStatus === 'PENDING') ||
       (paymentFilter === 'PAID' && o.paymentStatus === 'PAID');
-    const settlements = store.settlements.filter((settlement) => settlement.orderId === o.id || settlement.orderNumber === o.orderNumber);
-    const successful = settlements.length > 0 && settlements.every((settlement) => ['PAID', 'COMPLETED'].includes(settlement.settlementStatus));
+    const orderSettlements = settlements.filter((settlement) => settlement.orderId === o.id || settlement.orderNumber === o.orderNumber);
+    const successful = orderSettlements.length > 0 && orderSettlements.every((settlement) => ['PAID', 'COMPLETED'].includes(settlement.settlementStatus));
     return matchesSearch && matchesPayment && (view === 'SUCCESSFUL' ? successful : !successful);
   });
 
