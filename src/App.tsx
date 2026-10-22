@@ -65,6 +65,7 @@ import { InspectorWorkspace } from './pages/inspector/InspectorWorkspace';
 import { InspectorHistory } from './pages/inspector/InspectorHistory';
 
 // Admin Pages
+import { AdminSetup } from './pages/admin/AdminSetup';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { AdminUsers } from './pages/admin/AdminUsers';
 import { AdminFarmers } from './pages/admin/AdminFarmers';
@@ -100,6 +101,7 @@ export default function App() {
               <Route path="/warehouse-portal/login" element={<Login />} />
               <Route path="/admin-portal" element={<Navigate to="/admin-portal/login" replace />} />
               <Route path="/admin-portal/login" element={<Login />} />
+              <Route path="/admin-portal/setup" element={<AdminSetup />} />
             </Route>
 
             {/* Farmer Portal with DashboardLayout */}
