@@ -503,6 +503,27 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     const existing = existingResult.rows[0]?.data;
 
+    if (resource === 'codRecords' && role === 'warehouse') {
+      const immutableFields = ['orderId', 'orderNumber', 'deliveryPartnerId', 'deliveryPartnerName', 'amount', 'collectedAt'];
+      if (!existing || data.depositStatus !== 'CASH_DEPOSIT_VERIFIED' ||
+          existing.depositStatus === 'CASH_DEPOSIT_VERIFIED' ||
+          immutableFields.some((field) => data[field] !== existing[field])) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Warehouse managers may only verify an existing COD deposit once, without changing its transaction details' });
+      }
+
+      const orderResult = await client.query(
+        "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+        [existing.orderId]
+      );
+      const relatedOrder = orderResult.rows[0]?.data;
+      if (!relatedOrder || relatedOrder.paymentMethod !== 'COD' ||
+          relatedOrder.orderStatus !== 'DELIVERED' || relatedOrder.isDeliveryVerified !== true) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'COD deposit can only be verified after delivery is confirmed' });
+      }
+    }
+
     // Payment fields must only be changed by a dedicated server-side payment flow.
     if (resource === 'orders') {
       const protectedPaymentFields = [
