@@ -71,6 +71,7 @@ import { InspectorHistory } from './pages/inspector/InspectorHistory';
 // Admin Pages
 import { AdminSetup } from './pages/admin/AdminSetup';
 import { AdminRecovery } from './pages/admin/AdminRecovery';
+import { AdminCreate } from './pages/admin/AdminCreate';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { AdminUsers } from './pages/admin/AdminUsers';
 import { AdminFarmers } from './pages/admin/AdminFarmers';
@@ -119,6 +120,7 @@ export default function App() {
               <Route path="/admin-portal/reset-password" element={<PasswordReset />} />
               <Route path="/admin-portal/setup" element={<AdminSetup />} />
               <Route path="/admin-portal/recover" element={<AdminRecovery />} />
+              <Route path="/admin-portal/create-admin" element={<AdminCreate />} />
             </Route>
 
             {/* Farmer Portal with DashboardLayout */}
