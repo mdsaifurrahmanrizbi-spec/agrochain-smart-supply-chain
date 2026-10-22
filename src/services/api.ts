@@ -505,6 +505,17 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || 'Payment could not be verified');
+
+    if (data.status === 'PAID') {
+      const order = store.orders.find((item) => item.id === orderId || item.orderNumber === orderId);
+      if (order) {
+        order.paymentStatus = 'PAID';
+        order.paymentGateway = 'RUPANTORPAY';
+        order.transactionId = data.transactionId || transactionId;
+        order.updatedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
+        localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+      }
+    }
     return data;
   },
 
