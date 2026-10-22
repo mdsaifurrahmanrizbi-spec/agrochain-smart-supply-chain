@@ -259,6 +259,23 @@ export const agroApi = {
     return data as { message: string };
   },
 
+  // Create an additional administrator; backend access is gated by ADMIN_ACCOUNT_CREATION_ENABLED.
+  async createAdminAccount(input: { name: string; email: string; password: string; creationToken: string }): Promise<{ message: string }> {
+    const { creationToken, ...body } = input;
+    const res = await fetch(`${API_BASE_URL}/admin/create-account/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Bootstrap-Token': creationToken,
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Admin account creation failed (${res.status})`);
+    if (typeof data.message !== 'string') throw new Error('The server returned an invalid account creation response');
+    return data as { message: string };
+  },
+
   // Temporary recovery endpoint; the backend must have ADMIN_RECOVERY_ENABLED=true.
   async recoverAdminPassword(input: { email: string; password: string; recoveryToken: string }): Promise<{ message: string }> {
     const { recoveryToken, ...body } = input;
