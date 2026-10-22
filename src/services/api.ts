@@ -259,6 +259,23 @@ export const agroApi = {
     return data as { message: string };
   },
 
+  // Temporary recovery endpoint; the backend must have ADMIN_RECOVERY_ENABLED=true.
+  async recoverAdminPassword(input: { email: string; password: string; recoveryToken: string }): Promise<{ message: string }> {
+    const { recoveryToken, ...body } = input;
+    const res = await fetch(`${API_BASE_URL}/admin/recover-password/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Bootstrap-Token': recoveryToken,
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Admin password recovery failed (${res.status})`);
+    if (typeof data.message !== 'string') throw new Error('The server returned an invalid recovery response');
+    return data as { message: string };
+  },
+
   async getAdminUsers(): Promise<AdminAccount[]> {
     const res = await fetch(`${API_BASE_URL}/admin/users/`, { headers: authHeaders() });
     const data = await res.json().catch(() => ({}));
