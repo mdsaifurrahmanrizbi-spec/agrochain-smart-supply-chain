@@ -88,6 +88,7 @@ router.post('/rupantorpay/verify', requireAuth, async (req, res) => {
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (order.buyerId !== req.auth.sub) return res.status(403).json({ message: 'This order does not belong to your account' });
     if (order.paymentMethod !== 'ONLINE') return res.status(400).json({ message: 'This order is not an online payment order' });
+    if (order.orderStatus === 'CANCELLED') return res.status(409).json({ message: 'Cancelled orders cannot be paid' });
     if (order.paymentStatus === 'PAID' && order.transactionId === transactionId) {
       return res.json({ status: 'PAID', orderId, transactionId });
     }
@@ -134,6 +135,10 @@ router.post('/rupantorpay/verify', requireAuth, async (req, res) => {
     if (latest.paymentMethod !== 'ONLINE') {
       await client.query('ROLLBACK');
       return res.status(400).json({ message: 'This order is not an online payment order' });
+    }
+    if (latest.orderStatus === 'CANCELLED') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Cancelled orders cannot be paid' });
     }
     if (latest.paymentStatus === 'PAID') {
       await client.query('ROLLBACK');
