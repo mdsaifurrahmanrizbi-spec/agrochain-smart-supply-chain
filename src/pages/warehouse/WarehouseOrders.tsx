@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { store } from '../../services/api';
+import { agroApi, store } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Search, ShieldCheck, Banknote } from 'lucide-react';
 
@@ -8,9 +8,26 @@ export const WarehouseOrders: React.FC = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [cashFilter, setCashFilter] = useState<'ALL' | 'PENDING' | 'VERIFIED'>('ALL');
+  const [, setRevision] = useState(0);
 
   // Warehouse staff intentionally receive COD orders only. Online orders are not rendered here.
   const orders = useMemo(() => store.orders.filter((order) => order.paymentMethod === 'COD'), []);
+  const handleFarmerPayout = async (orderId: string) => {
+    const settlement = store.settlements.find((item) => item.orderId === orderId);
+    if (!settlement) {
+      window.alert('Farmer payout record is not available yet. Refresh orders after delivery confirmation.');
+      return;
+    }
+    const reference = window.prompt('After you have actually transferred the money to the farmer, enter the bank/bKash/Nagad transaction reference:');
+    if (reference === null) return;
+    try {
+      await agroApi.releaseSellerSettlementPayout(settlement.id, reference);
+      setRevision((value) => value + 1);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Could not record farmer payout.');
+    }
+  };
+
   const filtered = orders.filter((order) => {
     const query = search.trim().toLowerCase();
     const matchesSearch = !query || [
@@ -60,6 +77,7 @@ export const WarehouseOrders: React.FC = () => {
                 <th className="px-4 py-3">Delivery</th>
                 <th className="px-4 py-3">COD Cash</th>
                 <th className="px-4 py-3">Customer Payment</th>
+                <th className="px-4 py-3">Farmer Payout</th>
                 <th className="px-4 py-3 text-right">Action</th>
               </tr>
             </thead>
@@ -89,15 +107,30 @@ export const WarehouseOrders: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={order.paymentStatus} size="sm" />
-                      {order.paymentStatus === 'PAID' && <span className="mt-1 block text-[10px] font-semibold text-emerald-700">Cash deposit verified</span>}
+                      {order.paymentStatus === 'PAID' && <span className="mt-1 block text-[10px] font-semibold text-emerald-700">Collected at delivery</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const settlement = store.settlements.find((item) => item.orderId === order.id);
+                        const paid = settlement && ['PAID', 'COMPLETED'].includes(settlement.settlementStatus);
+                        return <><StatusBadge status={settlement?.settlementStatus || 'PENDING'} size="sm" />
+                          {settlement?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Ref: {settlement.payoutReference}</span>}
+                          {paid && <span className="mt-1 block text-[10px] font-semibold text-emerald-700">Farmer payout successful</span>}
+                        </>;
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {!verified && delivered && record ? <button onClick={() => navigate('/warehouse/verifications')} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 font-bold text-white"><ShieldCheck className="h-3.5 w-3.5" /> Audit cash</button> : verified ? <span className="inline-flex items-center gap-1 font-bold text-emerald-700"><Banknote className="h-3.5 w-3.5" /> Verified</span> : <span className="text-[10px] text-slate-400">After delivery</span>}
+                      {!verified && delivered && record ? <button onClick={() => navigate('/warehouse/verifications')} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 font-bold text-white"><ShieldCheck className="h-3.5 w-3.5" /> Audit cash</button> :
+                        verified && delivered && !['PAID', 'COMPLETED'].includes(store.settlements.find((item) => item.orderId === order.id)?.settlementStatus || 'PENDING') ?
+                          <button onClick={() => void handleFarmerPayout(order.id)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 font-bold text-white"><Banknote className="h-3.5 w-3.5" /> Farmer payout success</button> :
+                          ['PAID', 'COMPLETED'].includes(store.settlements.find((item) => item.orderId === order.id)?.settlementStatus || '') ?
+                            <span className="inline-flex items-center gap-1 font-bold text-emerald-700"><Banknote className="h-3.5 w-3.5" /> Paid</span> :
+                            <span className="text-[10px] text-slate-400">After delivery</span>}
                     </td>
                   </tr>
                 );
               })}
-              {filtered.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">No COD orders match this search/filter.</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-500">No COD orders match this search/filter.</td></tr>}
             </tbody>
           </table>
         </div>
