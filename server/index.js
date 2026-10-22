@@ -10,7 +10,6 @@ const app = express();
 const PORT = Number(process.env.PORT || 8000);
 
 app.use(express.json({ limit: '1mb' }));
-app.use('/api/payment', rupantorPayRouter);
 
 // Set CORS_ORIGINS to comma-separated deployed frontend origins in production.
 const allowedOrigins = new Set([
@@ -48,6 +47,8 @@ app.use((req, res, next) => {
 
   next();
 });
+
+app.use('/api/payment', rupantorPayRouter);
 
 // Role directory used by the frontend health check and admin panel.
 const roles = [
