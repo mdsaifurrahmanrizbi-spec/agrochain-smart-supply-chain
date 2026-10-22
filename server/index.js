@@ -4,11 +4,13 @@ import express from 'express';
 import { pool } from './db.js';
 import bcrypt from 'bcryptjs';
 import { createAuthToken, requireAuth } from './auth.js';
+import rupantorPayRouter from './rupantorpay.js';
 
 const app = express();
 const PORT = Number(process.env.PORT || 8000);
 
 app.use(express.json({ limit: '1mb' }));
+app.use('/api/payment', rupantorPayRouter);
 
 // Set CORS_ORIGINS to comma-separated deployed frontend origins in production.
 const allowedOrigins = new Set([
