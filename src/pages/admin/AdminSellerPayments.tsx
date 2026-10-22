@@ -31,10 +31,20 @@ export const AdminSellerPayments: React.FC = () => {
   );
 
   const handleDisburse = async (id: string) => {
-    await agroApi.releaseSellerSettlementPayout(id);
-    setSettlements([...store.settlements]);
-    setNotice(`Payout disbursed directly to farmer's mobile banking account.`);
-    setTimeout(() => setNotice(null), 3000);
+    const payoutReference = window.prompt(
+      'After you have actually transferred the money, enter the bank/bKash/Nagad transaction reference to record the payout:'
+    );
+    if (payoutReference === null) return;
+
+    try {
+      await agroApi.releaseSellerSettlementPayout(id, payoutReference);
+      setSettlements([...store.settlements]);
+      setNotice(`Farmer payout recorded with transfer reference ${payoutReference.trim()}.`);
+      setTimeout(() => setNotice(null), 4000);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not record farmer payout.');
+      setTimeout(() => setNotice(null), 5000);
+    }
   };
 
   const handleUpdateStatus = (id: string, status: any, reason?: string) => {
@@ -55,7 +65,7 @@ export const AdminSellerPayments: React.FC = () => {
       <div>
         <h1 className="text-xl font-bold text-slate-900">Seller Settlements & 10% Platform Commission</h1>
         <p className="text-xs text-slate-500 mt-1">
-          Audit agricultural sales disbursements, automated 10% AgroChain commissions, and execute mobile banking payouts.
+          Confirm farmer payouts only after delivery verification and, for COD, warehouse cash audit. Transfer funds manually first, then record the real transaction reference.
         </p>
       </div>
 
@@ -125,7 +135,7 @@ export const AdminSellerPayments: React.FC = () => {
                 <th className="py-3 px-4">Net Seller Payout</th>
                 <th className="py-3 px-4">Delivery Fee (Logistics)</th>
                 <th className="py-3 px-4">Channel</th>
-                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4">Status / Transfer Ref</th>
                 <th className="py-3 px-4 text-right">Settlement Action</th>
               </tr>
             </thead>
@@ -152,6 +162,7 @@ export const AdminSellerPayments: React.FC = () => {
                     <td className="py-3 px-4 font-medium text-slate-800">{s.paymentMethod}</td>
                     <td className="py-3 px-4">
                       <StatusBadge status={s.settlementStatus} size="sm" />
+                      {s.payoutReference && <span className="block mt-1 text-[10px] text-slate-500 font-mono">Ref: {s.payoutReference}</span>}
                     </td>
                     <td className="py-3 px-4 text-right space-x-1 whitespace-nowrap">
                       {!isPaid ? (
@@ -160,7 +171,7 @@ export const AdminSellerPayments: React.FC = () => {
                             onClick={() => handleDisburse(s.id)}
                             className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
                           >
-                            Disburse
+                            Record successful payout
                           </button>
                           {s.settlementStatus !== 'ON_HOLD' && (
                             <button

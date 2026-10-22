@@ -145,7 +145,12 @@ export interface Order {
   platformCommission: number; // 10% of productSubtotal
   sellerNetEarnings: number; // productSubtotal - platformCommission
   paymentMethod: 'ONLINE' | 'COD';
+  paymentGateway?: 'RUPANTORPAY';
   paymentStatus: 'PAID' | 'PENDING' | 'REFUNDED';
+  transactionId?: string;
+  gatewayTransactionId?: string;
+  paymentCurrency?: string;
+  paymentVerifiedAt?: string;
   orderStatus: OrderStatus;
   deliveryPartnerId?: string;
   deliveryPartnerName?: string;
@@ -379,6 +384,7 @@ export interface SellerSettlement {
   paymentMethod: 'bKash' | 'Nagad' | 'Bank Transfer';
   settlementStatus: 'PENDING' | 'PROCESSING' | 'PAID' | 'ON_HOLD' | 'COMPLETED';
   payoutDate?: string;
+  payoutReference?: string;
   holdReason?: string;
 }
 

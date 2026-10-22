@@ -387,7 +387,7 @@ const resourceWriteRoles = {
   orders: ['admin', 'buyer', 'farmer', 'delivery', 'warehouse', 'inspector'],
   jobs: ['admin', 'buyer', 'delivery', 'warehouse'],
   qualityChecks: ['admin', 'inspector', 'warehouse'],
-  codRecords: ['admin'],
+  codRecords: ['admin', 'warehouse', 'delivery'],
   settlements: ['admin'],
   trackingEvents: ['admin', 'buyer', 'delivery', 'warehouse', 'inspector'],
   godowns: ['admin', 'warehouse'],
@@ -395,7 +395,8 @@ const resourceWriteRoles = {
 };
 
 function canReadResource(role, resource) {
-  if (['users', 'codRecords', 'settlements'].includes(resource)) return role === 'admin';
+  if (['users', 'settlements'].includes(resource)) return role === 'admin';
+  if (resource === 'codRecords') return ['admin', 'warehouse'].includes(role);
   return allowedResources.has(resource);
 }
 
@@ -425,7 +426,27 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       [resource]
     );
 
-    res.json(result.rows);
+    let rows = result.rows;
+    if (resource === 'orders') {
+      const role = req.auth.role;
+      if (role === 'buyer') {
+        rows = rows.filter((row) => row.data?.buyerId === req.auth.sub);
+      } else if (role === 'farmer') {
+        rows = rows.filter((row) =>
+          Array.isArray(row.data?.items) &&
+          row.data.items.some((item) => item?.farmerId === req.auth.sub)
+        );
+      } else if (role === 'warehouse') {
+        // Warehouse staff only access COD orders; online orders are not exposed.
+        rows = rows.filter((row) => row.data?.paymentMethod === 'COD');
+      } else if (role === 'delivery') {
+        rows = rows.filter((row) =>
+          row.data?.deliveryPartnerId === req.auth.sub ||
+          row.data?.pickupPartnerId === req.auth.sub
+        );
+      }
+    }
+    res.json(rows);
   } catch (error) {
     console.error('Could not read records:', error.message);
     res.status(500).json({ message: 'Could not read records' });
@@ -444,6 +465,10 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
   if (!canWriteResource(role, resource)) {
     return res.status(403).json({ message: 'You do not have permission to write this resource' });
+  }
+
+  if (resource === 'orders' && role === 'warehouse' && data?.paymentMethod !== 'COD') {
+    return res.status(403).json({ message: 'Warehouse managers may only process COD orders' });
   }
 
   if (!id || !data || typeof data !== 'object' || Array.isArray(data)) {
@@ -478,11 +503,123 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     const existing = existingResult.rows[0]?.data;
 
+    // Farmer payout completion is a financial transition, so enforce its
+    // prerequisites on the server rather than trusting the admin UI.
+    if (resource === 'settlements') {
+      const paidStatuses = ['PAID', 'COMPLETED'];
+      const isPaidNow = paidStatuses.includes(data.settlementStatus);
+      const wasPaid = paidStatuses.includes(existing?.settlementStatus);
+
+      const immutablePaidFields = [
+        'settlementStatus', 'payoutReference', 'payoutDate',
+        'amount', 'netPayout', 'productSalesValue', 'commissionDeducted',
+        'farmerId', 'orderId', 'orderNumber', 'paymentMethod',
+      ];
+      if (wasPaid && (!isPaidNow ||
+          immutablePaidFields.some((field) => data[field] !== existing[field]))) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'A completed farmer payout is immutable' });
+      }
+
+      if (isPaidNow && !wasPaid) {
+        if (typeof data.payoutReference !== 'string' || !data.payoutReference.trim()) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'A real bank/MFS payout reference is required' });
+        }
+        const relatedOrderId = typeof data.orderId === 'string' ? data.orderId : '';
+        const relatedOrderNumber = typeof data.orderNumber === 'string' ? data.orderNumber : '';
+        const orderResult = relatedOrderId
+          ? await client.query(
+              "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+              [relatedOrderId]
+            )
+          : await client.query(
+              "SELECT data FROM agrochain_records WHERE resource = 'orders' AND data->>'orderNumber' = $1 LIMIT 1 FOR UPDATE",
+              [relatedOrderNumber]
+            );
+        const relatedOrder = orderResult.rows[0]?.data;
+        if (!relatedOrder || relatedOrder.orderStatus !== 'DELIVERED' ||
+            relatedOrder.isDeliveryVerified !== true) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'Farmer payout requires server-verified delivery' });
+        }
+
+        if (relatedOrder.paymentMethod === 'COD') {
+          const cashResult = await client.query(
+            "SELECT data FROM agrochain_records WHERE resource = 'codRecords' AND data->>'orderId' = $1 LIMIT 1",
+            [relatedOrder.id]
+          );
+          const cashRecord = cashResult.rows[0]?.data;
+          if (!cashRecord || cashRecord.depositStatus !== 'CASH_DEPOSIT_VERIFIED') {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ message: 'COD farmer payout requires warehouse-verified cash deposit' });
+          }
+        }
+      }
+    }
+
+    if (resource === 'codRecords' && role === 'delivery') {
+      if (existing || data.depositStatus !== 'CASH_COLLECTED') {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Delivery partners may only create a COD collection record after delivery' });
+      }
+      const orderResult = await client.query(
+        "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+        [data.orderId]
+      );
+      const relatedOrder = orderResult.rows[0]?.data;
+      if (!relatedOrder || relatedOrder.paymentMethod !== 'COD' ||
+          relatedOrder.orderStatus !== 'DELIVERED' || relatedOrder.isDeliveryVerified !== true ||
+          Number(data.amount) !== Number(relatedOrder.totalAmount)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'COD collection can only be recorded for the exact amount after verified delivery' });
+      }
+    }
+
+    if (resource === 'codRecords' && role === 'warehouse') {
+      const immutableFields = ['orderId', 'orderNumber', 'deliveryPartnerId', 'deliveryPartnerName', 'amount', 'collectedAt'];
+      if (!existing || data.depositStatus !== 'CASH_DEPOSIT_VERIFIED' ||
+          existing.depositStatus === 'CASH_DEPOSIT_VERIFIED' ||
+          immutableFields.some((field) => data[field] !== existing[field])) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Warehouse managers may only verify an existing COD deposit once, without changing its transaction details' });
+      }
+
+      const orderResult = await client.query(
+        "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+        [existing.orderId]
+      );
+      const relatedOrder = orderResult.rows[0]?.data;
+      if (!relatedOrder || relatedOrder.paymentMethod !== 'COD' ||
+          relatedOrder.orderStatus !== 'DELIVERED' || relatedOrder.isDeliveryVerified !== true) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'COD deposit can only be verified after delivery is confirmed' });
+      }
+    }
+
+    // Delivery verification is an authorization gate for farmer payouts.
+    // Non-admin clients must not be able to self-confirm delivery via generic writes.
+    if (resource === 'orders' && role !== 'admin') {
+      const wasDeliveryVerified = existing?.isDeliveryVerified === true;
+      const isDeliveryVerified = data.isDeliveryVerified === true;
+      if (isDeliveryVerified !== wasDeliveryVerified) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          message: 'Only an administrator may change verified-delivery authorization',
+        });
+      }
+    }
+
     // Payment fields must only be changed by a dedicated server-side payment flow.
     if (resource === 'orders') {
       const protectedPaymentFields = [
         'paymentStatus',
         'paymentMethod',
+        'paymentGateway',
+        'transactionId',
+        'gatewayTransactionId',
+        'paymentCurrency',
+        'paymentVerifiedAt',
         'totalAmount',
         'productSubtotal',
         'deliveryFee',

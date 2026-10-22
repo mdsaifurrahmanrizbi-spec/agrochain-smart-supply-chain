@@ -505,6 +505,17 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || 'Payment could not be verified');
+
+    if (data.status === 'PAID') {
+      const order = store.orders.find((item) => item.id === orderId || item.orderNumber === orderId);
+      if (order) {
+        order.paymentStatus = 'PAID';
+        order.paymentGateway = 'RUPANTORPAY';
+        order.transactionId = data.transactionId || transactionId;
+        order.updatedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
+        localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+      }
+    }
     return data;
   },
 
@@ -859,7 +870,10 @@ const pickupJob: LogisticsJob = {
       }
     );
 
-    // If COD, register / update COD record
+    // Persist delivery confirmation before recording COD collection.
+    await saveBackendRecord('orders', order);
+
+    // If COD, register the collected cash in the role-checked backend.
     if (order.paymentMethod === 'COD') {
       let codRec = store.codRecords.find((c) => c.orderId === order.id);
       if (!codRec) {
@@ -874,7 +888,8 @@ const pickupJob: LogisticsJob = {
           depositStatus: 'CASH_COLLECTED',
         };
         store.codRecords.unshift(codRec);
-      } else {
+        await saveBackendRecord('codRecords', codRec);
+      } else if (codRec.depositStatus !== 'CASH_DEPOSIT_VERIFIED') {
         codRec.depositStatus = 'CASH_COLLECTED';
         codRec.collectedAt = now;
       }
@@ -1142,14 +1157,11 @@ return qc;
     record.verifiedByAdmin = adminName;
     record.depositDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
-    // If there is an associated seller settlement waiting on COD verification, advance it to PROCESSING or PAID
-    const stl = store.settlements.find((s) => s.orderId === record.orderId);
-    if (stl && (stl.settlementStatus === 'PENDING' || (stl.settlementStatus as any) === 'ELIGIBLE')) {
-      stl.settlementStatus = 'PROCESSING';
-    }
+    // Persist the warehouse audit through the role-checked backend endpoint.
+    // Cash audit does not itself mark the farmer payout as successful.
+    await saveBackendRecord('codRecords', record);
 
     localStorage.setItem('agro_cod_records', JSON.stringify(store.codRecords));
-    localStorage.setItem('agro_settlements', JSON.stringify(store.settlements));
     return record;
   },
 
@@ -1166,24 +1178,39 @@ return qc;
     order.isDeliveryVerified = true;
     order.orderStatus = 'DELIVERED';
 
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
-
-    // Update settlement
-    let stl = store.settlements.find((s) => s.orderId === orderId);
-    if (stl) {
-      stl.settlementStatus = 'PAID';
-      stl.payoutDate = now;
-    }
-
+    // Persist delivery verification on the server because payout authorization
+    // re-checks delivery state against the authoritative backend order record.
+    await saveBackendRecord('orders', order);
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
-    localStorage.setItem('agro_settlements', JSON.stringify(store.settlements));
+
+    // Delivery confirmation is not a farmer payout. Keep the settlement pending
+    // until an authorized admin records an actual transfer and its reference.
   },
 
-  async releaseSellerSettlementPayout(settlementId: string): Promise<SellerSettlement> {
+  async releaseSellerSettlementPayout(settlementId: string, payoutReference: string): Promise<SellerSettlement> {
     const stl = store.settlements.find((s) => s.id === settlementId);
     if (!stl) throw new Error('Settlement not found');
+    if (!payoutReference.trim()) throw new Error('Enter the real bank/MFS transfer reference before confirming payout');
+
+    const order = store.orders.find((o) => o.id === stl.orderId || o.orderNumber === stl.orderNumber);
+    if (!order) throw new Error('Related order not found');
+    if (!order.isDeliveryVerified || order.orderStatus !== 'DELIVERED') {
+      throw new Error('Farmer payout can only be confirmed after customer delivery is verified');
+    }
+    if (order.paymentMethod === 'COD') {
+      const cashAudited = store.codRecords.some(
+        (record) => record.orderId === order.id && record.depositStatus === 'CASH_DEPOSIT_VERIFIED'
+      );
+      if (!cashAudited) throw new Error('COD cash must be verified by the warehouse before farmer payout');
+    }
+    if (stl.settlementStatus === 'PAID' || stl.settlementStatus === 'COMPLETED') {
+      throw new Error('This farmer payout is already marked successful');
+    }
+
     stl.settlementStatus = 'PAID';
     stl.payoutDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    stl.payoutReference = payoutReference.trim();
+    await saveBackendRecord('settlements', stl);
     localStorage.setItem('agro_settlements', JSON.stringify(store.settlements));
     return stl;
   },
