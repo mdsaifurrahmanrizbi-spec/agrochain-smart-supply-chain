@@ -484,6 +484,30 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     return store.orders.find((o) => o.id === id || o.orderNumber === id);
   },
 
+  async createRupantorPayCheckout(orderId: string): Promise<string> {
+    const response = await fetch(`${API_BASE_URL}/payment/rupantorpay/checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ orderId }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || typeof data.paymentUrl !== 'string') {
+      throw new Error(data.message || 'Could not start RupantorPay checkout');
+    }
+    return data.paymentUrl;
+  },
+
+  async verifyRupantorPayPayment(orderId: string, transactionId: string): Promise<{ status: string; orderId: string; transactionId: string }> {
+    const response = await fetch(`${API_BASE_URL}/payment/rupantorpay/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ orderId, transactionId }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || 'Payment could not be verified');
+    return data;
+  },
+
   async createOrder(orderData: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'updatedAt' | 'isDeliveryVerified' | 'orderStatus'>): Promise<Order> {
     const orderNumber = `AGRO-2026-${Math.floor(1000 + Math.random() * 9000)}`;
     const newOrder: Order = {
