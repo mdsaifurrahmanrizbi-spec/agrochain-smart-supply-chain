@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import {
@@ -16,6 +16,11 @@ import {
 export const AdminSellerPayments: React.FC = () => {
   const [settlements, setSettlements] = useState(store.settlements);
   const [notice, setNotice] = useState<string | null>(null);
+  
+  useEffect(() => {
+    agroApi.getSettlements().then((loaded) => setSettlements(loaded))
+      .catch((error) => console.warn('Could not refresh farmer payout ledger.', error));
+  }, []);
 
   const totalGross = settlements.reduce(
     (sum, s) => sum + (s.productSalesValue || (s.amount ? s.amount * 1.1 : 0)),
