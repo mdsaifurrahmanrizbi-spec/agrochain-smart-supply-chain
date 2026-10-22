@@ -1,12 +1,23 @@
-import React, { useState } from 'react';
-import { store } from '../../services/api';
+import React, { useEffect, useState } from 'react';
+import { agroApi, store } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Search, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const AdminOrders: React.FC = () => {
   const [orders] = useState(store.orders);
+  const [payoutAccounts, setPayoutAccounts] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    const farmerIds = [...new Set(orders.flatMap((order) => order.items.map((item) => item.farmerId)))];
+    agroApi.getFarmerPayoutAccounts(farmerIds).then((accounts) => {
+      setPayoutAccounts(Object.fromEntries(accounts.map((account) => [
+        account.farmerId,
+        [account.payoutMethod, account.payoutBankName, account.payoutAccountNumber].filter(Boolean).join(' · ') || 'Not provided',
+      ])));
+    }).catch((error) => console.warn('Could not load authorized farmer payout accounts.', error));
+  }, [orders]);
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'COD' | 'ONLINE' | 'PENDING' | 'PAID'>('ALL');
   const [view, setView] = useState<'ACTIVE' | 'SUCCESSFUL'>('ACTIVE');
 
@@ -94,7 +105,7 @@ export const AdminOrders: React.FC = () => {
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      {ord.items.map((item) => <div key={`${ord.id}-${item.productId}`} className="mb-1"><div className="font-semibold text-slate-900">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div></div>)}
+                      {ord.items.map((item) => <div key={`${ord.id}-${item.productId}`} className="mb-1"><div className="font-semibold text-slate-900">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div><div className="text-[10px] text-slate-600">Payout account: {payoutAccounts[item.farmerId] || 'Loading / not provided'}</div></div>)}
                     </td>
                     <td className="py-3 px-4 font-bold text-slate-900 tabular-nums">
                       ৳{gross.toLocaleString()}
