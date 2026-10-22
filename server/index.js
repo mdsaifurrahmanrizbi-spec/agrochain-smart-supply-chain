@@ -471,7 +471,7 @@ app.post('/api/login/', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, name, email, password_hash, role, status, created_at
+      `SELECT id, name, email, password_hash, role, status, payout_method, payout_account_number, payout_bank_name, created_at
        FROM auth_users WHERE email = $1 AND role = $2`,
       [email, requestedRole]
     );
