@@ -510,9 +510,13 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       const isPaidNow = paidStatuses.includes(data.settlementStatus);
       const wasPaid = paidStatuses.includes(existing?.settlementStatus);
 
+      const immutablePaidFields = [
+        'settlementStatus', 'payoutReference', 'payoutDate',
+        'amount', 'netPayout', 'productSalesValue', 'commissionDeducted',
+        'farmerId', 'orderId', 'orderNumber', 'paymentMethod',
+      ];
       if (wasPaid && (!isPaidNow ||
-          data.payoutReference !== existing.payoutReference ||
-          data.payoutDate !== existing.payoutDate)) {
+          immutablePaidFields.some((field) => data[field] !== existing[field]))) {
         await client.query('ROLLBACK');
         return res.status(409).json({ message: 'A completed farmer payout is immutable' });
       }
