@@ -109,9 +109,9 @@ export const Login: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-slate-700 font-semibold">Password</label>
-                <a href="#forgot" className="text-emerald-700 hover:text-emerald-800 text-[11px] font-medium">
+                <Link to={location.pathname.startsWith('/admin-portal') ? '/admin-portal/reset-password' : '/password-reset'} className="text-emerald-700 hover:text-emerald-800 text-[11px] font-medium">
                   Forgot?
-                </a>
+                </Link>
               </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />

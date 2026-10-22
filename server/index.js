@@ -214,6 +214,125 @@ app.post('/api/admin/bootstrap/', async (req, res) => {
   }
 });
 
+// Password reset uses short-lived, single-use tokens delivered by Resend.
+// Configure RESEND_API_KEY and RESET_EMAIL_FROM in the backend environment.
+const passwordResetRequests = new Map();
+app.post('/api/password-reset/request/', async (req, res) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const role = typeof req.body?.role === 'string' ? req.body.role.trim().toLowerCase() : '';
+  const validRoles = new Set(['admin', 'farmer', 'buyer', 'delivery', 'warehouse', 'inspector']);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || !validRoles.has(role)) {
+    return res.status(400).json({ message: 'Enter a valid email and account role' });
+  }
+  if (!process.env.RESEND_API_KEY || !process.env.RESET_EMAIL_FROM || !process.env.FRONTEND_URL) {
+    return res.status(503).json({ message: 'Password recovery email is not configured yet. Please contact the platform administrator.' });
+  }
+
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const previousRequest = passwordResetRequests.get(ip);
+  if (previousRequest && now - previousRequest < 60_000) {
+    return res.status(429).json({ message: 'Please wait a minute before requesting another reset email.' });
+  }
+  passwordResetRequests.set(ip, now);
+  if (passwordResetRequests.size > 5000) {
+    for (const [key, timestamp] of passwordResetRequests) {
+      if (now - timestamp > 60_000) passwordResetRequests.delete(key);
+    }
+  }
+
+  try {
+    const accountResult = await pool.query(
+      "SELECT id, name, email, role FROM auth_users WHERE email = $1 AND role = $2 AND status = 'ACTIVE' LIMIT 1",
+      [email, role]
+    );
+    const account = accountResult.rows[0];
+    if (account) {
+      const crypto = await import('node:crypto');
+      const rawToken = crypto.randomBytes(32).toString('base64url');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      await pool.query(
+        'UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL',
+        [account.id]
+      );
+      await pool.query(
+        "INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, NOW() + INTERVAL '30 minutes')",
+        [crypto.randomUUID(), account.id, tokenHash]
+      );
+
+      const frontend = process.env.FRONTEND_URL.replace(/\/$/, '');
+      const resetPath = account.role === 'admin' ? '/admin-portal/reset-password' : '/password-reset';
+      const resetUrl = frontend + resetPath + '?token=' + encodeURIComponent(rawToken);
+      const safeName = String(account.name).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const emailResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + process.env.RESEND_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: process.env.RESET_EMAIL_FROM,
+          to: [account.email],
+          subject: 'Reset your AgroChain password',
+          html: '<div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a"><h2>Reset your AgroChain password</h2><p>Hello ' + safeName + ',</p><p>We received a request to reset the password for your ' + account.role + ' account.</p><p><a href="' + resetUrl + '" style="display:inline-block;padding:12px 18px;background:#047857;color:#fff;text-decoration:none;border-radius:8px">Reset password</a></p><p>This link expires in 30 minutes and can only be used once. If you did not request this, you can ignore this email.</p></div>',
+        }),
+      });
+      if (!emailResponse.ok) {
+        const errorBody = await emailResponse.text().catch(() => '');
+        console.error('Password reset email delivery failed:', emailResponse.status, errorBody.slice(0, 300));
+        await pool.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE token_hash = $1', [tokenHash]);
+        passwordResetRequests.delete(ip);
+        return res.status(503).json({ message: 'Reset email could not be sent. Please contact the platform administrator.' });
+      }
+    }
+    return res.json({ message: 'If an active account matches those details, a password reset link will be sent shortly.' });
+  } catch (error) {
+    console.error('Password reset request failed:', error.message);
+    passwordResetRequests.delete(ip);
+    return res.status(500).json({ message: 'Password reset could not be requested. Please try again later.' });
+  }
+});
+
+app.post('/api/password-reset/confirm/', async (req, res) => {
+  const token = typeof req.body?.token === 'string' ? req.body.token : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (!token || token.length > 200) return res.status(400).json({ message: 'Reset token is missing or invalid' });
+  if (password.length < 12 || password.length > 128) {
+    return res.status(400).json({ message: 'Password must be 12 to 128 characters long' });
+  }
+
+  try {
+    const crypto = await import('node:crypto');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(
+        'SELECT prt.id AS token_id, prt.user_id FROM password_reset_tokens prt JOIN auth_users u ON u.id = prt.user_id WHERE prt.token_hash = $1 AND prt.used_at IS NULL AND prt.expires_at > NOW() AND u.status = $2 FOR UPDATE OF prt',
+        [tokenHash, 'ACTIVE']
+      );
+      const reset = result.rows[0];
+      if (!reset) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'This reset link is invalid, expired, or already used. Request a new one.' });
+      }
+      const passwordHash = await bcrypt.hash(password, 12);
+      await client.query('UPDATE auth_users SET password_hash = $1 WHERE id = $2', [passwordHash, reset.user_id]);
+      await client.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL', [reset.user_id]);
+      await client.query('COMMIT');
+      return res.json({ message: 'Password reset successfully. You can now sign in with your new password.' });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Password reset confirmation failed:', error.message);
+    return res.status(500).json({ message: 'Password could not be reset. Please request a new link and try again.' });
+  }
+});
+
 // Password-verified login. Demo accounts must be created explicitly.
 app.post('/api/login/', async (req, res) => {
   const email = String(req.body?.email || req.body?.username || '')
@@ -860,6 +979,21 @@ async function startServer() {
     ALTER TABLE auth_users DROP CONSTRAINT IF EXISTS auth_users_email_key;
     CREATE UNIQUE INDEX IF NOT EXISTS auth_users_email_role_unique
       ON auth_users(email, role)
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_active
+      ON password_reset_tokens(user_id, expires_at) WHERE used_at IS NULL
   `);
 
   await pool.query(`

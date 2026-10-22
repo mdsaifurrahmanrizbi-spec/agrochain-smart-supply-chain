@@ -17,6 +17,7 @@ import { HowItWorks } from './pages/public/HowItWorks';
 import { Contact } from './pages/public/Contact';
 import { Login } from './pages/public/Login';
 import { Register } from './pages/public/Register';
+import { PasswordReset } from './pages/PasswordReset';
 
 // Farmer Pages
 import { FarmerDashboard } from './pages/farmer/FarmerDashboard';
@@ -109,10 +110,12 @@ export default function App() {
               <Route path="/contact" element={<Contact />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/password-reset" element={<PasswordReset />} />
               <Route path="/warehouse-portal" element={<Navigate to="/warehouse-portal/login" replace />} />
               <Route path="/warehouse-portal/login" element={<Login />} />
               <Route path="/admin-portal" element={<Navigate to="/admin-portal/login" replace />} />
               <Route path="/admin-portal/login" element={<Login />} />
+              <Route path="/admin-portal/reset-password" element={<PasswordReset />} />
               <Route path="/admin-portal/setup" element={<AdminSetup />} />
             </Route>
 
