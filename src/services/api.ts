@@ -36,7 +36,7 @@ import {
 } from './mockData';
 import { selectDestinationLocalGodown, autoAssignDeliveryPartner } from '../utils/godownRouting';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agrochain-api.onrender.com/api';
 
 export type AdminAccount = Pick<User, 'id' | 'name' | 'email' | 'role' | 'status'> & {
   createdAt?: string;
