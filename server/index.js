@@ -483,6 +483,11 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       const protectedPaymentFields = [
         'paymentStatus',
         'paymentMethod',
+        'paymentGateway',
+        'transactionId',
+        'gatewayTransactionId',
+        'paymentCurrency',
+        'paymentVerifiedAt',
         'totalAmount',
         'productSubtotal',
         'deliveryFee',
