@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { agroApi, store } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -12,6 +12,18 @@ export const WarehouseOrders: React.FC = () => {
 
   // Warehouse staff intentionally receive COD orders only. Online orders are not rendered here.
   const orders = useMemo(() => store.orders.filter((order) => order.paymentMethod === 'COD'), []);
+  const [payoutAccounts, setPayoutAccounts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const farmerIds = [...new Set(orders.flatMap((order) => order.items.map((item) => item.farmerId)))];
+    agroApi.getFarmerPayoutAccounts(farmerIds).then((accounts) => {
+      setPayoutAccounts(Object.fromEntries(accounts.map((account) => [
+        account.farmerId,
+        [account.payoutMethod, account.payoutBankName, account.payoutAccountNumber].filter(Boolean).join(' · ') || 'Not provided',
+      ])));
+    }).catch((error) => console.warn('Could not load authorized farmer payout accounts.', error));
+  }, [orders]);
+
   const handleFarmerPayout = async (orderId: string) => {
     const settlement = store.settlements.find((item) => item.orderId === orderId);
     if (!settlement) {
@@ -97,7 +109,7 @@ export const WarehouseOrders: React.FC = () => {
                       <div className="text-[10px] text-slate-500">{order.buyerPhone} · {order.buyerCity}</div>
                     </td>
                     <td className="px-4 py-3">
-                      {order.items.map((item) => <div key={item.productId} className="mb-1"><div className="font-semibold">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div></div>)}
+                      {order.items.map((item) => <div key={item.productId} className="mb-1"><div className="font-semibold">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div><div className="text-[10px] text-slate-600">Payout account: {payoutAccounts[item.farmerId] || 'Loading / not provided'}</div></div>)}
                     </td>
                     <td className="px-4 py-3 font-bold tabular-nums">৳{order.totalAmount.toLocaleString()}</td>
                     <td className="px-4 py-3"><StatusBadge status={order.orderStatus} size="sm" />{delivered && <span className="mt-1 block text-[10px] font-semibold text-emerald-700">OTP confirmed</span>}</td>
