@@ -60,7 +60,7 @@ router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
     // RupantorPay has returned both numeric (1) and boolean/string success
     // values across its API responses. Accept documented success representations.
     const checkoutSucceeded = data.status === 1 || data.status === true ||
-      String(data.status).toLowerCase() === 'true';
+      String(data.status).toLowerCase() === 'true' || String(data.status) === '1';
     if (!response.ok || !checkoutSucceeded || typeof data.payment_url !== 'string' ||
         !data.payment_url.startsWith('https://')) {
       console.error('RupantorPay checkout rejected request:', response.status, data.message || 'No payment URL');
