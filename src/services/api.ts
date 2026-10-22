@@ -385,6 +385,35 @@ export const agroApi = {
     return data as User;
   },
 
+  async updateFarmerPayoutAccount(input: {
+    payoutMethod: 'bKash' | 'Nagad' | 'Bank Transfer';
+    payoutAccountNumber: string;
+    payoutBankName?: string;
+  }): Promise<User> {
+    const response = await fetch(API_BASE_URL + '/farmer/payout-account/', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(input),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || 'Could not save farmer payout account');
+    return data as User;
+  },
+
+  async getFarmerPayoutAccounts(farmerIds?: string[]): Promise<Array<{
+    farmerId: string;
+    farmerName: string;
+    payoutMethod: 'bKash' | 'Nagad' | 'Bank Transfer' | null;
+    payoutAccountNumber: string | null;
+    payoutBankName: string | null;
+  }>> {
+    const query = farmerIds?.length ? '?farmerIds=' + encodeURIComponent(farmerIds.join(',')) : '';
+    const response = await fetch(API_BASE_URL + '/farmers/payout-accounts/' + query, { headers: authHeaders() });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !Array.isArray(data)) throw new Error(data.message || 'Could not load farmer payout accounts');
+    return data;
+  },
+
   // GET /api/farms/
   
 async getFarms(farmerId?: string): Promise<Farm[]> {
