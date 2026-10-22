@@ -18,7 +18,7 @@ export const WarehouseOrders: React.FC = () => {
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([agroApi.getOrders(), agroApi.getSettlements()]).then(([loadedOrders, loadedSettlements]) => {
+    Promise.all([agroApi.getOrders(), agroApi.getSettlements(), agroApi.getCODRecords()]).then(([loadedOrders, loadedSettlements]) => {
       if (!mounted) return;
       setOrders(loadedOrders.filter((order) => order.paymentMethod === 'COD'));
       setSettlements(loadedSettlements);
