@@ -8,6 +8,7 @@ export const WarehouseOrders: React.FC = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [cashFilter, setCashFilter] = useState<'ALL' | 'PENDING' | 'VERIFIED'>('ALL');
+  const [view, setView] = useState<'ACTIVE' | 'SUCCESSFUL'>('ACTIVE');
   const [, setRevision] = useState(0);
 
   // Warehouse staff intentionally receive COD orders only. Online orders are not rendered here.
@@ -67,7 +68,9 @@ export const WarehouseOrders: React.FC = () => {
     const matchesCash = cashFilter === 'ALL' ||
       (cashFilter === 'VERIFIED' && verified) ||
       (cashFilter === 'PENDING' && !verified);
-    return matchesSearch && matchesCash;
+    const payout = settlements.find((item) => item.orderId === order.id);
+    const payoutSuccessful = !!payout && ['PAID', 'COMPLETED'].includes(payout.settlementStatus);
+    return matchesSearch && matchesCash && (view === 'SUCCESSFUL' ? payoutSuccessful : !payoutSuccessful);
   });
 
   return (
@@ -75,6 +78,11 @@ export const WarehouseOrders: React.FC = () => {
       <div>
         <h1 className="text-xl font-bold text-slate-900">COD Orders & Cash Audit</h1>
         <p className="mt-1 text-xs text-slate-500">Warehouse Manager access is limited to Cash on Delivery orders. Online payment orders are not available in this workspace.</p>
+      </div>
+
+      <div className="flex gap-2 rounded-xl border border-slate-200 bg-white p-1 w-fit">
+        <button onClick={() => setView('ACTIVE')} className={`px-3 py-2 rounded-lg text-xs font-bold ${view === 'ACTIVE' ? 'bg-emerald-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>COD Orders</button>
+        <button onClick={() => setView('SUCCESSFUL')} className={`px-3 py-2 rounded-lg text-xs font-bold ${view === 'SUCCESSFUL' ? 'bg-emerald-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Successful Orders</button>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
