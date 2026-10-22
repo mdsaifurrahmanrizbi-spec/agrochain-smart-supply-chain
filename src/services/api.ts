@@ -639,6 +639,43 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     store.orders.unshift(newOrder);
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
 
+    // Every confirmed order enters the QC queue before any pickup job can be created.
+    // Measurements remain explicitly unrecorded until an inspector performs the physical inspection.
+    const firstItem = newOrder.items[0];
+    const relatedBatch = store.batches.find((batch) =>
+      batch.farmerId === firstItem?.farmerId &&
+      (batch.cropName === firstItem?.productName || batch.id === firstItem?.productId)
+    );
+    const existingQc = store.qualityChecks.find((qc) => qc.orderId === newOrder.id);
+    if (!existingQc) {
+      const pendingQc: QualityCheck = {
+        id: `qc-${Date.now()}`,
+        orderId: newOrder.id,
+        batchId: relatedBatch?.id || firstItem?.productId || `unassigned-${newOrder.id}`,
+        batchCode: relatedBatch?.batchCode || 'BATCH-PENDING-ASSIGNMENT',
+        cropName: newOrder.items.map((item) => item.productName).join(', '),
+        farmerName: newOrder.items.map((item) => item.farmerName).filter(Boolean).join(', ') || 'Farmer not assigned',
+        farmLocation: store.products.find((product) => product.batchId === relatedBatch?.id || product.id === firstItem?.productId)?.farmLocation || 'Farm location pending verification',
+        inspectorId: '',
+        inspectorName: 'Unassigned Inspector',
+        inspectionDate: '',
+        inspectionLocation: 'FARM',
+        grade: 'Not graded',
+        moistureContentPercent: 0,
+        pesticideResiduePpm: 0,
+        foreignMatterPercent: 0,
+        status: 'PENDING',
+        remarks: 'Awaiting physical QC inspection. Measurements and grade have not been recorded.',
+      };
+      await saveBackendRecord('qualityChecks', pendingQc);
+      store.qualityChecks.unshift(pendingQc);
+      newOrder.qualityCheckId = pendingQc.id;
+      newOrder.qualityStatus = 'PENDING';
+      await saveBackendRecord('orders', newOrder);
+      localStorage.setItem('agro_quality_checks', JSON.stringify(store.qualityChecks));
+      localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+    }
+
     // Initialize tracking timeline for this order
     const initialTimeline: TrackingEvent[] = [
       {
@@ -657,39 +694,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     store.trackingEvents[newOrder.id] = initialTimeline;
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
 
-    // Auto-create pickup job for an approved delivery partner in the zone
-    // Assign only an approved partner who supports farm pickup
-const partner = store.deliveryPartners.find(
-  (p) => p.approvalStatus === 'APPROVED' && p.canPickup
-);
-
-if (!partner) {
-  console.warn(
-    `No approved pickup partner available for order ${newOrder.orderNumber}. Pickup job was not created.`
-  );
-  return newOrder;
-}
-
-const pickupJob: LogisticsJob = {
-      id: `job-${Date.now()}`,
-      jobCode: `JOB-PKP-${Math.floor(1000 + Math.random() * 9000)}`,
-      orderId: newOrder.id,
-      orderNumber: newOrder.orderNumber,
-      partnerId: partner.id,
-      partnerName: partner.name,
-      type: 'PICKUP',
-      productSummary: newOrder.items.map((i) => `${i.quantity} ${i.unit} ${i.productName}`).join(', '),
-      originAddress: 'Bogura Green Valley Agro Farm, Shibganj',
-      destinationAddress: 'Central Dhaka Agro-Logistics Center, Gazipur',
-      assignedDate: newOrder.createdAt,
-      status: 'ASSIGNED',
-      codAmount: 0,
-      updatedAt: newOrder.createdAt,
-    };
-    await saveBackendRecord('jobs', pickupJob);
-    store.jobs.unshift(pickupJob);
-    localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
-
+    // Pickup is intentionally NOT assigned here. QC approval unlocks pickup.
     return newOrder;
   },
 
@@ -1071,21 +1076,84 @@ async getQualityChecks(): Promise<QualityCheck[]> {
   try {
     const backendChecks = await getBackendRecords<QualityCheck>('qualityChecks');
 
-    if (backendChecks.length > 0) {
-      store.qualityChecks = backendChecks;
-      localStorage.setItem(
-        'agro_quality_checks',
-        JSON.stringify(store.qualityChecks)
-      );
-    } else {
-      // First-time migration: preserve existing local QC records
-      for (const qc of store.qualityChecks) {
-        await saveBackendRecord('qualityChecks', qc);
+    // Keep backend records authoritative, but do not discard locally-created records
+    // when the backend collection is temporarily empty (e.g. first-time migration).
+    const checksById = new Map<string, QualityCheck>();
+    for (const qc of [...store.qualityChecks, ...backendChecks]) checksById.set(qc.id, qc);
+    store.qualityChecks = [...checksById.values()];
+
+    // Migrate local-only QC records without blocking the whole queue if one write fails.
+    for (const qc of store.qualityChecks) {
+      if (!backendChecks.some((backendQc) => backendQc.id === qc.id)) {
+        try { await saveBackendRecord('qualityChecks', qc); }
+        catch (error) { console.warn('Could not migrate QC record:', qc.id, error); }
       }
     }
+
+    // Reconcile confirmed orders created before the QC queue was introduced.
+    // Create only a PENDING inspection record; never invent inspection results.
+    const backendOrders = await getBackendRecords<Order>('orders');
+    store.orders = backendOrders;
+    for (const order of backendOrders) {
+      if (String(order.orderStatus || '').toUpperCase() !== 'CONFIRMED') continue;
+
+      const existing = store.qualityChecks.find((check) =>
+        check.orderId === order.id ||
+        check.orderId === order.orderNumber ||
+        check.id === order.qualityCheckId
+      );
+      if (existing) {
+        if (!order.qualityCheckId) {
+          order.qualityCheckId = existing.id;
+          order.qualityStatus = existing.status;
+          await saveBackendRecord('orders', order);
+        }
+        continue;
+      }
+
+      const firstItem = order.items[0];
+      if (!firstItem) continue;
+      const product = store.products.find((item) => item.id === firstItem.productId);
+      const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+      const pendingQc: QualityCheck = {
+        id: `qc-order-${order.id}`,
+        orderId: order.id,
+        batchId: product?.batchId || 'PENDING_BATCH_LINK',
+        batchCode: store.batches.find((batch) => batch.id === product?.batchId)?.batchCode || 'Pending batch verification',
+        cropName: firstItem.productName,
+        farmerName: firstItem.farmerName,
+        farmLocation: product?.farmLocation || 'Farm location pending verification',
+        inspectorId: '',
+        inspectorName: 'Not assigned',
+        inspectionDate: now,
+        inspectionLocation: 'FARM',
+        grade: 'Not graded',
+        moistureContentPercent: 0,
+        pesticideResiduePpm: 0,
+        foreignMatterPercent: 0,
+        status: 'PENDING',
+        remarks: 'Inspection not performed yet. Measurements and grade must be entered by the inspector.',
+      };
+      // Keep the pending QC visible in this session even if a backend write fails;
+      // log the failure so it can be diagnosed instead of silently losing the queue item.
+      const alreadyAdded = store.qualityChecks.some((check) => check.id === pendingQc.id);
+      if (!alreadyAdded) store.qualityChecks.unshift(pendingQc);
+      order.qualityCheckId = pendingQc.id;
+      order.qualityStatus = 'PENDING';
+      order.updatedAt = now;
+      try {
+        await saveBackendRecord('qualityChecks', pendingQc);
+        await saveBackendRecord('orders', order);
+      } catch (error) {
+        console.error('Could not persist reconciled pending QC record:', pendingQc.id, error);
+      }
+    }
+
+    localStorage.setItem('agro_quality_checks', JSON.stringify(store.qualityChecks));
+    localStorage.setItem('agro_orders', JSON.stringify(store.orders));
   } catch (error) {
     console.error('Failed to sync quality checks:', error);
-    // Keep local records available if backend is unavailable
+    // Keep local records available if backend is unavailable.
   }
 
   return store.qualityChecks;
@@ -1181,11 +1249,56 @@ localStorage.setItem(
 await saveBackendRecord('qualityChecks', qc);
 
 if (order && update.status) {
+  if (update.status === 'REJECTED') {
+    order.orderStatus = 'CANCELLED';
+    order.updatedAt = now;
+  }
+
   await saveBackendRecord('orders', order);
 
   const latestEvent = store.trackingEvents[order.id]?.[0];
   if (latestEvent) {
     await saveBackendRecord('trackingEvents', latestEvent);
+  }
+
+  // Only QC-approved orders may enter the farm-pickup queue.
+  if (update.status === 'APPROVED') {
+    const existingPickup = store.jobs.find((job) => job.orderId === order.id && job.type === 'PICKUP');
+    if (!existingPickup) {
+      const originArea = (qc.farmLocation || '').trim().toLowerCase();
+      const partner = store.deliveryPartners.find((candidate) => {
+        if (candidate.approvalStatus !== 'APPROVED' || !candidate.canPickup) return false;
+        // Do not assign a pickup to a partner explicitly restricted to other areas.
+        const areas = [...(candidate.assignedAreas || []), candidate.preferredArea || '']
+          .map((area) => area.trim().toLowerCase())
+          .filter(Boolean);
+        if (!areas.length || !originArea || originArea.includes('pending verification')) return false;
+        return areas.some((area) => originArea.includes(area) || area.includes(originArea));
+      });
+      if (partner) {
+        const pickupJob: LogisticsJob = {
+          id: `job-${Date.now()}`,
+          jobCode: `JOB-PKP-${Math.floor(1000 + Math.random() * 9000)}`,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          partnerId: partner.id,
+          partnerName: partner.name,
+          type: 'PICKUP',
+          productSummary: order.items.map((item) => `${item.quantity} ${item.unit} ${item.productName}`).join(', '),
+          originAddress: qc.farmLocation || 'Farm location pending verification',
+          destinationAddress: order.warehouseName || 'Origin warehouse intake',
+          assignedDate: now,
+          status: 'ASSIGNED',
+          codAmount: 0,
+          updatedAt: now,
+        };
+        await saveBackendRecord('jobs', pickupJob);
+        store.jobs.unshift(pickupJob);
+        localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
+      } else {
+        console.warn(`QC approved order ${order.orderNumber}, but no approved pickup partner is available.`);
+      }
+    }
   }
 }
 
@@ -1611,6 +1724,15 @@ const events =
   async markArrivedAtLocalGodown(shipmentId: string): Promise<GodownShipment> {
     const shipment = store.godownShipments.find((s) => s.id === shipmentId || s.orderId === shipmentId);
     if (!shipment) throw new Error('Shipment not found');
+    if (shipment.transferStatus !== 'GODOWN_TRANSFER_IN_TRANSIT') {
+      throw new Error('A shipment must be dispatched and in transit before it can be marked arrived.');
+    }
+    const destinationGodown = store.godowns.find(
+      (g) => g.id === shipment.destinationGodownId || g.code === shipment.destinationGodownId
+    );
+    if (!destinationGodown || destinationGodown.status !== 'ACTIVE') {
+      throw new Error('Arrival cannot be recorded because the destination godown is missing or inactive.');
+    }
 
     const order = store.orders.find((o) => o.id === shipment.orderId);
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
@@ -1639,6 +1761,12 @@ const events =
     localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
 
+    await saveBackendRecord('godownShipments', shipment);
+    if (order) await saveBackendRecord('orders', order);
+    for (const event of events) {
+      await saveBackendRecord('trackingEvents', event);
+    }
+
     return shipment;
   },
 
@@ -1650,8 +1778,15 @@ const events =
   ): Promise<{ shipment: GodownShipment; assignedPartner?: DeliveryPartner; assignmentSuccess: boolean }> {
     const shipment = store.godownShipments.find((s) => s.id === shipmentId || s.orderId === shipmentId);
     if (!shipment) throw new Error('Shipment not found');
+    if (shipment.transferStatus !== 'ARRIVED_LOCAL_GODOWN') {
+      throw new Error('The godown manager can accept a shipment only after its arrival has been recorded.');
+    }
 
     const order = store.orders.find((o) => o.id === shipment.orderId);
+    const godown = store.godowns.find((g) => g.id === shipment.destinationGodownId || g.code === shipment.destinationGodownId);
+    if (!godown || godown.status !== 'ACTIVE') {
+      throw new Error('Cannot accept shipment because the destination godown is missing or inactive.');
+    }
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
     // Update shipment acceptance
@@ -1660,13 +1795,10 @@ const events =
     shipment.acceptedByManagerId = managerId;
     shipment.acceptedByManagerName = managerName;
 
-    // Update godown inventory
-    const godown = store.godowns.find((g) => g.id === shipment.destinationGodownId);
-    if (godown) {
-      godown.itemCount = (godown.itemCount || 0) + 1;
-      godown.currentStockMetricTons = Number(((godown.currentStockMetricTons || 0) + (shipment.weightKg / 1000)).toFixed(2));
-      localStorage.setItem('agro_local_godowns', JSON.stringify(store.godowns));
-    }
+    // Update godown inventory after the one-time arrival acceptance check above.
+    godown.itemCount = (godown.itemCount || 0) + 1;
+    godown.currentStockMetricTons = Number(((godown.currentStockMetricTons || 0) + (shipment.weightKg / 1000)).toFixed(2));
+    localStorage.setItem('agro_local_godowns', JSON.stringify(store.godowns));
 
     if (order) {
       order.orderStatus = 'GODOWN_RECEIVED';
@@ -1799,11 +1931,18 @@ const events =
   // 5. Delivery Partner Accepts Delivery Job
   async deliveryPartnerAcceptAssignment(jobIdOrShipmentId: string, partnerId: string): Promise<LogisticsJob> {
     const job = store.jobs.find((j) => j.id === jobIdOrShipmentId || j.orderId === jobIdOrShipmentId);
-    if (!job) throw new Error('Delivery job not found');
+    if (!job || job.type !== 'DELIVERY') throw new Error('Delivery job not found');
+    if (job.partnerId !== partnerId) {
+      throw new Error('Only the partner assigned to this delivery job can accept it.');
+    }
+    if (job.status !== 'ASSIGNED') {
+      throw new Error(`This delivery job cannot be accepted from status ${job.status}.`);
+    }
 
     const partner = store.deliveryPartners.find((p) => p.id === partnerId);
-    if (partner && partner.approvalStatus !== 'APPROVED') {
-      throw new Error(`Partner status is ${partner.approvalStatus}. Only APPROVED partners may accept delivery jobs.`);
+    if (!partner) throw new Error('Delivery partner not found');
+    if (partner.approvalStatus !== 'APPROVED' || !partner.canDeliver) {
+      throw new Error('Only approved delivery-capable partners may accept delivery jobs.');
     }
 
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
@@ -1927,6 +2066,8 @@ const events =
 
     localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+    await saveBackendRecord('godownShipments', shipment);
+    if (order) await saveBackendRecord('orders', order);
     return shipment;
   },
 
@@ -1935,15 +2076,21 @@ const events =
     const shipment = store.godownShipments.find((s) => s.id === shipmentIdOrJobId || s.orderId === shipmentIdOrJobId);
     if (!shipment) throw new Error('Shipment not found');
 
-    if (shipment.assignedPartnerId && shipment.assignedPartnerId !== partnerId) {
-      throw new Error('Only the specifically assigned delivery partner can confirm collection of this shipment.');
+    const job = store.jobs.find((j) => j.orderId === shipment.orderId && j.type === 'DELIVERY');
+    if (!shipment.assignedPartnerId || shipment.assignedPartnerId !== partnerId) {
+      throw new Error('Only the specifically assigned delivery partner can collect this shipment.');
+    }
+    if (!job || job.partnerId !== partnerId || !['ACCEPTED', 'ARRIVED_AT_GODOWN'].includes(job.status)) {
+      throw new Error('The assigned delivery job must be accepted by this partner and the partner must arrive at the godown before collection.');
+    }
+    if (shipment.transferStatus !== 'DELIVERY_ACCEPTED' || !shipment.handoverInitiatedAt) {
+      throw new Error('The godown manager must initiate handover after the delivery partner accepts the job.');
     }
 
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
     shipment.handoverConfirmedAt = now;
     shipment.transferStatus = 'DELIVERY_PARTNER_COLLECTED';
 
-    const job = store.jobs.find((j) => j.orderId === shipment.orderId && j.type === 'DELIVERY');
     if (job) {
       job.status = 'COLLECTED';
       job.handoverConfirmed = true;
@@ -1987,7 +2134,13 @@ const events =
   // 9. Delivery Partner Clicks "OUT FOR DELIVERY"
   async deliveryPartnerOutForDelivery(jobIdOrShipmentId: string, partnerId: string): Promise<LogisticsJob> {
     const job = store.jobs.find((j) => j.id === jobIdOrShipmentId || j.orderId === jobIdOrShipmentId);
-    if (!job) throw new Error('Delivery job not found');
+    if (!job || job.type !== 'DELIVERY') throw new Error('Delivery job not found');
+    if (job.partnerId !== partnerId) {
+      throw new Error('Only the assigned delivery partner can update this job.');
+    }
+    if (job.status !== 'COLLECTED') {
+      throw new Error('The delivery partner must confirm collection from the local godown before starting delivery.');
+    }
 
     const shipment = store.godownShipments.find((s) => s.orderId === job.orderId);
     if (shipment && shipment.transferStatus !== 'DELIVERY_PARTNER_COLLECTED' && job.status !== 'COLLECTED') {
@@ -2049,11 +2202,23 @@ const events =
 
     const partner = store.deliveryPartners.find((p) => p.id === partnerId);
     if (!partner) throw new Error('Partner not found');
-    if (partner.approvalStatus !== 'APPROVED') {
-      throw new Error(`Partner is not approved (Status: ${partner.approvalStatus}).`);
+    if (partner.approvalStatus !== 'APPROVED' || !partner.canDeliver) {
+      throw new Error(`Partner is not eligible for delivery assignment (Status: ${partner.approvalStatus}).`);
+    }
+    if (shipment.transferStatus !== 'GODOWN_RECEIVED' && shipment.transferStatus !== 'DELIVERY_ASSIGNMENT_PENDING') {
+      throw new Error('Delivery can only be assigned after the shipment is received at the local godown or placed in the assignment queue.');
+    }
+    const area = (shipment.customerArea || shipment.customerAddress || '').toLowerCase();
+    const partnerAreas = [partner.preferredArea, ...(partner.assignedAreas || [])].filter(Boolean).map((value) => value.toLowerCase());
+    if (!partnerAreas.some((partnerArea) => area.includes(partnerArea) || partnerArea.includes(area))) {
+      throw new Error('This partner is not assigned to the customer service area.');
     }
 
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    const existingJob = store.jobs.find((j) => j.orderId === shipment.orderId && j.type === 'DELIVERY');
+    if (existingJob?.status === 'ASSIGNED' || existingJob?.status === 'ACCEPTED' || existingJob?.status === 'COLLECTED' || existingJob?.status === 'OUT_FOR_DELIVERY') {
+      throw new Error('This shipment already has an active delivery job.');
+    }
     partner.activeJobsCount = (partner.activeJobsCount || 0) + 1;
 
     shipment.assignedPartnerId = partner.id;
@@ -2115,6 +2280,15 @@ const events =
     localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
     localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
+
+    await saveBackendRecord('godownShipments', shipment);
+    if (order) await saveBackendRecord('orders', order);
+    await saveBackendRecord('deliveryPartners', partner);
+    const savedDeliveryJob = store.jobs.find((j) => j.orderId === shipment.orderId && j.type === 'DELIVERY');
+    if (savedDeliveryJob) await saveBackendRecord('jobs', savedDeliveryJob);
+    for (const event of events) {
+      await saveBackendRecord('trackingEvents', event);
+    }
 
     return shipment;
   },

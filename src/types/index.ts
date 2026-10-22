@@ -361,7 +361,7 @@ export interface QualityCheck {
   inspectorName: string;
   inspectionDate: string;
   inspectionLocation: 'FARM' | 'WAREHOUSE';
-  grade: 'Grade A - Premium' | 'Grade B - Standard' | 'Grade C - Commercial';
+  grade: 'Not graded' | 'Grade A - Premium' | 'Grade B - Standard' | 'Grade C - Commercial';
   moistureContentPercent: number;
   pesticideResiduePpm: number;
   foreignMatterPercent: number;

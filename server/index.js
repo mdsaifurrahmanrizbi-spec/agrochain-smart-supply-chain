@@ -1256,6 +1256,47 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         message: 'Only an admin or quality inspector may set or change order QC status',
       });
     }
+    // Create the initial pending QC record atomically with a buyer's new order.
+    // Buyers cannot write the privileged qualityChecks resource directly; doing this
+    // server-side prevents a confirmed order from being stranded without a QC queue item.
+    if (resource === 'orders' && role === 'buyer' && !existing) {
+      const firstItem = Array.isArray(data.items) ? data.items[0] : null;
+      const qcId = typeof data.qualityCheckId === 'string' && data.qualityCheckId
+        ? data.qualityCheckId
+        : `qc-order-${id}`;
+      const pendingQc = {
+        id: qcId,
+        orderId: id,
+        batchId: firstItem?.productId || `unassigned-${id}`,
+        batchCode: 'BATCH-PENDING-ASSIGNMENT',
+        cropName: Array.isArray(data.items)
+          ? data.items.map((item) => item?.productName).filter(Boolean).join(', ')
+          : 'Commodity pending verification',
+        farmerName: Array.isArray(data.items)
+          ? data.items.map((item) => item?.farmerName).filter(Boolean).join(', ') || 'Farmer not assigned'
+          : 'Farmer not assigned',
+        farmLocation: 'Farm location pending verification',
+        inspectorId: '',
+        inspectorName: 'Unassigned Inspector',
+        inspectionDate: '',
+        inspectionLocation: 'FARM',
+        grade: 'Not graded',
+        moistureContentPercent: 0,
+        pesticideResiduePpm: 0,
+        foreignMatterPercent: 0,
+        status: 'PENDING',
+        remarks: 'Awaiting physical QC inspection. Measurements and grade have not been recorded.',
+      };
+      data.qualityCheckId = qcId;
+      data.qualityStatus = 'PENDING';
+      await client.query(
+        `INSERT INTO agrochain_records (resource, id, data)
+         VALUES ('qualityChecks', $1, $2::jsonb)
+         ON CONFLICT (resource, id) DO NOTHING`,
+        [qcId, JSON.stringify(pendingQc)]
+      );
+    }
+
     const result = await client.query(
       `INSERT INTO agrochain_records (resource, id, data)
        VALUES ($1, $2, $3::jsonb)
