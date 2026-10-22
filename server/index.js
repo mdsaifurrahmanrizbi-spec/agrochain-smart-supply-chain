@@ -387,7 +387,7 @@ const resourceWriteRoles = {
   orders: ['admin', 'buyer', 'farmer', 'delivery', 'warehouse', 'inspector'],
   jobs: ['admin', 'buyer', 'delivery', 'warehouse'],
   qualityChecks: ['admin', 'inspector', 'warehouse'],
-  codRecords: ['admin', 'warehouse'],
+  codRecords: ['admin', 'warehouse', 'delivery'],
   settlements: ['admin'],
   trackingEvents: ['admin', 'buyer', 'delivery', 'warehouse', 'inspector'],
   godowns: ['admin', 'warehouse'],
@@ -502,6 +502,24 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     );
 
     const existing = existingResult.rows[0]?.data;
+
+    if (resource === 'codRecords' && role === 'delivery') {
+      if (existing || data.depositStatus !== 'CASH_COLLECTED') {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Delivery partners may only create a COD collection record after delivery' });
+      }
+      const orderResult = await client.query(
+        "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+        [data.orderId]
+      );
+      const relatedOrder = orderResult.rows[0]?.data;
+      if (!relatedOrder || relatedOrder.paymentMethod !== 'COD' ||
+          relatedOrder.orderStatus !== 'DELIVERED' || relatedOrder.isDeliveryVerified !== true ||
+          Number(data.amount) !== Number(relatedOrder.totalAmount)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'COD collection can only be recorded for the exact amount after verified delivery' });
+      }
+    }
 
     if (resource === 'codRecords' && role === 'warehouse') {
       const immutableFields = ['orderId', 'orderNumber', 'deliveryPartnerId', 'deliveryPartnerName', 'amount', 'collectedAt'];
