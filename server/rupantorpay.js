@@ -57,7 +57,12 @@ router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
       }),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || data.status !== 1 || typeof data.payment_url !== 'string') {
+    // RupantorPay has returned both numeric (1) and boolean/string success
+    // values across its API responses. Accept documented success representations.
+    const checkoutSucceeded = data.status === 1 || data.status === true ||
+      String(data.status).toLowerCase() === 'true';
+    if (!response.ok || !checkoutSucceeded || typeof data.payment_url !== 'string' ||
+        !data.payment_url.startsWith('https://')) {
       console.error('RupantorPay checkout rejected request:', response.status, data.message || 'No payment URL');
       return res.status(502).json({ message: data.message || 'RupantorPay could not create a payment link' });
     }
