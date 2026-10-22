@@ -1,10 +1,22 @@
-import React from 'react';
-import { store } from '../../services/api';
+import React, { useEffect, useState } from 'react';
+import { store, agroApi } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 
 export const AdminQualityChecks: React.FC = () => {
-  const checks = store.qualityChecks;
-  const orders = store.orders;
+  const [checks, setChecks] = useState(store.qualityChecks);
+  const [orders, setOrders] = useState(store.orders);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([agroApi.getQualityChecks(), agroApi.getOrders()])
+      .then(([freshChecks, freshOrders]) => {
+        if (!active) return;
+        setChecks([...freshChecks]);
+        setOrders([...freshOrders]);
+      })
+      .catch((error) => console.error('Could not refresh QC audit data:', error));
+    return () => { active = false; };
+  }, []);
 
   return (
     <div className="space-y-6">
