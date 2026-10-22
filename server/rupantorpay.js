@@ -1,0 +1,162 @@
+import express from 'express';
+import { pool } from './db.js';
+import { requireAuth } from './auth.js';
+
+const router = express.Router();
+const GATEWAY_URL = 'https://payment.rupantorpay.com/api/payment';
+const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://agrochain-smart-supply-chain.vercel.app').replace(/\/$/, '');
+
+function gatewayHeaders() {
+  const apiKey = process.env.RUPANTORPAY_API_KEY;
+  if (!apiKey) throw new Error('RUPANTORPAY_API_KEY is not configured');
+  return {
+    'Content-Type': 'application/json',
+    'X-API-KEY': apiKey,
+    'X-CLIENT': new URL(FRONTEND_URL).host,
+  };
+}
+
+router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'buyer') {
+    return res.status(403).json({ message: 'Only buyers can initiate checkout' });
+  }
+
+  const orderId = typeof req.body?.orderId === 'string' ? req.body.orderId.trim() : '';
+  if (!orderId) return res.status(400).json({ message: 'orderId is required' });
+
+  try {
+    const result = await pool.query(
+      "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1",
+      [orderId]
+    );
+    const order = result.rows[0]?.data;
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order.buyerId !== req.auth.sub) return res.status(403).json({ message: 'This order does not belong to your account' });
+    if (order.paymentMethod !== 'ONLINE') return res.status(400).json({ message: 'This order was not created for online payment' });
+    if (order.paymentStatus === 'PAID') return res.status(409).json({ message: 'This order is already paid' });
+
+    const accountResult = await pool.query(
+      'SELECT name, email FROM auth_users WHERE id = $1 AND status = $2',
+      [req.auth.sub, 'ACTIVE']
+    );
+    const account = accountResult.rows[0];
+    if (!account) return res.status(401).json({ message: 'Buyer account could not be verified' });
+
+    const response = await fetch(`${GATEWAY_URL}/checkout`, {
+      method: 'POST',
+      headers: gatewayHeaders(),
+      body: JSON.stringify({
+        fullname: order.buyerName || account.name,
+        email: account.email,
+        amount: Number(order.totalAmount).toFixed(2),
+        success_url: `${FRONTEND_URL}/buyer/payment-result?orderId=${encodeURIComponent(orderId)}`,
+        cancel_url: `${FRONTEND_URL}/buyer/payment-result?orderId=${encodeURIComponent(orderId)}&cancelled=1`,
+        webhook_url: `${process.env.API_PUBLIC_URL || 'https://agrochain-api.onrender.com'}/api/payment/rupantorpay/webhook`,
+        metadata: { order_id: orderId, buyer_id: req.auth.sub },
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.status !== 1 || typeof data.payment_url !== 'string') {
+      console.error('RupantorPay checkout rejected request:', response.status, data.message || 'No payment URL');
+      return res.status(502).json({ message: data.message || 'RupantorPay could not create a payment link' });
+    }
+    return res.json({ paymentUrl: data.payment_url });
+  } catch (error) {
+    console.error('RupantorPay checkout failed:', error.message);
+    return res.status(500).json({
+      message: error.message === 'RUPANTORPAY_API_KEY is not configured'
+        ? 'Payment gateway is not configured on the server'
+        : 'Could not start RupantorPay checkout',
+    });
+  }
+});
+
+router.post('/rupantorpay/verify', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'buyer') return res.status(403).json({ message: 'Only buyers can verify their checkout' });
+  const orderId = typeof req.body?.orderId === 'string' ? req.body.orderId.trim() : '';
+  const transactionId = typeof req.body?.transactionId === 'string' ? req.body.transactionId.trim() : '';
+  if (!orderId || !transactionId) return res.status(400).json({ message: 'orderId and transactionId are required' });
+
+  const client = await pool.connect();
+  try {
+    const existingResult = await client.query(
+      "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1",
+      [orderId]
+    );
+    const order = existingResult.rows[0]?.data;
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order.buyerId !== req.auth.sub) return res.status(403).json({ message: 'This order does not belong to your account' });
+    if (order.paymentStatus === 'PAID' && order.transactionId === transactionId) {
+      return res.json({ status: 'PAID', orderId, transactionId });
+    }
+
+    const response = await fetch(`${GATEWAY_URL}/verify-payment`, {
+      method: 'POST',
+      headers: gatewayHeaders(),
+      body: JSON.stringify({ transaction_id: transactionId }),
+    });
+    const verified = await response.json().catch(() => ({}));
+    if (!response.ok || String(verified.status || '').toUpperCase() !== 'COMPLETED') {
+      return res.status(402).json({
+        status: String(verified.status || 'PENDING').toUpperCase(),
+        message: 'Gateway has not confirmed a completed payment yet',
+      });
+    }
+
+    const verifiedAmount = Number(verified.amount);
+    const expectedAmount = Number(order.totalAmount);
+    const metadataOrderId = verified.metadata?.order_id;
+    if (!Number.isFinite(verifiedAmount) || Math.abs(verifiedAmount - expectedAmount) > 0.01) {
+      return res.status(409).json({ message: 'Verified payment amount does not match this order' });
+    }
+    if (metadataOrderId && metadataOrderId !== orderId) {
+      return res.status(409).json({ message: 'Verified transaction belongs to a different order' });
+    }
+
+    await client.query('BEGIN');
+    const locked = await client.query(
+      "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+      [orderId]
+    );
+    const latest = locked.rows[0]?.data;
+    if (!latest || latest.buyerId !== req.auth.sub) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    if (latest.paymentStatus !== 'PAID') {
+      const updated = {
+        ...latest,
+        paymentStatus: 'PAID',
+        paymentMethod: 'RUPANTORPAY',
+        transactionId,
+        gatewayTransactionId: verified.trx_id || transactionId,
+        paymentCurrency: verified.currency || 'BDT',
+        paymentVerifiedAt: new Date().toISOString(),
+      };
+      await client.query(
+        "UPDATE agrochain_records SET data = $1::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $2",
+        [JSON.stringify(updated), orderId]
+      );
+    }
+    await client.query('COMMIT');
+    return res.json({ status: 'PAID', orderId, transactionId });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('RupantorPay verification failed:', error.message);
+    return res.status(500).json({ message: 'Could not verify payment with RupantorPay' });
+  } finally {
+    client.release();
+  }
+});
+
+router.post('/rupantorpay/webhook', async (req, res) => {
+  // Treat gateway notifications as a signal only; the transaction must still be
+  // verified server-to-server before any order can be marked paid.
+  const transactionId = typeof req.body?.transactionId === 'string'
+    ? req.body.transactionId
+    : typeof req.body?.transaction_id === 'string' ? req.body.transaction_id : '';
+  if (!transactionId) return res.status(400).json({ message: 'transaction ID is required' });
+  return res.status(202).json({ received: true, message: 'Use the authenticated verification flow to confirm the order' });
+});
+
+export default router;
