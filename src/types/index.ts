@@ -14,6 +14,9 @@ export interface User {
   isGodownManager?: boolean;
   godownId?: string;
   createdAt: string;
+  payoutMethod?: 'bKash' | 'Nagad' | 'Bank Transfer';
+  payoutAccountNumber?: string;
+  payoutBankName?: string;
 }
 
 export interface Farm {

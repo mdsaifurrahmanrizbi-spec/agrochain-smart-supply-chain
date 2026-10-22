@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { agroApi } from '../../services/api';
 import { User, Phone, Mail, MapPin, CreditCard, ShieldCheck, Check } from 'lucide-react';
 
 export const FarmerProfile: React.FC = () => {
@@ -9,14 +10,30 @@ export const FarmerProfile: React.FC = () => {
   const [name, setName] = useState(user?.name || 'Md. Rafiqul Islam');
   const [phone, setPhone] = useState(user?.phone || '+880 1819-345678');
   const [location, setLocation] = useState(user?.location || 'Shibganj, Bogura');
-  const [bKashNumber, setBKashNumber] = useState('01819345678');
+  const [payoutMethod, setPayoutMethod] = useState<'bKash' | 'Nagad' | 'Bank Transfer'>(user?.payoutMethod || 'bKash');
+  const [payoutAccountNumber, setPayoutAccountNumber] = useState(user?.payoutAccountNumber || '');
+  const [payoutBankName, setPayoutBankName] = useState(user?.payoutBankName || '');
   const [nidNumber, setNidNumber] = useState('19842691234567890');
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateProfile({ name, phone, location });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    try {
+      const payoutAccount = await agroApi.updateFarmerPayoutAccount({
+        payoutMethod,
+        payoutAccountNumber,
+        payoutBankName,
+      });
+      updateProfile({
+        name, phone, location,
+        payoutMethod: payoutAccount.payoutMethod,
+        payoutAccountNumber: payoutAccount.payoutAccountNumber,
+        payoutBankName: payoutAccount.payoutBankName,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Could not save payout details.');
+    }
   };
 
   return (
@@ -100,21 +117,46 @@ export const FarmerProfile: React.FC = () => {
             <h3 className="text-xs font-bold text-slate-900 mb-3">Mobile Banking Settlement Accounts</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">bKash Merchant / Personal No.</label>
+                <label className="block text-slate-700 font-semibold mb-1">Payout Method</label>
+                <select
+                  required
+                  value={payoutMethod}
+                  onChange={(e) => setPayoutMethod(e.target.value as 'bKash' | 'Nagad' | 'Bank Transfer')}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden"
+                >
+                  <option value="bKash">bKash</option>
+                  <option value="Nagad">Nagad</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Payout Account Number</label>
                 <input
                   type="text"
                   required
-                  value={bKashNumber}
-                  onChange={(e) => setBKashNumber(e.target.value)}
+                  minLength={5}
+                  maxLength={50}
+                  value={payoutAccountNumber}
+                  onChange={(e) => setPayoutAccountNumber(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden font-mono"
                 />
               </div>
+              {payoutMethod === 'Bank Transfer' && <div>
+                <label className="block text-slate-700 font-semibold mb-1">Bank Name</label>
+                <input
+                  type="text"
+                  required
+                  value={payoutBankName}
+                  onChange={(e) => setPayoutBankName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden"
+                />
+              </div>}
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Settlement Cadence</label>
+                <label className="block text-slate-700 font-semibold mb-1">Payout Timing</label>
                 <input
                   type="text"
                   disabled
-                  value="Automatic release on delivery verification"
+                  value="After delivery and authorized payout"
                   className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 cursor-not-allowed"
                 />
               </div>

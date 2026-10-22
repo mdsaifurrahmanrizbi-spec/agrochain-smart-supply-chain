@@ -471,7 +471,7 @@ app.post('/api/login/', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, name, email, password_hash, role, status, created_at
+      `SELECT id, name, email, password_hash, role, status, payout_method, payout_account_number, payout_bank_name, created_at
        FROM auth_users WHERE email = $1 AND role = $2`,
       [email, requestedRole]
     );
@@ -497,6 +497,9 @@ app.post('/api/login/', async (req, res) => {
       email: account.email,
       role: account.role,
       status: account.status,
+      payoutMethod: account.payout_method || undefined,
+      payoutAccountNumber: account.payout_account_number || undefined,
+      payoutBankName: account.payout_bank_name || undefined,
       createdAt: account.created_at,
     };
 
@@ -568,10 +571,66 @@ app.patch('/api/admin/users/:id/status/', requireAuth, async (req, res) => {
   }
 });
 
+// Farmer payout accounts are private: farmers may edit only their own account;
+// only Admin and Warehouse Manager can view account details for payout processing.
+app.patch('/api/farmer/payout-account/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'farmer') return res.status(403).json({ message: 'Only farmers can update their own payout account' });
+  const payoutMethod = typeof req.body?.payoutMethod === 'string' ? req.body.payoutMethod.trim() : '';
+  const payoutAccountNumber = typeof req.body?.payoutAccountNumber === 'string' ? req.body.payoutAccountNumber.trim() : '';
+  const payoutBankName = typeof req.body?.payoutBankName === 'string' ? req.body.payoutBankName.trim() : '';
+  if (!['bKash', 'Nagad', 'Bank Transfer'].includes(payoutMethod)) return res.status(400).json({ message: 'Choose bKash, Nagad, or Bank Transfer' });
+  if (payoutAccountNumber.length < 5 || payoutAccountNumber.length > 50) return res.status(400).json({ message: 'Enter a valid payout account number' });
+  if (payoutBankName.length > 120) return res.status(400).json({ message: 'Bank name is too long' });
+  try {
+    const result = await pool.query(
+      `UPDATE auth_users
+       SET payout_method = $1, payout_account_number = $2, payout_bank_name = $3
+       WHERE id = $4 AND role = 'farmer'
+       RETURNING id, name, email, role, status, payout_method, payout_account_number, payout_bank_name, created_at`,
+      [payoutMethod, payoutAccountNumber, payoutBankName || null, req.auth.sub]
+    );
+    if (!result.rows[0]) return res.status(404).json({ message: 'Farmer account not found' });
+    const row = result.rows[0];
+    return res.json({ id: row.id, name: row.name, email: row.email, role: row.role, status: row.status, payoutMethod: row.payout_method, payoutAccountNumber: row.payout_account_number, payoutBankName: row.payout_bank_name, createdAt: row.created_at });
+  } catch (error) {
+    console.error('Could not save farmer payout account:', error.message);
+    return res.status(500).json({ message: 'Could not save payout account' });
+  }
+});
+
+app.get('/api/farmers/payout-accounts/', requireAuth, async (req, res) => {
+  if (!['admin', 'warehouse'].includes(req.auth.role)) return res.status(403).json({ message: 'Admin or Warehouse Manager access required' });
+  const requestedIds = typeof req.query.farmerIds === 'string'
+    ? req.query.farmerIds.split(',').map((value) => value.trim()).filter(Boolean).slice(0, 100)
+    : [];
+  try {
+    const result = requestedIds.length
+      ? await pool.query(
+          `SELECT id, name, payout_method, payout_account_number, payout_bank_name
+           FROM auth_users WHERE role = 'farmer' AND id = ANY($1::text[]) ORDER BY name`,
+          [requestedIds]
+        )
+      : await pool.query(
+          `SELECT id, name, payout_method, payout_account_number, payout_bank_name
+           FROM auth_users WHERE role = 'farmer' ORDER BY name`
+        );
+    return res.json(result.rows.map((row) => ({
+      farmerId: row.id,
+      farmerName: row.name,
+      payoutMethod: row.payout_method || null,
+      payoutAccountNumber: row.payout_account_number || null,
+      payoutBankName: row.payout_bank_name || null,
+    })));
+  } catch (error) {
+    console.error('Could not load farmer payout accounts:', error.message);
+    return res.status(500).json({ message: 'Could not load payout accounts' });
+  }
+});
+
 // Return the authenticated account from the database.
 app.get('/api/me', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, email, role, status, created_at FROM auth_users WHERE id = $1', [req.auth.sub]);
+    const result = await pool.query('SELECT id, name, email, role, status, payout_method, payout_account_number, payout_bank_name, created_at FROM auth_users WHERE id = $1', [req.auth.sub]);
     const account = result.rows[0];
     if (!account || account.status !== 'ACTIVE') {
       return res.status(401).json({ message: 'Account is inactive or unavailable' });
@@ -622,14 +681,15 @@ const resourceWriteRoles = {
   jobs: ['admin', 'buyer', 'delivery', 'warehouse'],
   qualityChecks: ['admin', 'inspector', 'warehouse'],
   codRecords: ['admin', 'warehouse', 'delivery'],
-  settlements: ['admin'],
+  settlements: ['admin', 'warehouse'],
   trackingEvents: ['admin', 'buyer', 'delivery', 'warehouse', 'inspector'],
   godowns: ['admin', 'warehouse'],
   godownShipments: ['admin', 'delivery', 'warehouse'],
 };
 
 function canReadResource(role, resource) {
-  if (['users', 'settlements'].includes(resource)) return role === 'admin';
+  if (resource === 'users') return role === 'admin';
+  if (resource === 'settlements') return ['admin', 'farmer', 'warehouse'].includes(role);
   if (resource === 'codRecords') return ['admin', 'warehouse'].includes(role);
   return allowedResources.has(resource);
 }
@@ -637,6 +697,144 @@ function canReadResource(role, resource) {
 function canWriteResource(role, resource) {
   return resourceWriteRoles[resource]?.includes(role) === true;
 }
+
+// Server-authoritative delivery confirmation. COD customer payment becomes PAID
+// at the exact moment the assigned delivery partner verifies the customer's OTP.
+app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'delivery') {
+    return res.status(403).json({ message: 'Only the assigned delivery partner can confirm delivery' });
+  }
+  const { id } = req.params;
+  const otp = typeof req.body?.otp === 'string' ? req.body.otp.trim() : '';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const found = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND (id = $1 OR data->>'orderNumber' = $1) LIMIT 1 FOR UPDATE",
+      [id]
+    );
+    const order = found.rows[0]?.data;
+    const accountResult = await client.query("SELECT email FROM auth_users WHERE id = $1", [req.auth.sub]);
+    const accountEmail = accountResult.rows[0]?.email;
+    const partnerResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (id = $1 OR lower(data->>'email') = lower($2)) LIMIT 1",
+      [req.auth.sub, accountEmail || '']
+    );
+    const partnerRecord = partnerResult.rows[0];
+    if (!order) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    const authorizedPartnerId = partnerRecord?.id || req.auth.sub;
+    if (order.deliveryPartnerId !== authorizedPartnerId) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'This order is not assigned to your delivery account' });
+    }
+    if (order.isDeliveryVerified || order.orderStatus === 'DELIVERED') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Delivery has already been confirmed' });
+    }
+    if ((Number(order.otpAttemptsRemaining) || 0) <= 0) {
+      await client.query('ROLLBACK');
+      return res.status(423).json({ message: 'Delivery OTP is locked; contact dispatch support' });
+    }
+    if (!otp || otp !== String(order.deliveryOtp || '').trim()) {
+      order.otpAttemptsRemaining = Math.max(0, (Number(order.otpAttemptsRemaining) || 0) - 1);
+      await client.query(
+        "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1",
+        [found.rows[0].id || id, JSON.stringify(order)]
+      );
+      await client.query('COMMIT');
+      return res.status(400).json({ message: 'Invalid customer delivery OTP', attemptsRemaining: order.otpAttemptsRemaining });
+    }
+
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    order.orderStatus = 'DELIVERED';
+    order.isDeliveryVerified = true;
+    order.deliveryConfirmedAt = now;
+    order.updatedAt = now;
+    if (order.paymentMethod === 'COD') {
+      order.paymentStatus = 'PAID';
+      order.paymentVerifiedAt = now;
+    }
+    await client.query(
+      "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1",
+      [found.rows[0].id || id, JSON.stringify(order)]
+    );
+
+    let codRecord = null;
+    if (order.paymentMethod === 'COD') {
+      const existingCod = await client.query(
+        "SELECT id, data FROM agrochain_records WHERE resource = 'codRecords' AND data->>'orderId' = $1 LIMIT 1 FOR UPDATE",
+        [found.rows[0].id || id]
+      );
+      codRecord = existingCod.rows[0]?.data || {
+        id: `cod-${Date.now()}`,
+        orderId: found.rows[0].id || id,
+        orderNumber: order.orderNumber,
+        deliveryPartnerId: authorizedPartnerId,
+        deliveryPartnerName: partnerRecord?.data?.name || order.deliveryPartnerName || 'Delivery Partner',
+        amount: Number(order.totalAmount),
+        collectedAt: now,
+        depositStatus: 'CASH_COLLECTED',
+      };
+      if (!existingCod.rows[0]) {
+        await client.query(
+          "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('codRecords', $1, $2::jsonb, NOW(), NOW())",
+          [codRecord.id, JSON.stringify(codRecord)]
+        );
+      }
+    }
+
+    const orderId = found.rows[0].id || id;
+    let settlement = null;
+    const existingSettlement = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'settlements' AND data->>'orderId' = $1 LIMIT 1 FOR UPDATE",
+      [orderId]
+    );
+    if (!existingSettlement.rows[0]) {
+      const productSalesValue = Number(order.productSubtotal) || 0;
+      const commissionDeducted = Math.round(productSalesValue * 0.1);
+      settlement = {
+        id: `stl-${Date.now()}`,
+        orderId,
+        orderNumber: order.orderNumber,
+        farmerId: order.items?.[0]?.farmerId || '',
+        farmerName: order.items?.[0]?.farmerName || 'Farmer',
+        productSalesValue,
+        commissionDeducted,
+        netPayout: productSalesValue - commissionDeducted,
+        deliveryFee: Number(order.deliveryFee) || 0,
+        productSummary: (order.items || []).map((item) => `${item.quantity} ${item.unit} ${item.productName}`).join(', '),
+        deliveryDate: now,
+        deliveryConfirmedAt: now,
+        paymentMethod: 'bKash',
+        settlementStatus: 'PENDING',
+      };
+      await client.query(
+        "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('settlements', $1, $2::jsonb, NOW(), NOW())",
+        [settlement.id, JSON.stringify(settlement)]
+      );
+    } else {
+      settlement = existingSettlement.rows[0].data;
+      settlement.deliveryConfirmedAt = now;
+      settlement.settlementStatus = ['PAID', 'COMPLETED'].includes(settlement.settlementStatus) ? settlement.settlementStatus : 'PENDING';
+      await client.query(
+        "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'settlements' AND id = $1",
+        [existingSettlement.rows[0].id, JSON.stringify(settlement)]
+      );
+    }
+
+    await client.query('COMMIT');
+    return res.json({ success: true, order, codRecord, settlement, message: 'Delivery confirmed successfully' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Delivery confirmation failed:', error.message);
+    return res.status(500).json({ message: 'Could not confirm delivery' });
+  } finally {
+    client.release();
+  }
+});
 
 // Read records for a resource.
 app.get('/api/records/:resource', requireAuth, async (req, res) => {
@@ -661,6 +859,19 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
     );
 
     let rows = result.rows;
+    if (resource === 'settlements') {
+      const role = req.auth.role;
+      if (role === 'farmer') {
+        rows = rows.filter((row) => row.data?.farmerId === req.auth.sub);
+      } else if (role === 'warehouse') {
+        const codOrders = await pool.query(
+          "SELECT id FROM agrochain_records WHERE resource = 'orders' AND data->>'paymentMethod' = 'COD'"
+        );
+        const codOrderIds = new Set(codOrders.rows.map((row) => row.id));
+        rows = rows.filter((row) => codOrderIds.has(row.data?.orderId));
+      }
+    }
+
     if (resource === 'orders') {
       const role = req.auth.role;
       if (role === 'buyer') {
@@ -736,6 +947,19 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     );
 
     const existing = existingResult.rows[0]?.data;
+
+    // Warehouse may only complete COD farmer payouts. Online payouts remain admin-only.
+    if (resource === 'settlements' && role === 'warehouse') {
+      const relatedId = typeof data.orderId === 'string' ? data.orderId : '';
+      const related = relatedId ? await client.query(
+        "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+        [relatedId]
+      ) : { rows: [] };
+      if (!related.rows[0]?.data || related.rows[0].data.paymentMethod !== 'COD') {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Warehouse managers may only process COD farmer payouts' });
+      }
+    }
 
     // Farmer payout completion is a financial transition, so enforce its
     // prerequisites on the server rather than trusting the admin UI.
@@ -1001,27 +1225,6 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       [resource, id, JSON.stringify(data)]
     );
 
-    // A verified warehouse cash deposit completes the customer's COD payment.
-    // This is deliberately separate from the farmer settlement/payout record.
-    if (
-      resource === 'codRecords' &&
-      ['admin', 'warehouse'].includes(role) &&
-      data.depositStatus === 'CASH_DEPOSIT_VERIFIED'
-    ) {
-      const verifiedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
-      await client.query(
-        `UPDATE agrochain_records
-         SET data = data || jsonb_build_object(
-           'paymentStatus', 'PAID',
-           'paymentVerifiedAt', $2,
-           'updatedAt', $2
-         ),
-         updated_at = NOW()
-         WHERE resource = 'orders' AND id = $1`,
-        [data.orderId, verifiedAt]
-      );
-    }
-
     await client.query('COMMIT');
     return res.json(result.rows[0]);
   } catch (error) {
@@ -1108,6 +1311,13 @@ async function startServer() {
         CHECK (status IN ('ACTIVE', 'PENDING', 'SUSPENDED')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE auth_users
+      ADD COLUMN IF NOT EXISTS payout_method TEXT,
+      ADD COLUMN IF NOT EXISTS payout_account_number TEXT,
+      ADD COLUMN IF NOT EXISTS payout_bank_name TEXT
   `);
 
   // Allow the same email to have separate role-specific accounts/passwords.

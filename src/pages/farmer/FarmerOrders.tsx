@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { store } from '../../services/api';
+import React, { useEffect, useState } from 'react';
+import { agroApi, store } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ShoppingBag, Eye, Truck, MapPin, ShieldCheck, Percent } from 'lucide-react';
@@ -9,9 +9,29 @@ export const FarmerOrders: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const farmerId = user?.id || 'u-farmer-1';
-  const myOrders = store.orders.filter((o) =>
-    o.items.some((item) => item.farmerId === farmerId)
-  );
+  const [orders, setOrders] = useState(store.orders);
+  const [settlements, setSettlements] = useState(store.settlements);
+  const [view, setView] = useState<'ACTIVE' | 'SUCCESSFUL'>('ACTIVE');
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([
+      agroApi.getOrders(farmerId, 'farmer'),
+      agroApi.getSettlements(farmerId),
+    ]).then(([loadedOrders, loadedSettlements]) => {
+      if (!mounted) return;
+      setOrders(loadedOrders);
+      setSettlements(loadedSettlements);
+    }).catch((error) => console.warn('Could not refresh farmer orders/payment status.', error));
+    return () => { mounted = false; };
+  }, [farmerId]);
+
+  const farmerOrders = orders.filter((o) => o.items.some((item) => item.farmerId === farmerId));
+  const myOrders = farmerOrders.filter((order) => {
+    const settlement = settlements.find((item) => item.orderId === order.id || item.orderNumber === order.orderNumber);
+    const payoutSuccessful = !!settlement && ['PAID', 'COMPLETED'].includes(settlement.settlementStatus);
+    return view === 'SUCCESSFUL' ? payoutSuccessful : !payoutSuccessful;
+  });
 
   return (
     <div className="space-y-6">
@@ -20,6 +40,11 @@ export const FarmerOrders: React.FC = () => {
         <p className="text-xs text-slate-500 mt-1">
           Monitor incoming customer orders, farm pickup logistics, and net earnings after the automated 10% platform commission.
         </p>
+      </div>
+
+      <div className="flex gap-2 rounded-xl border border-slate-200 bg-white p-1 w-fit">
+        <button onClick={() => setView('ACTIVE')} className={`px-3 py-2 rounded-lg text-xs font-bold ${view === 'ACTIVE' ? 'bg-emerald-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Orders ({farmerOrders.filter((order) => !settlements.some((s) => (s.orderId === order.id || s.orderNumber === order.orderNumber) && ['PAID', 'COMPLETED'].includes(s.settlementStatus))).length})</button>
+        <button onClick={() => setView('SUCCESSFUL')} className={`px-3 py-2 rounded-lg text-xs font-bold ${view === 'SUCCESSFUL' ? 'bg-emerald-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Successful Orders ({farmerOrders.filter((order) => settlements.some((s) => (s.orderId === order.id || s.orderNumber === order.orderNumber) && ['PAID', 'COMPLETED'].includes(s.settlementStatus))).length})</button>
       </div>
 
       {/* 10% Commission Guidance */}
@@ -47,7 +72,9 @@ export const FarmerOrders: React.FC = () => {
                 <th className="py-3 px-4">Commission (10%)</th>
                 <th className="py-3 px-4">Seller Net Earnings</th>
                 <th className="py-3 px-4">Farm QC</th>
-                <th className="py-3 px-4">Logistics Status</th>
+                <th className="py-3 px-4">Delivery Status</th>
+                <th className="py-3 px-4">Payment Method / Customer Payment</th>
+                <th className="py-3 px-4">Farmer Payout</th>
                 <th className="py-3 px-4 text-right">Action</th>
               </tr>
             </thead>
@@ -85,6 +112,18 @@ export const FarmerOrders: React.FC = () => {
                     </td>
                     <td className="py-3 px-4">
                       <StatusBadge status={ord.orderStatus} size="sm" />
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="font-semibold">{ord.paymentMethod === 'ONLINE' ? 'RupantorPay Online' : 'Cash on Delivery (COD)'}</div>
+                      <StatusBadge status={ord.paymentStatus} size="sm" />
+                    </td>
+                    <td className="py-3 px-4">
+                      {(() => {
+                        const settlement = settlements.find((item) => item.orderId === ord.id || item.orderNumber === ord.orderNumber);
+                        return <><StatusBadge status={settlement?.settlementStatus || 'PENDING'} size="sm" />
+                          {settlement?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Transfer ref: {settlement.payoutReference}</span>}
+                        </>;
+                      })()}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <button

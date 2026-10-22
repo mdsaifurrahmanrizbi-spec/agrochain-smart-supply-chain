@@ -1,12 +1,34 @@
-import React, { useState } from 'react';
-import { store } from '../../services/api';
+import React, { useEffect, useState } from 'react';
+import { agroApi, store } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Search, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const AdminOrders: React.FC = () => {
-  const [orders] = useState(store.orders);
+  const [orders, setOrders] = useState(store.orders);
+  const [settlements, setSettlements] = useState(store.settlements);
+  const [payoutAccounts, setPayoutAccounts] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([agroApi.getOrders(), agroApi.getSettlements()]).then(([loadedOrders, loadedSettlements]) => {
+      if (!mounted) return;
+      setOrders(loadedOrders);
+      setSettlements(loadedSettlements);
+    }).catch((error) => console.warn('Could not refresh admin orders and payouts.', error));
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    const farmerIds = [...new Set(orders.flatMap((order) => order.items.map((item) => item.farmerId)))];
+    agroApi.getFarmerPayoutAccounts(farmerIds).then((accounts) => {
+      setPayoutAccounts(Object.fromEntries(accounts.map((account) => [
+        account.farmerId,
+        [account.payoutMethod, account.payoutBankName, account.payoutAccountNumber].filter(Boolean).join(' · ') || 'Not provided',
+      ])));
+    }).catch((error) => console.warn('Could not load authorized farmer payout accounts.', error));
+  }, [orders]);
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'COD' | 'ONLINE' | 'PENDING' | 'PAID'>('ALL');
   const [view, setView] = useState<'ACTIVE' | 'SUCCESSFUL'>('ACTIVE');
 
@@ -21,8 +43,8 @@ export const AdminOrders: React.FC = () => {
       (paymentFilter === 'ONLINE' && o.paymentMethod === 'ONLINE') ||
       (paymentFilter === 'PENDING' && o.paymentStatus === 'PENDING') ||
       (paymentFilter === 'PAID' && o.paymentStatus === 'PAID');
-    const settlements = store.settlements.filter((settlement) => settlement.orderId === o.id || settlement.orderNumber === o.orderNumber);
-    const successful = settlements.length > 0 && settlements.every((settlement) => ['PAID', 'COMPLETED'].includes(settlement.settlementStatus));
+    const orderSettlements = settlements.filter((settlement) => settlement.orderId === o.id || settlement.orderNumber === o.orderNumber);
+    const successful = orderSettlements.length > 0 && orderSettlements.every((settlement) => ['PAID', 'COMPLETED'].includes(settlement.settlementStatus));
     return matchesSearch && matchesPayment && (view === 'SUCCESSFUL' ? successful : !successful);
   });
 
@@ -94,7 +116,7 @@ export const AdminOrders: React.FC = () => {
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      {ord.items.map((item) => <div key={`${ord.id}-${item.productId}`} className="mb-1"><div className="font-semibold text-slate-900">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div></div>)}
+                      {ord.items.map((item) => <div key={`${ord.id}-${item.productId}`} className="mb-1"><div className="font-semibold text-slate-900">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div><div className="text-[10px] text-slate-600">Payout account: {payoutAccounts[item.farmerId] || 'Loading / not provided'}</div></div>)}
                     </td>
                     <td className="py-3 px-4 font-bold text-slate-900 tabular-nums">
                       ৳{gross.toLocaleString()}
@@ -121,6 +143,13 @@ export const AdminOrders: React.FC = () => {
                       <StatusBadge status={ord.orderStatus} size="sm" />
                     </td>
                     <td className="py-3 px-4 text-right">
+                      {(() => {
+                        const payout = settlements.find((item) => item.orderId === ord.id || item.orderNumber === ord.orderNumber);
+                        return <div className="mb-2">
+                          <StatusBadge status={payout?.settlementStatus || 'PENDING'} size="sm" />
+                          {payout?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Transfer ref: {payout.payoutReference}</span>}
+                        </div>;
+                      })()}
                       {ord.isDeliveryVerified && ord.orderStatus === 'DELIVERED' ? (
                         <Link to="/admin/seller-payments" className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
                           <ShieldCheck className="w-3 h-3" /> Manage farmer payout
