@@ -622,14 +622,15 @@ const resourceWriteRoles = {
   jobs: ['admin', 'buyer', 'delivery', 'warehouse'],
   qualityChecks: ['admin', 'inspector', 'warehouse'],
   codRecords: ['admin', 'warehouse', 'delivery'],
-  settlements: ['admin'],
+  settlements: ['admin', 'warehouse'],
   trackingEvents: ['admin', 'buyer', 'delivery', 'warehouse', 'inspector'],
   godowns: ['admin', 'warehouse'],
   godownShipments: ['admin', 'delivery', 'warehouse'],
 };
 
 function canReadResource(role, resource) {
-  if (['users', 'settlements'].includes(resource)) return role === 'admin';
+  if (resource === 'users') return role === 'admin';
+  if (resource === 'settlements') return ['admin', 'farmer', 'warehouse'].includes(role);
   if (resource === 'codRecords') return ['admin', 'warehouse'].includes(role);
   return allowedResources.has(resource);
 }
@@ -650,7 +651,7 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
   try {
     await client.query('BEGIN');
     const found = await client.query(
-      "SELECT data FROM agrochain_records WHERE resource = 'orders' AND (id = $1 OR data->>'orderNumber' = $1) LIMIT 1 FOR UPDATE",
+      "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND (id = $1 OR data->>'orderNumber' = $1) LIMIT 1 FOR UPDATE",
       [id]
     );
     const order = found.rows[0]?.data;
@@ -690,8 +691,8 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
       order.paymentVerifiedAt = now;
     }
     await client.query(
-      "UPDATE agrochain_records SET data = $3::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1",
-      [found.rows[0].id || id, '', JSON.stringify(order)]
+      "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1",
+      [found.rows[0].id || id, JSON.stringify(order)]
     );
 
     let codRecord = null;
@@ -791,6 +792,19 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
     );
 
     let rows = result.rows;
+    if (resource === 'settlements') {
+      const role = req.auth.role;
+      if (role === 'farmer') {
+        rows = rows.filter((row) => row.data?.farmerId === req.auth.sub);
+      } else if (role === 'warehouse') {
+        const codOrders = await pool.query(
+          "SELECT id FROM agrochain_records WHERE resource = 'orders' AND data->>'paymentMethod' = 'COD'"
+        );
+        const codOrderIds = new Set(codOrders.rows.map((row) => row.id));
+        rows = rows.filter((row) => codOrderIds.has(row.data?.orderId));
+      }
+    }
+
     if (resource === 'orders') {
       const role = req.auth.role;
       if (role === 'buyer') {
@@ -866,6 +880,19 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     );
 
     const existing = existingResult.rows[0]?.data;
+
+    // Warehouse may only complete COD farmer payouts. Online payouts remain admin-only.
+    if (resource === 'settlements' && role === 'warehouse') {
+      const relatedId = typeof data.orderId === 'string' ? data.orderId : '';
+      const related = relatedId ? await client.query(
+        "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+        [relatedId]
+      ) : { rows: [] };
+      if (!related.rows[0]?.data || related.rows[0].data.paymentMethod !== 'COD') {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Warehouse managers may only process COD farmer payouts' });
+      }
+    }
 
     // Farmer payout completion is a financial transition, so enforce its
     // prerequisites on the server rather than trusting the admin UI.
@@ -1130,27 +1157,6 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
        RETURNING id, data, created_at, updated_at`,
       [resource, id, JSON.stringify(data)]
     );
-
-    // A verified warehouse cash deposit completes the customer's COD payment.
-    // This is deliberately separate from the farmer settlement/payout record.
-    if (
-      resource === 'codRecords' &&
-      ['admin', 'warehouse'].includes(role) &&
-      data.depositStatus === 'CASH_DEPOSIT_VERIFIED'
-    ) {
-      const verifiedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
-      await client.query(
-        `UPDATE agrochain_records
-         SET data = data || jsonb_build_object(
-           'paymentStatus', 'PAID',
-           'paymentVerifiedAt', $2,
-           'updatedAt', $2
-         ),
-         updated_at = NOW()
-         WHERE resource = 'orders' AND id = $1`,
-        [data.orderId, verifiedAt]
-      );
-    }
 
     await client.query('COMMIT');
     return res.json(result.rows[0]);
