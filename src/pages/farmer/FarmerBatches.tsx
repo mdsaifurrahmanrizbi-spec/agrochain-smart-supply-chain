@@ -120,7 +120,7 @@ export const FarmerBatches: React.FC = () => {
                 <img
                   className="w-full h-full object-contain"
                   alt={`Scannable QR code for batch ${selectedBatchForQr.batchCode}`}
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=${encodeURIComponent(`${window.location.origin}/?batch=${selectedBatchForQr.batchCode}`)}`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=${encodeURIComponent(`${window.location.origin}/traceability/${encodeURIComponent(selectedBatchForQr.batchCode)}`)}`}
                 />
               </div>
               <p className="text-[10px] text-slate-500 mb-2">Scan with your phone camera to open AgroChain and identify this batch.</p>
