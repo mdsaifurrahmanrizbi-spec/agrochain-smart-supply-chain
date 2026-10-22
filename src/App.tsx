@@ -11,6 +11,7 @@ import { DashboardLayout } from './components/layouts/DashboardLayout';
 import { Home } from './pages/public/Home';
 import { Products } from './pages/public/Products';
 import { ProductDetail } from './pages/public/ProductDetail';
+import { BatchTraceability } from './pages/public/BatchTraceability';
 import { About } from './pages/public/About';
 import { HowItWorks } from './pages/public/HowItWorks';
 import { Contact } from './pages/public/Contact';
@@ -92,6 +93,7 @@ export default function App() {
               <Route path="/" element={<Home />} />
               <Route path="/products" element={<Products />} />
               <Route path="/products/:id" element={<ProductDetail />} />
+              <Route path="/traceability/:batchCode" element={<BatchTraceability />} />
               <Route path="/about" element={<About />} />
               <Route path="/how-it-works" element={<HowItWorks />} />
               <Route path="/contact" element={<Contact />} />
