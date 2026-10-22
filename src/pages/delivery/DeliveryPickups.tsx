@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -17,6 +17,16 @@ import {
 export const DeliveryPickups: React.FC = () => {
   const { user } = useAuth();
   const [jobs, setJobs] = useState(store.jobs.filter((j) => j.type === 'PICKUP'));
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([agroApi.getLogisticsJobs(), agroApi.getOrders()])
+      .then(([freshJobs]) => {
+        if (active) setJobs(freshJobs.filter((job) => job.type === 'PICKUP'));
+      })
+      .catch((error) => console.error('Could not refresh assigned pickups:', error));
+    return () => { active = false; };
+  }, []);
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
