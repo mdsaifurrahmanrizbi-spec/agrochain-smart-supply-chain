@@ -638,6 +638,136 @@ function canWriteResource(role, resource) {
   return resourceWriteRoles[resource]?.includes(role) === true;
 }
 
+// Server-authoritative delivery confirmation. COD customer payment becomes PAID
+// at the exact moment the assigned delivery partner verifies the customer's OTP.
+app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'delivery') {
+    return res.status(403).json({ message: 'Only the assigned delivery partner can confirm delivery' });
+  }
+  const { id } = req.params;
+  const otp = typeof req.body?.otp === 'string' ? req.body.otp.trim() : '';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const found = await client.query(
+      "SELECT data FROM agrochain_records WHERE resource = 'orders' AND (id = $1 OR data->>'orderNumber' = $1) LIMIT 1 FOR UPDATE",
+      [id]
+    );
+    const order = found.rows[0]?.data;
+    if (!order) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    if (order.deliveryPartnerId !== req.auth.sub) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'This order is not assigned to your delivery account' });
+    }
+    if (order.isDeliveryVerified || order.orderStatus === 'DELIVERED') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Delivery has already been confirmed' });
+    }
+    if ((Number(order.otpAttemptsRemaining) || 0) <= 0) {
+      await client.query('ROLLBACK');
+      return res.status(423).json({ message: 'Delivery OTP is locked; contact dispatch support' });
+    }
+    if (!otp || otp !== String(order.deliveryOtp || '').trim()) {
+      order.otpAttemptsRemaining = Math.max(0, (Number(order.otpAttemptsRemaining) || 0) - 1);
+      await client.query(
+        "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1",
+        [found.rows[0].id || id, JSON.stringify(order)]
+      );
+      await client.query('COMMIT');
+      return res.status(400).json({ message: 'Invalid customer delivery OTP', attemptsRemaining: order.otpAttemptsRemaining });
+    }
+
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    order.orderStatus = 'DELIVERED';
+    order.isDeliveryVerified = true;
+    order.deliveryConfirmedAt = now;
+    order.updatedAt = now;
+    if (order.paymentMethod === 'COD') {
+      order.paymentStatus = 'PAID';
+      order.paymentVerifiedAt = now;
+    }
+    await client.query(
+      "UPDATE agrochain_records SET data = $3::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1",
+      [found.rows[0].id || id, '', JSON.stringify(order)]
+    );
+
+    let codRecord = null;
+    if (order.paymentMethod === 'COD') {
+      const existingCod = await client.query(
+        "SELECT id, data FROM agrochain_records WHERE resource = 'codRecords' AND data->>'orderId' = $1 LIMIT 1 FOR UPDATE",
+        [found.rows[0].id || id]
+      );
+      codRecord = existingCod.rows[0]?.data || {
+        id: `cod-${Date.now()}`,
+        orderId: found.rows[0].id || id,
+        orderNumber: order.orderNumber,
+        deliveryPartnerId: req.auth.sub,
+        deliveryPartnerName: order.deliveryPartnerName || 'Delivery Partner',
+        amount: Number(order.totalAmount),
+        collectedAt: now,
+        depositStatus: 'CASH_COLLECTED',
+      };
+      if (!existingCod.rows[0]) {
+        await client.query(
+          "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('codRecords', $1, $2::jsonb, NOW(), NOW())",
+          [codRecord.id, JSON.stringify(codRecord)]
+        );
+      }
+    }
+
+    const orderId = found.rows[0].id || id;
+    let settlement = null;
+    const existingSettlement = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'settlements' AND data->>'orderId' = $1 LIMIT 1 FOR UPDATE",
+      [orderId]
+    );
+    if (!existingSettlement.rows[0]) {
+      const productSalesValue = Number(order.productSubtotal) || 0;
+      const commissionDeducted = Math.round(productSalesValue * 0.1);
+      settlement = {
+        id: `stl-${Date.now()}`,
+        orderId,
+        orderNumber: order.orderNumber,
+        farmerId: order.items?.[0]?.farmerId || '',
+        farmerName: order.items?.[0]?.farmerName || 'Farmer',
+        productSalesValue,
+        commissionDeducted,
+        netPayout: productSalesValue - commissionDeducted,
+        deliveryFee: Number(order.deliveryFee) || 0,
+        productSummary: (order.items || []).map((item) => `${item.quantity} ${item.unit} ${item.productName}`).join(', '),
+        deliveryDate: now,
+        deliveryConfirmedAt: now,
+        paymentMethod: 'bKash',
+        settlementStatus: 'PENDING',
+      };
+      await client.query(
+        "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('settlements', $1, $2::jsonb, NOW(), NOW())",
+        [settlement.id, JSON.stringify(settlement)]
+      );
+    } else {
+      settlement = existingSettlement.rows[0].data;
+      settlement.deliveryConfirmedAt = now;
+      settlement.settlementStatus = ['PAID', 'COMPLETED'].includes(settlement.settlementStatus) ? settlement.settlementStatus : 'PENDING';
+      await client.query(
+        "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'settlements' AND id = $1",
+        [existingSettlement.rows[0].id, JSON.stringify(settlement)]
+      );
+    }
+
+    await client.query('COMMIT');
+    return res.json({ success: true, order, codRecord, settlement, message: 'Delivery confirmed successfully' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Delivery confirmation failed:', error.message);
+    return res.status(500).json({ message: 'Could not confirm delivery' });
+  } finally {
+    client.release();
+  }
+});
+
 // Read records for a resource.
 app.get('/api/records/:resource', requireAuth, async (req, res) => {
   const { resource } = req.params;
