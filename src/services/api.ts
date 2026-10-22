@@ -1179,15 +1179,9 @@ return qc;
 
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
-    // Update settlement
-    let stl = store.settlements.find((s) => s.orderId === orderId);
-    if (stl) {
-      stl.settlementStatus = 'PAID';
-      stl.payoutDate = now;
-    }
-
+    // Delivery confirmation is not a farmer payout. Keep the settlement pending
+    // until an authorized admin records an actual transfer and its reference.
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
-    localStorage.setItem('agro_settlements', JSON.stringify(store.settlements));
   },
 
   async releaseSellerSettlementPayout(settlementId: string, payoutReference: string): Promise<SellerSettlement> {
