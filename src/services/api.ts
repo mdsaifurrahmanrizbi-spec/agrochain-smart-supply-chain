@@ -529,6 +529,15 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
 
   // Orders
   async getOrders(userId?: string, role?: string): Promise<Order[]> {
+    try {
+      const backendOrders = await getBackendRecords<Order>('orders');
+      if (backendOrders.length > 0) {
+        store.orders = backendOrders;
+        localStorage.setItem('agro_orders', JSON.stringify(backendOrders));
+      }
+    } catch (error) {
+      console.warn('Could not refresh orders from backend; using cached orders.', error);
+    }
     if (role === 'buyer' && userId) {
       return store.orders.filter((o) => o.buyerId === userId);
     }
@@ -860,6 +869,9 @@ const pickupJob: LogisticsJob = {
   ): Promise<{ success: boolean; message: string; order: Order }> {
     const order = store.orders.find((o) => o.id === orderId || o.orderNumber === orderId);
     if (!order) throw new Error('Order consignment not found');
+    if (order.deliveryPartnerId && order.deliveryPartnerId !== partnerId) {
+      throw new Error('This order is not assigned to your delivery account');
+    }
 
     const response = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(order.id)}/confirm-delivery`, {
       method: 'POST',
@@ -1165,23 +1177,21 @@ return qc;
     record.verifiedByAdmin = adminName;
     record.depositDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
-    // The backend atomically verifies the COD deposit and marks the customer's
-    // COD payment PAID. This does not mark the farmer's separate payout as paid.
+    // Customer COD payment was already marked PAID at delivery OTP confirmation.
+    // Warehouse cash verification is a prerequisite for the separate farmer payout.
     await saveBackendRecord('codRecords', record);
-
-    const order = store.orders.find((item) => item.id === record.orderId);
-    if (order) {
-      order.paymentStatus = 'PAID';
-      order.paymentVerifiedAt = record.depositDate;
-      order.updatedAt = record.depositDate || order.updatedAt;
-      localStorage.setItem('agro_orders', JSON.stringify(store.orders));
-    }
-
     localStorage.setItem('agro_cod_records', JSON.stringify(store.codRecords));
     return record;
   },
 
   async getSettlements(farmerId?: string): Promise<SellerSettlement[]> {
+    try {
+      const backendSettlements = await getBackendRecords<SellerSettlement>('settlements');
+      store.settlements = backendSettlements;
+      localStorage.setItem('agro_settlements', JSON.stringify(backendSettlements));
+    } catch (error) {
+      console.warn('Could not refresh settlements from backend; using cached settlements.', error);
+    }
     if (farmerId) {
       return store.settlements.filter((s) => s.farmerId === farmerId);
     }
