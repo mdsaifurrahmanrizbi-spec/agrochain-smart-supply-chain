@@ -655,11 +655,19 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
       [id]
     );
     const order = found.rows[0]?.data;
+    const accountResult = await client.query("SELECT email FROM auth_users WHERE id = $1", [req.auth.sub]);
+    const accountEmail = accountResult.rows[0]?.email;
+    const partnerResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (id = $1 OR lower(data->>'email') = lower($2)) LIMIT 1",
+      [req.auth.sub, accountEmail || '']
+    );
+    const partnerRecord = partnerResult.rows[0];
     if (!order) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Order not found' });
     }
-    if (order.deliveryPartnerId !== req.auth.sub) {
+    const authorizedPartnerId = partnerRecord?.id || req.auth.sub;
+    if (order.deliveryPartnerId !== authorizedPartnerId) {
       await client.query('ROLLBACK');
       return res.status(403).json({ message: 'This order is not assigned to your delivery account' });
     }
@@ -705,8 +713,8 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
         id: `cod-${Date.now()}`,
         orderId: found.rows[0].id || id,
         orderNumber: order.orderNumber,
-        deliveryPartnerId: req.auth.sub,
-        deliveryPartnerName: order.deliveryPartnerName || 'Delivery Partner',
+        deliveryPartnerId: authorizedPartnerId,
+        deliveryPartnerName: partnerRecord?.data?.name || order.deliveryPartnerName || 'Delivery Partner',
         amount: Number(order.totalAmount),
         collectedAt: now,
         depositStatus: 'CASH_COLLECTED',
