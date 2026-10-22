@@ -810,13 +810,13 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       }
     }
 
-    if (resource === 'codRecords' && role === 'warehouse') {
+    if (resource === 'codRecords' && ['admin', 'warehouse'].includes(role)) {
       const immutableFields = ['orderId', 'orderNumber', 'deliveryPartnerId', 'deliveryPartnerName', 'amount', 'collectedAt'];
       if (!existing || data.depositStatus !== 'CASH_DEPOSIT_VERIFIED' ||
           existing.depositStatus === 'CASH_DEPOSIT_VERIFIED' ||
           immutableFields.some((field) => data[field] !== existing[field])) {
         await client.query('ROLLBACK');
-        return res.status(403).json({ message: 'Warehouse managers may only verify an existing COD deposit once, without changing its transaction details' });
+        return res.status(403).json({ message: 'Only an admin or warehouse manager may verify an existing COD deposit once, without changing its transaction details' });
       }
 
       const orderResult = await client.query(
@@ -825,9 +825,10 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       );
       const relatedOrder = orderResult.rows[0]?.data;
       if (!relatedOrder || relatedOrder.paymentMethod !== 'COD' ||
-          relatedOrder.orderStatus !== 'DELIVERED' || relatedOrder.isDeliveryVerified !== true) {
+          relatedOrder.orderStatus !== 'DELIVERED' || relatedOrder.isDeliveryVerified !== true ||
+          Number(existing.amount) !== Number(relatedOrder.totalAmount)) {
         await client.query('ROLLBACK');
-        return res.status(409).json({ message: 'COD deposit can only be verified after delivery is confirmed' });
+        return res.status(409).json({ message: 'COD deposit can only be verified for the exact order amount after delivery is confirmed' });
       }
     }
 
@@ -999,6 +1000,27 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
        RETURNING id, data, created_at, updated_at`,
       [resource, id, JSON.stringify(data)]
     );
+
+    // A verified warehouse cash deposit completes the customer's COD payment.
+    // This is deliberately separate from the farmer settlement/payout record.
+    if (
+      resource === 'codRecords' &&
+      ['admin', 'warehouse'].includes(role) &&
+      data.depositStatus === 'CASH_DEPOSIT_VERIFIED'
+    ) {
+      const verifiedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
+      await client.query(
+        `UPDATE agrochain_records
+         SET data = data || jsonb_build_object(
+           'paymentStatus', 'PAID',
+           'paymentVerifiedAt', $2,
+           'updatedAt', $2
+         ),
+         updated_at = NOW()
+         WHERE resource = 'orders' AND id = $1`,
+        [data.orderId, verifiedAt]
+      );
+    }
 
     await client.query('COMMIT');
     return res.json(result.rows[0]);
