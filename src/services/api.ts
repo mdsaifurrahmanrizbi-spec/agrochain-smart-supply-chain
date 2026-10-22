@@ -850,7 +850,8 @@ const pickupJob: LogisticsJob = {
     return job;
   },
 
-  // UPDATE 1: OTP-Based Delivery Confirmation
+  // Server-authoritative OTP delivery confirmation. COD customer payment becomes
+  // PAID immediately at delivery; farmer payout remains pending until separately paid.
   async verifyDeliveryOtp(
     orderId: string,
     otpInput: string,
@@ -860,66 +861,62 @@ const pickupJob: LogisticsJob = {
     const order = store.orders.find((o) => o.id === orderId || o.orderNumber === orderId);
     if (!order) throw new Error('Order consignment not found');
 
-    if (order.isDeliveryVerified) {
-      throw new Error('This shipment delivery has already been verified and confirmed.');
+    const response = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(order.id)}/confirm-delivery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ otp: otpInput.trim(), notes }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (typeof data.attemptsRemaining === 'number') {
+        order.otpAttemptsRemaining = data.attemptsRemaining;
+        localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+      }
+      throw new Error(data.message || 'Could not confirm delivery');
     }
 
-    if (order.otpAttemptsRemaining <= 0) {
-      throw new Error('Delivery OTP locked due to excessive failed attempts. Please contact dispatch support.');
+    const now = data.order?.deliveryConfirmedAt || new Date().toISOString().replace('T', ' ').substring(0, 16);
+    Object.assign(order, data.order);
+    if (data.codRecord) {
+      const index = store.codRecords.findIndex((item) => item.id === data.codRecord.id);
+      if (index >= 0) store.codRecords[index] = data.codRecord;
+      else store.codRecords.unshift(data.codRecord);
+      localStorage.setItem('agro_cod_records', JSON.stringify(store.codRecords));
+    }
+    if (data.settlement) {
+      const index = store.settlements.findIndex((item) => item.id === data.settlement.id);
+      if (index >= 0) store.settlements[index] = data.settlement;
+      else store.settlements.unshift(data.settlement);
+      localStorage.setItem('agro_settlements', JSON.stringify(store.settlements));
     }
 
-    const partner = store.deliveryPartners.find((p) => p.id === partnerId);
-    const partnerName = partner ? partner.name : (order.deliveryPartnerName || 'Delivery Partner');
-
-    const enteredClean = otpInput.trim();
-    const correctClean = order.deliveryOtp.trim();
-
-    if (enteredClean !== correctClean) {
-      order.otpAttemptsRemaining = Math.max(0, order.otpAttemptsRemaining - 1);
-      localStorage.setItem('agro_orders', JSON.stringify(store.orders));
-
-      throw new Error(
-        `Invalid Customer Delivery OTP. ${order.otpAttemptsRemaining} verification attempt${
-          order.otpAttemptsRemaining === 1 ? '' : 's'
-        } remaining before security lockout.`
-      );
-    }
-
-    // OTP Verification Successful!
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
-    order.orderStatus = 'DELIVERED';
-    order.isDeliveryVerified = true;
-    order.deliveryConfirmedAt = now;
-    order.updatedAt = now;
-
-    // Update associated delivery job
-    const deliveryJob = store.jobs.find((j) => j.orderId === order.id && j.type === 'DELIVERY');
+    const deliveryJob = store.jobs.find((job) => job.orderId === order.id && job.type === 'DELIVERY');
     if (deliveryJob) {
       deliveryJob.status = 'DELIVERED';
-      deliveryJob.deliveryOtpSubmitted = enteredClean;
+      deliveryJob.deliveryOtpSubmitted = otpInput.trim();
       deliveryJob.proofNotes = notes || 'Handed directly to recipient after OTP match.';
       deliveryJob.updatedAt = now;
+      await saveBackendRecord('jobs', deliveryJob);
     }
 
-    // Update tracking timeline automatically: NO additional admin approval required!
     const events = store.trackingEvents[order.id] || [];
     events.unshift(
       {
         id: `trk-${Date.now()}-del`,
         orderId: order.id,
         title: 'DELIVERED SUCCESSFULLY',
-        description: `Product handed over to customer. Delivery automatically confirmed via recipient OTP verification.`,
+        description: 'Product handed over to customer. Delivery automatically confirmed via recipient OTP verification.',
         location: order.buyerAddress,
         timestamp: now,
         actorRole: 'Delivery Partner',
-        actorName: partnerName,
+        actorName: order.deliveryPartnerName || 'Delivery Partner',
         status: 'COMPLETED',
       },
       {
         id: `trk-${Date.now()}-otp`,
         orderId: order.id,
         title: 'CUSTOMER OTP VERIFIED',
-        description: `Secure 4-digit recipient delivery passcode entered by ${partnerName} verified and authenticated by AgroChain.`,
+        description: 'Customer delivery OTP was verified by the server.',
         location: order.buyerCity,
         timestamp: now,
         actorRole: 'Automated Security System',
@@ -927,79 +924,32 @@ const pickupJob: LogisticsJob = {
         status: 'COMPLETED',
       }
     );
-
-    // Persist delivery confirmation before recording COD collection.
-    await saveBackendRecord('orders', order);
-
-    // If COD, register the collected cash in the role-checked backend.
     if (order.paymentMethod === 'COD') {
-      let codRec = store.codRecords.find((c) => c.orderId === order.id);
-      if (!codRec) {
-        codRec = {
-          id: `cod-${Date.now()}`,
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          deliveryPartnerId: partnerId,
-          deliveryPartnerName: partnerName,
-          amount: order.totalAmount,
-          collectedAt: now,
-          depositStatus: 'CASH_COLLECTED',
-        };
-        store.codRecords.unshift(codRec);
-        await saveBackendRecord('codRecords', codRec);
-      } else if (codRec.depositStatus !== 'CASH_DEPOSIT_VERIFIED') {
-        codRec.depositStatus = 'CASH_COLLECTED';
-        codRec.collectedAt = now;
-      }
-      localStorage.setItem('agro_cod_records', JSON.stringify(store.codRecords));
-    }
-
-    // UPDATE 5: Automatic 10% Seller Commission Settlement
-    // Formula: Commission = Product Sales Value * 10%
-    // Net Earnings = Product Sales Value - Commission
-    // Delivery fees belong to logistics and are excluded from commission
-    const productSalesValue = order.productSubtotal;
-    const commissionDeducted = Math.round(productSalesValue * 0.1);
-    const netPayout = productSalesValue - commissionDeducted;
-
-    // Settlement status: COD orders settle after cash collection/deposit; Online orders are eligible or processing immediately
-    const settlementStatus = order.paymentMethod === 'ONLINE' ? 'PROCESSING' : 'PENDING';
-
-    let stl = store.settlements.find((s) => s.orderId === order.id);
-    if (!stl) {
-      stl = {
-        id: `stl-${Date.now()}`,
+      events.unshift({
+        id: `trk-${Date.now()}-codpaid`,
         orderId: order.id,
-        orderNumber: order.orderNumber,
-        farmerId: order.items[0]?.farmerId || 'u-farmer-1',
-        farmerName: order.items[0]?.farmerName || 'Md. Rafiqul Islam',
-        productSalesValue,
-        commissionDeducted,
-        netPayout,
-        deliveryFee: order.deliveryFee,
-        productSummary: order.items.map((i) => `${i.quantity} ${i.unit} ${i.productName}`).join(', '),
-        deliveryDate: now,
-        deliveryConfirmedAt: now,
-        paymentMethod: 'bKash',
-        settlementStatus,
-      };
-      store.settlements.unshift(stl);
-    } else {
-      stl.deliveryConfirmedAt = now;
-      stl.productSalesValue = productSalesValue;
-      stl.commissionDeducted = commissionDeducted;
-      stl.netPayout = netPayout;
-      stl.settlementStatus = settlementStatus;
+        title: 'COD CUSTOMER PAYMENT CONFIRMED',
+        description: 'Cash was collected from the customer at delivery; customer payment is now PAID. Farmer payout remains pending.',
+        location: order.buyerCity,
+        timestamp: now,
+        actorRole: 'Automated Payment System',
+        actorName: 'AgroChain Core Engine',
+        status: 'COMPLETED',
+      });
+    }
+    store.trackingEvents[order.id] = events;
+    for (const event of events.slice(0, order.paymentMethod === 'COD' ? 3 : 2)) {
+      await saveBackendRecord('trackingEvents', event);
     }
 
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
     localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
-    localStorage.setItem('agro_settlements', JSON.stringify(store.settlements));
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
-
     return {
       success: true,
-      message: `Delivery successfully confirmed via Customer OTP verification! Shipment status updated to DELIVERED.`,
+      message: order.paymentMethod === 'COD'
+        ? 'Delivery confirmed. Customer COD payment is PAID; farmer payout is still pending.'
+        : 'Delivery confirmed. Customer online payment remains verified; farmer payout is still pending.',
       order,
     };
   },
