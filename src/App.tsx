@@ -36,6 +36,7 @@ import { BuyerCart } from './pages/buyer/BuyerCart';
 import { BuyerCheckout } from './pages/buyer/BuyerCheckout';
 import { BuyerOrders } from './pages/buyer/BuyerOrders';
 import { BuyerTracking } from './pages/buyer/BuyerTracking';
+import { BuyerPaymentResult } from './pages/buyer/BuyerPaymentResult';
 import { BuyerProfile } from './pages/buyer/BuyerProfile';
 
 // Delivery Pages
@@ -138,6 +139,7 @@ export default function App() {
               <Route path="orders/:id" element={<BuyerTracking />} />
               <Route path="tracking" element={<BuyerTracking />} />
               <Route path="tracking/:id" element={<BuyerTracking />} />
+              <Route path="payment-result" element={<BuyerPaymentResult />} />
               <Route path="profile" element={<BuyerProfile />} />
             </Route>
 
