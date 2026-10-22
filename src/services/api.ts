@@ -560,10 +560,8 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
   async getOrders(userId?: string, role?: string): Promise<Order[]> {
     try {
       const backendOrders = await getBackendRecords<Order>('orders');
-      if (backendOrders.length > 0) {
-        store.orders = backendOrders;
-        localStorage.setItem('agro_orders', JSON.stringify(backendOrders));
-      }
+      store.orders = backendOrders;
+      localStorage.setItem('agro_orders', JSON.stringify(backendOrders));
     } catch (error) {
       console.warn('Could not refresh orders from backend; using cached orders.', error);
     }
@@ -1196,6 +1194,13 @@ return qc;
 
   // COD & Settlements
   async getCODRecords(): Promise<CODRecord[]> {
+    try {
+      const records = await getBackendRecords<CODRecord>('codRecords');
+      store.codRecords = records;
+      localStorage.setItem('agro_cod_records', JSON.stringify(records));
+    } catch (error) {
+      console.warn('Could not refresh COD records from backend; using cached records.', error);
+    }
     return store.codRecords;
   },
 
