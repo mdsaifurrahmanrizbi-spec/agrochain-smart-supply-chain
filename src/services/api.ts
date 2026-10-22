@@ -639,6 +639,43 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     store.orders.unshift(newOrder);
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
 
+    // Every confirmed order enters the QC queue before any pickup job can be created.
+    // Measurements remain explicitly unrecorded until an inspector performs the physical inspection.
+    const firstItem = newOrder.items[0];
+    const relatedBatch = store.batches.find((batch) =>
+      batch.farmerId === firstItem?.farmerId &&
+      (batch.cropName === firstItem?.productName || batch.id === firstItem?.productId)
+    );
+    const existingQc = store.qualityChecks.find((qc) => qc.orderId === newOrder.id);
+    if (!existingQc) {
+      const pendingQc: QualityCheck = {
+        id: `qc-${Date.now()}`,
+        orderId: newOrder.id,
+        batchId: relatedBatch?.id || firstItem?.productId || `unassigned-${newOrder.id}`,
+        batchCode: relatedBatch?.batchCode || 'BATCH-PENDING-ASSIGNMENT',
+        cropName: newOrder.items.map((item) => item.productName).join(', '),
+        farmerName: newOrder.items.map((item) => item.farmerName).filter(Boolean).join(', ') || 'Farmer not assigned',
+        farmLocation: relatedBatch?.farmLocation || 'Farm location pending verification',
+        inspectorId: '',
+        inspectorName: 'Unassigned Inspector',
+        inspectionDate: '',
+        inspectionLocation: 'FARM',
+        grade: 'Grade C - Commercial',
+        moistureContentPercent: 0,
+        pesticideResiduePpm: 0,
+        foreignMatterPercent: 0,
+        status: 'PENDING',
+        remarks: 'Awaiting physical QC inspection. Measurements and grade have not been recorded.',
+      };
+      await saveBackendRecord('qualityChecks', pendingQc);
+      store.qualityChecks.unshift(pendingQc);
+      newOrder.qualityCheckId = pendingQc.id;
+      newOrder.qualityStatus = 'PENDING';
+      await saveBackendRecord('orders', newOrder);
+      localStorage.setItem('agro_quality_checks', JSON.stringify(store.qualityChecks));
+      localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+    }
+
     // Initialize tracking timeline for this order
     const initialTimeline: TrackingEvent[] = [
       {
@@ -657,39 +694,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     store.trackingEvents[newOrder.id] = initialTimeline;
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
 
-    // Auto-create pickup job for an approved delivery partner in the zone
-    // Assign only an approved partner who supports farm pickup
-const partner = store.deliveryPartners.find(
-  (p) => p.approvalStatus === 'APPROVED' && p.canPickup
-);
-
-if (!partner) {
-  console.warn(
-    `No approved pickup partner available for order ${newOrder.orderNumber}. Pickup job was not created.`
-  );
-  return newOrder;
-}
-
-const pickupJob: LogisticsJob = {
-      id: `job-${Date.now()}`,
-      jobCode: `JOB-PKP-${Math.floor(1000 + Math.random() * 9000)}`,
-      orderId: newOrder.id,
-      orderNumber: newOrder.orderNumber,
-      partnerId: partner.id,
-      partnerName: partner.name,
-      type: 'PICKUP',
-      productSummary: newOrder.items.map((i) => `${i.quantity} ${i.unit} ${i.productName}`).join(', '),
-      originAddress: 'Bogura Green Valley Agro Farm, Shibganj',
-      destinationAddress: 'Central Dhaka Agro-Logistics Center, Gazipur',
-      assignedDate: newOrder.createdAt,
-      status: 'ASSIGNED',
-      codAmount: 0,
-      updatedAt: newOrder.createdAt,
-    };
-    await saveBackendRecord('jobs', pickupJob);
-    store.jobs.unshift(pickupJob);
-    localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
-
+    // Pickup is intentionally NOT assigned here. QC approval unlocks pickup.
     return newOrder;
   },
 
