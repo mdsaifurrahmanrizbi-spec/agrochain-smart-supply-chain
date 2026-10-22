@@ -695,6 +695,25 @@ const pickupJob: LogisticsJob = {
 
   // Tracking Timeline
   async getTrackingEvents(orderId: string): Promise<TrackingEvent[]> {
+    // Prefer the server timeline so customer/farmer sessions see events created
+    // by delivery, warehouse, and cancellation actions in other sessions.
+    try {
+      const backendEvents = await getBackendRecords<TrackingEvent>('trackingEvents');
+      const matchingEvents = backendEvents
+        .filter((event) => event.orderId === orderId)
+        .sort((a, b) => {
+          const timeA = new Date(a.timestamp).getTime();
+          const timeB = new Date(b.timestamp).getTime();
+          return timeB - timeA;
+        });
+      if (matchingEvents.length > 0) {
+        store.trackingEvents[orderId] = matchingEvents;
+        localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
+        return matchingEvents;
+      }
+    } catch (error) {
+      console.warn('Could not refresh tracking events from backend; using cached timeline.', error);
+    }
     return store.trackingEvents[orderId] || [];
   },
 

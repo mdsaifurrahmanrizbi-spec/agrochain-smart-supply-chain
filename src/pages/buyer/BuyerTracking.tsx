@@ -30,7 +30,18 @@ export const BuyerTracking: React.FC = () => {
     myOrders[0] ||
     store.orders[0];
 
-  const events = store.trackingEvents[order?.id] || [];
+  const [events, setEvents] = React.useState(store.trackingEvents[order?.id] || []);
+
+  React.useEffect(() => {
+    let active = true;
+    if (!order?.id) return () => { active = false; };
+    store.getTrackingEvents(order.id).then((latestEvents) => {
+      if (active) setEvents(latestEvents);
+    }).catch((error) => {
+      console.warn('Could not load the latest order tracking timeline.', error);
+    });
+    return () => { active = false; };
+  }, [order?.id]);
 
   // Check if current user is the owner of this order (or demo viewing customer panel)
   const isCorrectCustomer = user?.role === 'buyer' || user?.role === 'admin' || !user;
