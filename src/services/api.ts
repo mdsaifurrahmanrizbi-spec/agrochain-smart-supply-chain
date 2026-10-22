@@ -1766,8 +1766,15 @@ const events =
   ): Promise<{ shipment: GodownShipment; assignedPartner?: DeliveryPartner; assignmentSuccess: boolean }> {
     const shipment = store.godownShipments.find((s) => s.id === shipmentId || s.orderId === shipmentId);
     if (!shipment) throw new Error('Shipment not found');
+    if (shipment.transferStatus !== 'ARRIVED_LOCAL_GODOWN') {
+      throw new Error('The godown manager can accept a shipment only after its arrival has been recorded.');
+    }
 
     const order = store.orders.find((o) => o.id === shipment.orderId);
+    const godown = store.godowns.find((g) => g.id === shipment.destinationGodownId || g.code === shipment.destinationGodownId);
+    if (!godown || godown.status !== 'ACTIVE') {
+      throw new Error('Cannot accept shipment because the destination godown is missing or inactive.');
+    }
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
     // Update shipment acceptance
@@ -1776,13 +1783,10 @@ const events =
     shipment.acceptedByManagerId = managerId;
     shipment.acceptedByManagerName = managerName;
 
-    // Update godown inventory
-    const godown = store.godowns.find((g) => g.id === shipment.destinationGodownId);
-    if (godown) {
-      godown.itemCount = (godown.itemCount || 0) + 1;
-      godown.currentStockMetricTons = Number(((godown.currentStockMetricTons || 0) + (shipment.weightKg / 1000)).toFixed(2));
-      localStorage.setItem('agro_local_godowns', JSON.stringify(store.godowns));
-    }
+    // Update godown inventory after the one-time arrival acceptance check above.
+    godown.itemCount = (godown.itemCount || 0) + 1;
+    godown.currentStockMetricTons = Number(((godown.currentStockMetricTons || 0) + (shipment.weightKg / 1000)).toFixed(2));
+    localStorage.setItem('agro_local_godowns', JSON.stringify(store.godowns));
 
     if (order) {
       order.orderStatus = 'GODOWN_RECEIVED';
