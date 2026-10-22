@@ -143,6 +143,13 @@ export const AdminOrders: React.FC = () => {
                       <StatusBadge status={ord.orderStatus} size="sm" />
                     </td>
                     <td className="py-3 px-4 text-right">
+                      {(() => {
+                        const payout = settlements.find((item) => item.orderId === ord.id || item.orderNumber === ord.orderNumber);
+                        return <div className="mb-2">
+                          <StatusBadge status={payout?.settlementStatus || 'PENDING'} size="sm" />
+                          {payout?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Transfer ref: {payout.payoutReference}</span>}
+                        </div>;
+                      })()}
                       {ord.isDeliveryVerified && ord.orderStatus === 'DELIVERED' ? (
                         <Link to="/admin/seller-payments" className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
                           <ShieldCheck className="w-3 h-3" /> Manage farmer payout
