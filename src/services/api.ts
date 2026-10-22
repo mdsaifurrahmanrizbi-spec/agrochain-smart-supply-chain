@@ -38,6 +38,11 @@ import { selectDestinationLocalGodown, autoAssignDeliveryPartner } from '../util
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
+export type AdminAccount = Pick<User, 'id' | 'name' | 'email' | 'role' | 'status'> & {
+  createdAt?: string;
+  created_at?: string;
+};
+
 type BackendRecord<T> = {
   id: string;
   data: T;
@@ -252,6 +257,36 @@ export const agroApi = {
     if (!res.ok) throw new Error(data.message || `Admin setup failed (${res.status})`);
     if (typeof data.message !== 'string') throw new Error('The server returned an invalid setup response');
     return data as { message: string };
+  },
+
+  async getAdminUsers(): Promise<AdminAccount[]> {
+    const res = await fetch(`${API_BASE_URL}/admin/users/`, { headers: authHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Could not load accounts (${res.status})`);
+    if (!Array.isArray(data)) throw new Error('The server returned an invalid account list');
+    return data as AdminAccount[];
+  },
+
+  async createStaffAccount(input: { name: string; email: string; password: string; role: 'warehouse' | 'inspector' }): Promise<AdminAccount> {
+    const res = await fetch(`${API_BASE_URL}/admin/users/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(input),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Could not create staff account (${res.status})`);
+    return data as AdminAccount;
+  },
+
+  async updateAccountStatus(id: string, status: 'ACTIVE' | 'PENDING' | 'SUSPENDED'): Promise<AdminAccount> {
+    const res = await fetch(`${API_BASE_URL}/admin/users/${encodeURIComponent(id)}/status/`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ status }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Could not update account (${res.status})`);
+    return data as AdminAccount;
   },
 
   // Authenticate only against the backend; never silently fall back to a mock user.
