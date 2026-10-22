@@ -289,6 +289,30 @@ export const agroApi = {
     return data as AdminAccount;
   },
 
+  async requestPasswordReset(email: string, role: User['role']): Promise<{ message: string }> {
+    const res = await fetch(`${API_BASE_URL}/password-reset/request/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, role }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Password reset request failed (${res.status})`);
+    if (typeof data.message !== 'string') throw new Error('The server returned an invalid password reset response');
+    return data as { message: string };
+  },
+
+  async confirmPasswordReset(token: string, password: string): Promise<{ message: string }> {
+    const res = await fetch(`${API_BASE_URL}/password-reset/confirm/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Password reset failed (${res.status})`);
+    if (typeof data.message !== 'string') throw new Error('The server returned an invalid password reset response');
+    return data as { message: string };
+  },
+
   // Authenticate only against the backend; never silently fall back to a mock user.
   async login(email: string, password: string, role: User['role']): Promise<{ token: string; user: User }> {
     const res = await fetch(`${API_BASE_URL}/login/`, {
