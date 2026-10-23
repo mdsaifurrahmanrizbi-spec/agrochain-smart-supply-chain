@@ -1,13 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
 import { QualityCheck } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
 
 type InspectorAccount = { id: string; name: string; email?: string; role: string; status?: string };
 
 export const AdminQualityChecks: React.FC = () => {
-  const { user } = useAuth();
   const [checks, setChecks] = useState(store.qualityChecks);
   const [orders, setOrders] = useState(store.orders);
   const [inspectors, setInspectors] = useState<InspectorAccount[]>([]);
