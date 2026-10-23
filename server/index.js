@@ -977,6 +977,56 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     const existing = existingResult.rows[0]?.data;
 
+    // QC decisions are server-authorized: inspectors may act only on records
+    // explicitly assigned to their authenticated account. Admins may manage all QC.
+    if (resource === 'qualityChecks' && role === 'inspector') {
+      if (!existing || existing.inspectorId !== req.auth.sub) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'This QC inspection is not assigned to your inspector account' });
+      }
+      if (data.inspectorId !== existing.inspectorId) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Inspectors cannot reassign QC records' });
+      }
+      if (data.status !== undefined && data.status !== existing.status) {
+        const moisture = Number(data.moistureContentPercent);
+        const pesticide = Number(data.pesticideResiduePpm);
+        const foreignMatter = Number(data.foreignMatterPercent);
+        if (!Number.isFinite(moisture) || moisture < 0 || moisture > 100 ||
+            !Number.isFinite(pesticide) || pesticide < 0 ||
+            !Number.isFinite(foreignMatter) || foreignMatter < 0 || foreignMatter > 100 ||
+            typeof data.remarks !== 'string' || !data.remarks.trim() ||
+            !['Grade A - Premium', 'Grade B - Standard', 'Grade C - Commercial'].includes(data.grade)) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'A QC decision requires valid measured values, grade, and inspection remarks' });
+        }
+      }
+    }
+
+    // A pickup job must never be created/updated unless its linked QC is approved.
+    if (resource === 'jobs' && data.type === 'PICKUP' && !['admin'].includes(role)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'Only an administrator may manage pickup jobs' });
+    }
+    if (resource === 'jobs' && data.type === 'PICKUP' && data.status !== 'CANCELLED') {
+      const qcResult = await client.query(
+        "SELECT data FROM agrochain_records WHERE resource = 'qualityChecks' AND (data->>'orderId' = $1 OR id = $2) LIMIT 1",
+        [data.orderId, data.orderId]
+      );
+      const qc = qcResult.rows[0]?.data;
+      const orderResult = await client.query(
+        "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 LIMIT 1",
+        [data.orderId]
+      );
+      const order = orderResult.rows[0]?.data;
+      if (!qc || qc.status !== 'APPROVED' || !order ||
+          !['APPROVED', 'QC_APPROVED'].includes(String(order.qualityStatus || order.orderStatus || '').toUpperCase()) ||
+          String(order.qualityStatus || '').toUpperCase() !== 'APPROVED') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'Pickup is blocked until the linked order has an approved QC inspection' });
+      }
+    }
+
     // Buyers may create only their own orders. Existing order state changes must
     // use dedicated server-authoritative workflows (cancellation/payment/delivery).
     if (resource === 'orders' && role === 'buyer') {
