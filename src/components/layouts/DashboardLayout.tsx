@@ -2,6 +2,7 @@
 import { Link, NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../common/Logo';
+import { LanguageSwitcher } from '../common/LanguageSwitcher';
 import { DemoRoleSwitcher } from '../common/DemoRoleSwitcher';
 import {
   LayoutDashboard,
