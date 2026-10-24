@@ -679,7 +679,7 @@ const resourceWriteRoles = {
   deliveryPartners: ['admin', 'warehouse'],
   orders: ['admin', 'buyer', 'farmer', 'delivery', 'warehouse', 'inspector'],
   jobs: ['admin', 'buyer', 'delivery', 'warehouse'],
-  qualityChecks: ['admin', 'inspector', 'warehouse'],
+  qualityChecks: ['admin', 'inspector', 'warehouse', 'delivery'],
   codRecords: ['admin', 'warehouse', 'delivery'],
   settlements: ['admin', 'warehouse'],
   trackingEvents: ['admin', 'buyer', 'delivery', 'warehouse', 'inspector'],
@@ -977,6 +977,77 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     const existing = existingResult.rows[0]?.data;
 
+    // Delivery accounts may perform QC only when their partner profile is assigned
+    // to this order's active pickup job. Never trust a client-supplied inspector ID.
+    let assignedPickupQcPartner = null;
+    let authorizedPickupQcOrder = false;
+    if (resource === 'orders' && role === 'delivery' && existing && data.qualityStatus !== existing.qualityStatus) {
+      const accountResult = await client.query('SELECT email FROM auth_users WHERE id = $1 LIMIT 1', [req.auth.sub]);
+      const accountEmail = accountResult.rows[0]?.email || req.auth.email || '';
+      const partnerResult = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'deliveryPartners' AND (id = $1 OR lower(data->>'email') = lower($2)) LIMIT 1",
+        [req.auth.sub, accountEmail]
+      );
+      const partnerId = partnerResult.rows[0]?.id;
+      if (partnerId) {
+        const pickupResult = await client.query(
+          "SELECT id FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'PICKUP' AND data->>'partnerId' = $2 LIMIT 1",
+          [id, partnerId]
+        );
+        const qcResult = await client.query(
+          "SELECT data FROM agrochain_records WHERE resource = 'qualityChecks' AND data->>'orderId' = $1 AND data->>'inspectorId' = $2 LIMIT 1",
+          [id, partnerId]
+        );
+        const qc = qcResult.rows[0]?.data;
+        authorizedPickupQcOrder = Boolean(pickupResult.rows[0] && qc && qc.status === data.qualityStatus &&
+          ['APPROVED', 'REJECTED', 'RECHECK_REQUIRED'].includes(String(qc.status)));
+      }
+      if (!authorizedPickupQcOrder) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Only the assigned pickup person may update order QC status after recording the inspection' });
+      }
+    }
+    if (resource === 'qualityChecks' && role === 'delivery' && existing?.orderId) {
+      const accountResult = await client.query('SELECT email FROM auth_users WHERE id = $1 LIMIT 1', [req.auth.sub]);
+      const accountEmail = accountResult.rows[0]?.email || req.auth.email || '';
+      const partnerResult = await client.query(
+        "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (id = $1 OR lower(data->>'email') = lower($2)) LIMIT 1",
+        [req.auth.sub, accountEmail]
+      );
+      const partner = partnerResult.rows[0];
+      if (partner) {
+        const pickupResult = await client.query(
+          "SELECT data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'PICKUP' AND data->>'partnerId' = $2 LIMIT 1",
+          [existing.orderId, partner.id]
+        );
+        const pickupJob = pickupResult.rows[0]?.data;
+        if (pickupJob && !['CANCELLED', 'COMPLETED', 'PICKED_UP'].includes(String(pickupJob.status || '').toUpperCase())) {
+          assignedPickupQcPartner = { id: partner.id, name: partner.data?.name || partner.data?.partnerName || 'Assigned pickup person' };
+        }
+      }
+      if (!assignedPickupQcPartner) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Only the pickup person assigned to this order may perform farm-gate QC' });
+      }
+      if (data.inspectorId !== assignedPickupQcPartner.id) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'QC inspector identity must match the assigned pickup person' });
+      }
+      if (data.status !== undefined && data.status !== existing.status) {
+        const moisture = Number(data.moistureContentPercent);
+        const pesticide = Number(data.pesticideResiduePpm);
+        const foreignMatter = Number(data.foreignMatterPercent);
+        if (!Number.isFinite(moisture) || moisture < 0 || moisture > 100 ||
+            !Number.isFinite(pesticide) || pesticide < 0 ||
+            !Number.isFinite(foreignMatter) || foreignMatter < 0 || foreignMatter > 100 ||
+            typeof data.remarks !== 'string' || !data.remarks.trim() ||
+            !['Grade A - Premium', 'Grade B - Standard', 'Grade C - Commercial'].includes(data.grade)) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'A QC decision requires valid measured values, grade, and inspection remarks' });
+        }
+      }
+    }
+
     // QC decisions are server-authorized: inspectors may act only on records
     // explicitly assigned to their authenticated account. Admins may manage all QC.
     if (resource === 'qualityChecks' && role === 'inspector') {
@@ -1003,12 +1074,43 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       }
     }
 
-    // A pickup job must never be created/updated unless its linked QC is approved.
-    if (resource === 'jobs' && data.type === 'PICKUP' && !['admin'].includes(role)) {
-      await client.query('ROLLBACK');
-      return res.status(403).json({ message: 'Only an administrator may manage pickup jobs' });
+    // Pickup jobs can be created as an assignment before QC, but only the
+    // assigned pickup partner may accept/advance that job. Physical collection
+    // remains server-blocked until the linked QC and order are both approved.
+    if (resource === 'jobs' && data.type === 'PICKUP' && role !== 'admin') {
+      if (!existing && role === 'buyer' && data.status === 'ASSIGNED') {
+        const partnerResult = await client.query(
+          "SELECT data FROM agrochain_records WHERE resource = 'deliveryPartners' AND id = $1 LIMIT 1",
+          [data.partnerId]
+        );
+        const partner = partnerResult.rows[0]?.data;
+        const orderResult = await client.query(
+          "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 LIMIT 1",
+          [data.orderId]
+        );
+        if (!partner || partner.approvalStatus !== 'APPROVED' || partner.canPickup !== true || !orderResult.rows[0]) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'A pickup job requires an approved pickup-capable partner and a valid order' });
+        }
+      } else if (role === 'delivery' && existing) {
+        const accountResult = await client.query('SELECT email FROM auth_users WHERE id = $1 LIMIT 1', [req.auth.sub]);
+        const accountEmail = accountResult.rows[0]?.email || req.auth.email || '';
+        const partnerResult = await client.query(
+          "SELECT id FROM agrochain_records WHERE resource = 'deliveryPartners' AND (id = $1 OR lower(data->>'email') = lower($2)) LIMIT 1",
+          [req.auth.sub, accountEmail]
+        );
+        const partnerId = partnerResult.rows[0]?.id;
+        if (!partnerId || existing.partnerId !== partnerId || data.partnerId !== partnerId ||
+            !['ASSIGNED', 'ACCEPTED', 'DECLINED', 'REJECTED', 'QC_PENDING', 'EN_ROUTE', 'PICKED_UP', 'WAREHOUSE_HANDOVER', 'ARRIVED_AT_GODOWN', 'FAILED'].includes(String(data.status || ''))) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'You may only update your own assigned pickup job' });
+        }
+      } else {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Only the assigned pickup partner or an administrator may manage this pickup job' });
+      }
     }
-    if (resource === 'jobs' && data.type === 'PICKUP' && data.status !== 'CANCELLED') {
+    if (resource === 'jobs' && data.type === 'PICKUP' && ['PICKED_UP', 'WAREHOUSE_HANDOVER', 'ARRIVED_AT_GODOWN'].includes(String(data.status || '').toUpperCase())) {
       const qcResult = await client.query(
         "SELECT data FROM agrochain_records WHERE resource = 'qualityChecks' AND (data->>'orderId' = $1 OR id = $2) LIMIT 1",
         [data.orderId, data.orderId]
@@ -1019,9 +1121,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         [data.orderId]
       );
       const order = orderResult.rows[0]?.data;
-      if (!qc || qc.status !== 'APPROVED' || !order ||
-          !['APPROVED', 'QC_APPROVED'].includes(String(order.qualityStatus || order.orderStatus || '').toUpperCase()) ||
-          String(order.qualityStatus || '').toUpperCase() !== 'APPROVED') {
+      if (!qc || qc.status !== 'APPROVED' || !order || String(order.qualityStatus || '').toUpperCase() !== 'APPROVED') {
         await client.query('ROLLBACK');
         return res.status(409).json({ message: 'Pickup is blocked until the linked order has an approved QC inspection' });
       }
@@ -1211,12 +1311,37 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
       const claimsInspectorIdentity =
         typeof data.actorRole === 'string' &&
-        /quality\s*inspector|inspector|agronomist/i.test(data.actorRole);
+        /quality\s*inspector|inspector|agronomist/i.test(data.actorRole) &&
+        !/pickup person \/ qc inspector/i.test(data.actorRole);
 
-      if (claimsQcDecision || claimsInspectorIdentity) {
+      let authorizedPickupQcEvent = false;
+      if (role === 'delivery' && claimsQcDecision &&
+          typeof data.actorRole === 'string' &&
+          /pickup person \/ qc inspector/i.test(data.actorRole) &&
+          typeof data.orderId === 'string') {
+        const accountResult = await client.query('SELECT email FROM auth_users WHERE id = $1 LIMIT 1', [req.auth.sub]);
+        const accountEmail = accountResult.rows[0]?.email || req.auth.email || '';
+        const partnerResult = await client.query(
+          "SELECT id FROM agrochain_records WHERE resource = 'deliveryPartners' AND (id = $1 OR lower(data->>'email') = lower($2)) LIMIT 1",
+          [req.auth.sub, accountEmail]
+        );
+        const partnerId = partnerResult.rows[0]?.id;
+        if (partnerId) {
+          const pickupResult = await client.query(
+            "SELECT id FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'PICKUP' AND data->>'partnerId' = $2 LIMIT 1",
+            [data.orderId, partnerId]
+          );
+          const qcResult = await client.query(
+            "SELECT data FROM agrochain_records WHERE resource = 'qualityChecks' AND data->>'orderId' = $1 AND data->>'inspectorId' = $2 LIMIT 1",
+            [data.orderId, partnerId]
+          );
+          authorizedPickupQcEvent = Boolean(pickupResult.rows[0] && qcResult.rows[0]);
+        }
+      }
+      if ((claimsQcDecision && !authorizedPickupQcEvent) || claimsInspectorIdentity) {
         await client.query('ROLLBACK');
         return res.status(403).json({
-          message: 'Only an admin or quality inspector may create QC-related tracking events',
+          message: 'Only an admin, quality inspector, or assigned pickup person may create QC-related tracking events',
         });
       }
     }
@@ -1229,11 +1354,12 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       'RECHECK_REQUIRED',
     ];
     const privilegedQcRoles = ['admin', 'inspector'];
+    const mayDecideQc = privilegedQcRoles.includes(role) || Boolean(assignedPickupQcPartner) || authorizedPickupQcOrder;
     const finalQcStatuses = ['APPROVED', 'REJECTED'];
 
     if (
       resource === 'qualityChecks' &&
-      privilegedQcRoles.includes(role) &&
+      mayDecideQc &&
       existing &&
       existing.status !== data.status &&
       finalQcStatuses.includes(existing.status)
@@ -1246,7 +1372,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     if (
       resource === 'orders' &&
-      privilegedQcRoles.includes(role) &&
+      mayDecideQc &&
       existing &&
       existing.qualityStatus !== data.qualityStatus &&
       finalQcStatuses.includes(existing.qualityStatus)
@@ -1281,7 +1407,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     if (
       resource === 'qualityChecks' &&
-      !privilegedQcRoles.includes(role) &&
+      !mayDecideQc &&
       (
         (existing && existing.status !== data.status) ||
         (!existing && data.status !== undefined && data.status !== 'PENDING')
@@ -1295,7 +1421,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     if (
       resource === 'orders' &&
-      !privilegedQcRoles.includes(role) &&
+      !mayDecideQc &&
       (
         (existing && existing.qualityStatus !== data.qualityStatus) ||
         (!existing && data.qualityStatus !== undefined && data.qualityStatus !== 'PENDING')
