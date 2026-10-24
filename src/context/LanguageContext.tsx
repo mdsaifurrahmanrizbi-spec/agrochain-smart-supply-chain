@@ -17,7 +17,6 @@ const translations: Record<string, string> = {
   'Name':'নাম','Location':'অবস্থান','Address':'ঠিকানা','District':'জেলা','Phone':'ফোন','Update Profile':'প্রোফাইল আপডেট করুন',
   'System Architecture & Backend Settings':'সিস্টেম আর্কিটেকচার ও ব্যাকএন্ড সেটিংস','Farmer Profile & Payout Settings':'কৃষক প্রোফাইল ও পেমেন্ট সেটিংস',
   'Manage your verified farmer identity and settlement mobile banking accounts.':'আপনার যাচাইকৃত কৃষক পরিচয় ও পেমেন্টের মোবাইল ব্যাংকিং অ্যাকাউন্ট পরিচালনা করুন।',
-  'Agricultural Marketplace':'কৃষিপণ্য বাজার','Supply Chain':'সরবরাহ শৃঙ্খল','View Cart':'কার্ট দেখুন',
   'Voice to Text':'ভয়েস থেকে লেখা','Start Listening':'শোনা শুরু করুন','Stop Listening':'শোনা বন্ধ করুন','Listening...':'শোনা হচ্ছে...'
 };
 
