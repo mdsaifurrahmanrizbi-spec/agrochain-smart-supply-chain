@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from './Logo';
+import { LanguageSwitcher } from './LanguageSwitcher';
+import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { ShoppingCart, User, ArrowRight, Menu, X } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const { user, role, isAuthenticated } = useAuth();
+  const { t } = useLanguage();
   const { totalItemsCount } = useCart();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -41,21 +44,22 @@ export const Header: React.FC = () => {
           {/* Zone 2: 4-5 clean single-line nav links */}
           <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600">
             <Link to="/products" className="hover:text-emerald-700 transition-colors whitespace-nowrap shrink-0">
-              Agricultural Marketplace
+              {t('Agricultural Marketplace')}
             </Link>
             <Link to="/how-it-works" className="hover:text-emerald-700 transition-colors whitespace-nowrap shrink-0">
-              Supply Chain Process
+              {t('Supply Chain Process')}
             </Link>
             <Link to="/about" className="hover:text-emerald-700 transition-colors whitespace-nowrap shrink-0">
-              About Platform
+              {t('About Platform')}
             </Link>
             <Link to="/contact" className="hover:text-emerald-700 transition-colors whitespace-nowrap shrink-0">
-              Regional Hubs
+              {t('Regional Hubs')}
             </Link>
           </nav>
 
           {/* Zone 3: Cart + Primary Action */}
           <div className="flex items-center gap-3 shrink-0">
+            <LanguageSwitcher compact />
             {/* Cart Icon */}
             <Link
               to="/buyer/cart"
