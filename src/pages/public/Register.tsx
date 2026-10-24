@@ -132,9 +132,9 @@ export const Register: React.FC = () => {
             <Truck className="w-4 h-4" />
             <span>Delivery Partner</span>
           </button>
-        </div>
 
           <button type="button" onClick={() => setSelectedRole('warehouse')} className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${selectedRole === 'warehouse' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}><Truck className="w-4 h-4" /><span>Warehouse</span></button>
+        </div>
         {/* Form Card */}
         <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-xs">
           {submittedMessage ? (
@@ -227,6 +227,18 @@ export const Register: React.FC = () => {
                   <div className="flex items-center gap-2 text-emerald-900 font-bold">
                     <Truck className="w-4 h-4 text-emerald-700" />
                     <span>Delivery & Logistics Fleet Credentials</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-semibold mb-1">Full Residential / Business Address</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="House, road, area, city or district"
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
