@@ -683,7 +683,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       || '';
     const existingPickupJob = store.jobs.find((job) => job.orderId === newOrder.id && job.type === 'PICKUP');
     if (!existingPickupJob) {
-      const normalizeArea = (value: string) => value.toLowerCase().replace(/[^a-z0-9\\s-]/g, ' ').replace(/\\s+/g, ' ').trim();
+      const normalizeArea = (value: string) => value.toLowerCase().replace(/[,/]/g, ' ').replace(/\s+/g, ' ').trim();
       const originArea = normalizeArea(farmLocation);
       const pickupPartner = store.deliveryPartners.find((candidate) => {
         if (candidate.approvalStatus !== 'APPROVED' || !candidate.canPickup) return false;
