@@ -317,13 +317,13 @@ export const agroApi = {
       isMainWarehouse: application.isMainWarehouse === true,
     };
     await saveBackendRecord('warehouses', warehouse);
-    const updatedApplication: Record<string, any> = {
+    const updatedApplication = {
       ...application,
       id: String(application.id),
       applicationStatus: 'APPROVED',
       approvedAt: new Date().toISOString(),
     };
-    await saveBackendRecord<Record<string, any>>('warehouseApplications', updatedApplication);
+    await saveBackendRecord('warehouseApplications', updatedApplication);
     await this.updateAccountStatus(application.managerId, 'ACTIVE');
   },
 
