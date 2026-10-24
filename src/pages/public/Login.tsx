@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
 import { UserRole } from '../../types';
-import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2, Sprout, Leaf } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const { login, switchDemoRole } = useAuth();
@@ -188,6 +188,52 @@ export const Login: React.FC = () => {
           )}
         </div>
       </div>
+      {loading && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-emerald-950/80 p-4 backdrop-blur-md"
+          role="status"
+          aria-live="polite"
+          aria-label="Authenticating your AgroChain account"
+        >
+          <div className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-white/15 bg-white p-8 text-center shadow-2xl">
+            <div className="absolute inset-x-0 top-0 h-1.5 overflow-hidden bg-emerald-100">
+              <div className="h-full w-2/5 rounded-full bg-emerald-500 animate-[loading-bar_1.4s_ease-in-out_infinite]" />
+            </div>
+            <div className="relative mx-auto mb-6 flex h-28 w-28 items-center justify-center">
+              <div className="absolute inset-1 rounded-full border-2 border-dashed border-emerald-200 animate-[spin_12s_linear_infinite]" />
+              <div className="absolute inset-3 rounded-full border-4 border-emerald-100 border-t-emerald-600 animate-spin" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-900/20 animate-pulse">
+                <Sprout className="h-9 w-9" />
+              </div>
+              <Leaf className="absolute right-0 top-3 h-6 w-6 text-lime-500 animate-bounce" />
+              <Leaf className="absolute bottom-2 left-0 h-5 w-5 rotate-[-35deg] text-emerald-500 animate-pulse" />
+            </div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-emerald-700">
+              AgroChain Secure Access
+            </p>
+            <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
+              Welcome to AgroChain
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Securely connecting you to your agricultural network.
+            </p>
+            <div className="mt-6 flex items-center justify-center gap-2 text-sm font-semibold text-emerald-800">
+              <ShieldCheck className="h-4 w-4" />
+              <span>Verifying your credentials</span>
+              <span className="flex gap-1" aria-hidden="true">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-bounce [animation-delay:0ms]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-bounce [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-bounce [animation-delay:300ms]" />
+              </span>
+            </div>
+            <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-slate-400">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+              <span>Your password is never shown or shared on this screen.</span>
+            </div>
+          </div>
+          <style>{`@keyframes loading-bar { 0% { transform: translateX(-120%); } 100% { transform: translateX(260%); } } @media (prefers-reduced-motion: reduce) { .animate-spin, .animate-pulse, .animate-bounce { animation: none !important; } }`}</style>
+        </div>
+      )}
     </div>
   );
 };
