@@ -244,11 +244,13 @@ export function autoAssignDeliveryPartner(
         : '';
 
     const servesCustomer = targets.some((target) => {
-      const matchesAssignedArea = assignedAreas.some(
-        (area) =>
-          typeof area === 'string' &&
-          areaMatches(target, area)
-      );
+      const matchesAssignedArea = assignedAreas.some((area) => {
+        if (typeof area !== 'string') return false;
+        // Registration stores areas as "Area, District". Match the specific
+        // area label first so "Tejgaon, Dhaka" can match an order for "Tejgaon".
+        const areaLabel = area.split(',')[0]?.trim() || '';
+        return areaMatches(target, areaLabel) || areaMatches(areaLabel, target);
+      });
 
       const matchesPreferredArea =
         preferredArea.length > 0 &&
