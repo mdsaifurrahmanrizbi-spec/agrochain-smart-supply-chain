@@ -2,6 +2,7 @@
 import { Link, NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../common/Logo';
+import { LanguageSwitcher } from '../common/LanguageSwitcher';
 import { DemoRoleSwitcher } from '../common/DemoRoleSwitcher';
 import {
   LayoutDashboard,
@@ -175,9 +176,12 @@ export const DashboardLayout: React.FC = () => {
       >
         {/* Brand Lockup */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-emerald-900/60 bg-[#043d2e]">
-          <Link to="/" className="flex items-center">
-            <Logo variant="light" size="sm" />
-          </Link>
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <Link to="/" className="flex items-center">
+              <Logo variant="light" size="sm" />
+            </Link>
+            <div className="ml-auto"><LanguageSwitcher compact /></div>
+          </div>
           <button
             onClick={() => setMobileSidebarOpen(false)}
             className="md:hidden p-1 text-slate-400 hover:text-white"

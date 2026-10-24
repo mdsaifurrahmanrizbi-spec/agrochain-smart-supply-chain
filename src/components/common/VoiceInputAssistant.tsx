@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Languages, Mic, MicOff } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 type SpeechAlternative = { transcript: string };
 type SpeechResult = { isFinal: boolean; length: number; [index: number]: SpeechAlternative };
@@ -46,15 +47,18 @@ const fieldKey = (element: HTMLInputElement | HTMLTextAreaElement) => {
 };
 
 export const VoiceInputAssistant: React.FC = () => {
+  const { language: appLanguage, voiceLocale } = useLanguage();
   const [fields, setFields] = useState<VoiceField[]>([]);
   const [activeField, setActiveField] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
-  const [language, setLanguage] = useState<VoiceLanguage>('bn-BD');
+  const [language, setLanguage] = useState<VoiceLanguage>('en-US');
   const [isListening, setIsListening] = useState(false);
   const [notice, setNotice] = useState('');
   const [interimText, setInterimText] = useState('');
   const [panelField, setPanelField] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const activeFieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+
+  useEffect(() => { setLanguage(voiceLocale); }, [voiceLocale]);
 
   const refreshFields = useCallback(() => {
     const next: VoiceField[] = Array.from(document.querySelectorAll('input, textarea'))
@@ -211,24 +215,24 @@ export const VoiceInputAssistant: React.FC = () => {
             {isPanelOpen && createPortal(
               <section data-voice-assistant-ignore style={{ position: 'fixed', top: Math.max(8, rect.top - 8), right, transform: 'translateY(-100%)', zIndex: 90, width: 'min(300px, calc(100vw - 24px))' }} className="rounded-xl border border-emerald-100 bg-white p-3 shadow-xl">
                 <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                  <Languages className="h-4 w-4 text-emerald-700" /> Voice input
+                  <Languages className="h-4 w-4 text-emerald-700" /> {appLanguage === 'bn' ? 'ভয়েস ইনপুট' : 'Voice input'}
                   <select aria-label="Voice language" value={language} disabled={isListening} onChange={(event) => setLanguage(event.target.value as VoiceLanguage)} className="ml-auto rounded-md border border-slate-200 bg-white px-2 py-1 text-xs">
                     <option value="bn-BD">বাংলা</option>
                     <option value="en-US">English</option>
                   </select>
                 </div>
-                <p className="mb-2 text-xs text-slate-600">এই field-এ কথা বলুন। Text পরে edit করতে পারবেন।</p>
+                <p className="mb-2 text-xs text-slate-600">{appLanguage === 'bn' ? 'এই ঘরে কথা বলুন। পরে লেখাটি সম্পাদনা করতে পারবেন।' : 'Speak into this field. You can edit the text afterward.'}</p>
                 {interimText && <p className="mb-2 rounded bg-emerald-50 p-2 text-xs text-emerald-900">{interimText}</p>}
                 {notice && <p role="status" aria-live="polite" className="mb-2 text-xs text-slate-600">{notice}</p>}
                 <div className="flex gap-2">
                   {!isListening ? (
-                    <button type="button" onClick={() => startListening(element)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800"><Mic className="h-4 w-4" /> Start speaking</button>
+                    <button type="button" onClick={() => startListening(element)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800"><Mic className="h-4 w-4" /> {appLanguage === 'bn' ? 'কথা বলা শুরু করুন' : 'Start speaking'}</button>
                   ) : (
-                    <button type="button" onClick={stopListening} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"><MicOff className="h-4 w-4" /> Stop</button>
+                    <button type="button" onClick={stopListening} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"><MicOff className="h-4 w-4" /> {appLanguage === 'bn' ? 'থামুন' : 'Stop'}</button>
                   )}
-                  <button type="button" onClick={() => { stopListening(); setPanelField(null); }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600">Close</button>
+                  <button type="button" onClick={() => { stopListening(); setPanelField(null); }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600">{appLanguage === 'bn' ? 'বন্ধ করুন' : 'Close'}</button>
                 </div>
-                <p className="mt-2 text-[10px] leading-4 text-slate-400">Browser support and microphone permission required.</p>
+                <p className="mt-2 text-[10px] leading-4 text-slate-400">{appLanguage === 'bn' ? 'ব্রাউজার সমর্থন ও মাইক্রোফোনের অনুমতি প্রয়োজন।' : 'Browser support and microphone permission required.'}</p>
               </section>,
               document.body
             )}
