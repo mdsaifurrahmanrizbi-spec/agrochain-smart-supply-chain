@@ -268,6 +268,8 @@ export interface DeliveryPartner {
   nid: string;
   address: string;
   preferredArea: string;
+  /** Districts selected by the partner during registration. */
+  serviceDistricts?: string[];
   assignedAreas: string[];
     warehouseId?: string;
   vehicleType: 'Motorcycle' | 'Pickup Van' | 'Cargo Auto' | 'Mini Truck';
