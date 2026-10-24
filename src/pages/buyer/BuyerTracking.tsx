@@ -123,7 +123,13 @@ export const BuyerTracking: React.FC = () => {
 
           <div className="text-xs text-slate-600 sm:text-right">
             <span className="text-[11px] text-slate-400 block">Delivery Destination</span>
-            <strong className="text-slate-900">{order.buyerAddress}, {order.buyerCity}</strong>
+            <strong className="text-slate-900">{(() => {
+              const address = (order.buyerAddress || '').trim().replace(/,\s*$/, '');
+              const district = (order.buyerCity || '').trim();
+              if (!address) return district || 'Address not provided';
+              if (!district || address.toLowerCase().includes(district.toLowerCase())) return address;
+              return `${address}, ${district}`;
+            })()}</strong>
           </div>
         </div>
 
@@ -235,7 +241,7 @@ export const BuyerTracking: React.FC = () => {
             </span>
           </div>
           <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
-            <span className="text-emerald-700 block text-[11px] font-semibold">Grand Total Paid</span>
+            <span className="text-emerald-700 block text-[11px] font-semibold">{order.paymentStatus === 'PAID' || order.paymentStatus === 'COMPLETED' ? 'Grand Total Paid' : order.paymentMethod === 'COD' ? 'Amount Due on Delivery' : 'Grand Total'}</span>
             <span className="font-bold text-emerald-900 text-sm tabular-nums">৳{order.totalAmount.toLocaleString()}</span>
           </div>
         </div>
