@@ -11,8 +11,8 @@ export const Register: React.FC = () => {
   const navigate = useNavigate();
   // Public registration creates accounts through the backend, not demo roles.
 
-  const [selectedRole, setSelectedRole] = useState<'farmer' | 'buyer' | 'delivery'>(
-    (['farmer', 'buyer', 'delivery'].includes(initialRole) ? initialRole : 'farmer') as 'farmer' | 'buyer' | 'delivery'
+  const [selectedRole, setSelectedRole] = useState<'farmer' | 'buyer' | 'delivery' | 'warehouse'>(
+    (['farmer', 'buyer', 'delivery', 'warehouse'].includes(initialRole) ? initialRole : 'farmer') as 'farmer' | 'buyer' | 'delivery' | 'warehouse'
   );
 
   const [formData, setFormData] = useState({
@@ -27,6 +27,12 @@ export const Register: React.FC = () => {
     vehicleRegNumber: '',
     canPickup: true,
     canDeliver: true,
+    warehouseName: '',
+    warehouseType: 'REGIONAL_GODOWN' as 'CENTRAL' | 'REGIONAL_GODOWN',
+    warehouseAddress: '',
+    warehouseCity: 'Dhaka',
+    warehouseCapacity: '50',
+    temperatureControlled: false,
   });
 
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
@@ -51,6 +57,10 @@ export const Register: React.FC = () => {
         email: formData.email.trim(),
         password: formData.password,
         role: selectedRole,
+        phone: formData.phone.trim(),
+        location: formData.address.trim(),
+        ...(selectedRole === 'delivery' ? { deliveryProfile: { nid: formData.nid.trim(), address: formData.address.trim(), preferredArea: formData.preferredArea, assignedAreas: [formData.preferredArea], vehicleType: formData.vehicleType, vehicleRegNumber: formData.vehicleRegNumber.trim(), canPickup: formData.canPickup, canDeliver: formData.canDeliver } } : {}),
+        ...(selectedRole === 'warehouse' ? { warehouseProfile: { name: formData.warehouseName.trim(), type: formData.warehouseType, address: formData.warehouseAddress.trim(), city: formData.warehouseCity, capacityMetricTons: Number(formData.warehouseCapacity), temperatureControlled: formData.temperatureControlled } } : {}),
       });
 
       setSubmittedMessage(
@@ -83,7 +93,7 @@ export const Register: React.FC = () => {
         </div>
 
         {/* Role Selector Tabs */}
-        <div className="grid grid-cols-3 gap-2 bg-white p-1.5 rounded-xl border border-slate-200">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white p-1.5 rounded-xl border border-slate-200">
           <button
             type="button"
             onClick={() => setSelectedRole('farmer')}
@@ -122,8 +132,9 @@ export const Register: React.FC = () => {
             <Truck className="w-4 h-4" />
             <span>Delivery Partner</span>
           </button>
-        </div>
 
+          <button type="button" onClick={() => setSelectedRole('warehouse')} className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${selectedRole === 'warehouse' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}><Truck className="w-4 h-4" /><span>Warehouse</span></button>
+        </div>
         {/* Form Card */}
         <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-xs">
           {submittedMessage ? (
@@ -211,11 +222,23 @@ export const Register: React.FC = () => {
               </div>
 
               {/* Delivery Partner Specific Details */}
-              {false && selectedRole === 'delivery' && (
+              {selectedRole === 'delivery' && (
                 <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-3">
                   <div className="flex items-center gap-2 text-emerald-900 font-bold">
                     <Truck className="w-4 h-4 text-emerald-700" />
                     <span>Delivery & Logistics Fleet Credentials</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-semibold mb-1">Full Residential / Business Address</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="House, road, area, city or district"
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -299,12 +322,14 @@ export const Register: React.FC = () => {
                 </div>
               )}
 
+              {selectedRole === 'warehouse' && (<div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-3"><div className="font-bold text-emerald-900">Warehouse / Godown Application Details</div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="block text-slate-700 font-semibold mb-1">Warehouse / Godown Name</label><input required value={formData.warehouseName} onChange={e => setFormData({...formData, warehouseName:e.target.value})} placeholder="Warehouse name" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><div><label className="block text-slate-700 font-semibold mb-1">Facility Type</label><select value={formData.warehouseType} onChange={e => setFormData({...formData, warehouseType:e.target.value as 'CENTRAL' | 'REGIONAL_GODOWN'})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg"><option value="REGIONAL_GODOWN">Regional Godown</option><option value="CENTRAL">Central Warehouse</option></select></div><div><label className="block text-slate-700 font-semibold mb-1">Full Facility Address</label><input required value={formData.warehouseAddress} onChange={e => setFormData({...formData, warehouseAddress:e.target.value})} placeholder="Full address" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><div><label className="block text-slate-700 font-semibold mb-1">City / District</label><input required value={formData.warehouseCity} onChange={e => setFormData({...formData, warehouseCity:e.target.value})} placeholder="City or district" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><div><label className="block text-slate-700 font-semibold mb-1">Storage Capacity (metric tons)</label><input required type="number" min="1" max="100000" value={formData.warehouseCapacity} onChange={e => setFormData({...formData, warehouseCapacity:e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><label className="flex items-center gap-2 text-slate-700 font-medium"><input type="checkbox" checked={formData.temperatureControlled} onChange={e => setFormData({...formData, temperatureControlled:e.target.checked})} />Temperature-controlled / cold storage</label></div><p className="text-xs text-amber-800">Warehouse applications remain pending until reviewed by an administrator.</p></div>)}
+
               <button
                 type="submit"
                 disabled={isSubmitting}
                 className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2 shadow-xs"
               >
-                <span>{isSubmitting ? "Creating Account..." : selectedRole === 'delivery' ? "Submit for Approval" : "Complete Registration"}</span>
+                <span>{isSubmitting ? "Creating Account..." : (['delivery', 'warehouse'].includes(selectedRole) ? "Submit for Approval" : "Complete Registration")}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
