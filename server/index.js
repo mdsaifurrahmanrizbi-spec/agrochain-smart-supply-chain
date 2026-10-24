@@ -1372,7 +1372,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     if (
       resource === 'orders' &&
-      privilegedQcRoles.includes(role) &&
+      mayDecideQc &&
       existing &&
       existing.qualityStatus !== data.qualityStatus &&
       finalQcStatuses.includes(existing.qualityStatus)
@@ -1421,7 +1421,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     if (
       resource === 'orders' &&
-      !privilegedQcRoles.includes(role) &&
+      !mayDecideQc &&
       (
         (existing && existing.qualityStatus !== data.qualityStatus) ||
         (!existing && data.qualityStatus !== undefined && data.qualityStatus !== 'PENDING')
