@@ -143,6 +143,79 @@ export const BuyerTracking: React.FC = () => {
           ))}
         </div>
 
+        {/* Farmer and source transparency: trace every purchased item to its seller and farm. */}
+        <section className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 sm:p-5">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="rounded-lg bg-emerald-100 p-2 text-emerald-800">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-emerald-950">Farmer &amp; Source Transparency</h2>
+              <p className="mt-1 text-xs leading-relaxed text-emerald-900/80">
+                See which farmer supplied each product and the farm or batch source recorded in AgroChain.
+                Source details are shown from available product and batch records; unavailable details are marked as pending rather than guessed.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {order.items.map((item) => {
+              const sourceProduct = store.products.find((product) =>
+                product.id === item.productId ||
+                (product.name === item.productName && product.farmerId === item.farmerId)
+              );
+              const sourceBatch = sourceProduct
+                ? store.batches.find((batch) => batch.id === sourceProduct.batchId)
+                : store.batches.find((batch) =>
+                    batch.farmerId === item.farmerId &&
+                    batch.cropName.toLowerCase() === item.productName.toLowerCase()
+                  );
+              const sourceFarm = sourceBatch
+                ? store.farms.find((farm) => farm.id === sourceBatch.farmId)
+                : undefined;
+              const farmerName = item.farmerName || sourceProduct?.farmerName || sourceBatch?.farmerName;
+              const farmName = sourceProduct?.farmName || sourceBatch?.farmName || sourceFarm?.name;
+              const farmLocation = sourceProduct?.farmLocation ||
+                [sourceFarm?.upazila, sourceFarm?.district].filter(Boolean).join(', ');
+              return (
+                <div key={item.productId} className="rounded-lg border border-emerald-100 bg-white p-3 sm:p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Product source</div>
+                      <div className="mt-0.5 font-semibold text-slate-900">{item.productName}</div>
+                      <div className="mt-2 flex items-start gap-2 text-sm text-slate-700">
+                        <span className="mt-0.5 text-emerald-700"><CheckCircle2 className="h-4 w-4" /></span>
+                        <div>
+                          <div className="text-[11px] text-slate-500">Supplied by farmer</div>
+                          <div className="font-semibold">{farmerName || 'Farmer details pending verification'}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid flex-1 grid-cols-1 gap-2 sm:max-w-[55%] sm:grid-cols-2">
+                      <div className="rounded-md bg-slate-50 p-2.5">
+                        <div className="text-[11px] text-slate-500">Farm</div>
+                        <div className="mt-0.5 text-sm font-medium text-slate-800">{farmName || 'Farm name not recorded'}</div>
+                      </div>
+                      <div className="rounded-md bg-slate-50 p-2.5">
+                        <div className="text-[11px] text-slate-500">Farm location</div>
+                        <div className="mt-0.5 text-sm font-medium text-slate-800">{farmLocation || 'Farm location not recorded'}</div>
+                      </div>
+                      <div className="rounded-md bg-slate-50 p-2.5">
+                        <div className="text-[11px] text-slate-500">Batch reference</div>
+                        <div className="mt-0.5 break-all font-mono text-xs font-semibold text-slate-800">{sourceBatch?.batchCode || sourceProduct?.batchId || 'Batch reference pending'}</div>
+                      </div>
+                      <div className="rounded-md bg-slate-50 p-2.5">
+                        <div className="text-[11px] text-slate-500">Quantity in this order</div>
+                        <div className="mt-0.5 text-sm font-semibold text-slate-800">{item.quantity} {item.unit}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         {/* UPDATE 4: Financial Summary with Automated Delivery Charges */}
         <div className="pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
