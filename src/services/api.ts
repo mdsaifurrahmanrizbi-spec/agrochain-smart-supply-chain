@@ -294,6 +294,37 @@ export const agroApi = {
     return data as { message: string };
   },
 
+  async getWarehouseApplications(): Promise<Array<Record<string, any>>> {
+    return getBackendRecords<Record<string, any>>('warehouseApplications');
+  },
+
+  async approveWarehouseApplication(application: Record<string, any>): Promise<void> {
+    const warehouseId = `wh-${application.id}`;
+    const warehouse = {
+      id: warehouseId,
+      name: application.warehouseName,
+      code: `WH-${String(application.district || 'BD').slice(0, 3).toUpperCase()}-${String(application.id).slice(-5).toUpperCase()}`,
+      type: application.warehouseType === 'CENTRAL' ? 'CENTRAL' : 'REGIONAL_GODOWN',
+      location: `${application.address}, ${application.upazila}, ${application.district}`,
+      managerName: application.managerName,
+      managerId: application.managerId,
+      capacityMetricTons: Number(application.capacityMetricTons),
+      currentStockMetricTons: 0,
+      temperatureControlled: application.temperatureControlled === true,
+      district: application.district,
+      upazila: application.upazila,
+      status: 'ACTIVE',
+      isMainWarehouse: application.isMainWarehouse === true,
+    };
+    await saveBackendRecord('warehouses', warehouse);
+    await saveBackendRecord('warehouseApplications', {
+      ...application,
+      applicationStatus: 'APPROVED',
+      approvedAt: new Date().toISOString(),
+    });
+    await this.updateAccountStatus(application.managerId, 'ACTIVE');
+  },
+
   async getAdminUsers(): Promise<AdminAccount[]> {
     const res = await fetch(`${API_BASE_URL}/admin/users/`, { headers: authHeaders() });
     const data = await res.json().catch(() => ({}));
