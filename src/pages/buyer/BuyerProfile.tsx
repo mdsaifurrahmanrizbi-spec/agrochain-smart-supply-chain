@@ -48,18 +48,20 @@ export const BuyerProfile: React.FC = () => {
         const parsed = JSON.parse(raw) as DeliveryAddress[];
         setAddresses(parsed);
       } else {
-        setAddresses([
+        const initialAddress: DeliveryAddress[] = [
           {
             id: 'address-default',
             label: 'Home',
-            recipient: user?.name || 'Tasnim Rahman',
-            phone: user?.phone || '+880 1755-432109',
-            address: user?.location || 'Banani DOHS',
-            area: 'Banani',
+            recipient: user?.name || '',
+            phone: user?.phone || '',
+            address: user?.location && !['Bangladesh', 'Dhaka, Bangladesh'].includes(user.location) ? user.location : '',
+            area: '',
             district: 'Dhaka',
             isDefault: true,
           },
-        ]);
+        ];
+        setAddresses(initialAddress);
+        localStorage.setItem(storageKey, JSON.stringify(initialAddress));
       }
     } catch (error) {
       console.error('Could not load saved delivery addresses:', error);

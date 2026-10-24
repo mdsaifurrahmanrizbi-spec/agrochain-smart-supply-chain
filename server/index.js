@@ -937,7 +937,10 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     return res.status(400).json({ message: 'Invalid resource' });
   }
 
-  if (!canWriteResource(role, resource)) {
+  // Buyers may create a single pending QC queue record for an order they own.
+  // They cannot edit existing QC records or submit inspection results.
+  const buyerPendingQcCreate = role === 'buyer' && resource === 'qualityChecks';
+  if (!canWriteResource(role, resource) && !buyerPendingQcCreate) {
     return res.status(403).json({ message: 'You do not have permission to write this resource' });
   }
 
@@ -976,6 +979,26 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     );
 
     const existing = existingResult.rows[0]?.data;
+
+    if (buyerPendingQcCreate) {
+      if (existing) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Buyers may only create a new pending QC queue record' });
+      }
+      if (data.status !== 'PENDING' || data.inspectorId || data.inspectorName !== 'Unassigned Inspector') {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Buyer-created QC records must remain pending and unassigned' });
+      }
+      const orderResult = await client.query(
+        "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 LIMIT 1",
+        [String(data.orderId || '')]
+      );
+      const ownedOrder = orderResult.rows[0]?.data;
+      if (!ownedOrder || String(ownedOrder.buyerId || '') !== String(req.auth.sub)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'QC queue record must belong to an order created by this buyer' });
+      }
+    }
 
     // Delivery accounts may perform QC only when their partner profile is assigned
     // to this order's active pickup job. Never trust a client-supplied inspector ID.
