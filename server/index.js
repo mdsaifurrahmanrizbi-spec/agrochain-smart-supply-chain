@@ -108,6 +108,10 @@ app.post('/api/register/', async (req, res) => {
         !Number.isFinite(Number(profile.capacityMetricTons)) || Number(profile.capacityMetricTons) <= 0) {
       return res.status(400).json({ message: 'Warehouse name, full address, district, area and positive capacity are required' });
     }
+    if (profile.warehouseType === 'CENTRAL' &&
+        (profile.district !== 'Dhaka' || String(profile.upazila).trim().toLowerCase() !== 'tejgaon')) {
+      return res.status(400).json({ message: 'The main / central warehouse must be located in Dhaka, Tejgaon' });
+    }
   }
 
   const status = ['delivery', 'warehouse'].includes(requestedRole) ? 'PENDING' : 'ACTIVE';
