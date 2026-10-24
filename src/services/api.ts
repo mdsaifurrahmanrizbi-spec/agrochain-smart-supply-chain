@@ -215,8 +215,8 @@ export const agroApi = {
     role: 'farmer' | 'buyer' | 'delivery' | 'warehouse';
     phone?: string;
     location?: string;
-    deliveryProfile?: { nid: string; address: string; preferredArea: string; assignedAreas: string[]; vehicleType: 'Motorcycle' | 'Pickup Van' | 'Cargo Auto' | 'Mini Truck'; vehicleRegNumber: string; canPickup: boolean; canDeliver: boolean };
-    warehouseProfile?: { name: string; type: 'CENTRAL' | 'REGIONAL_GODOWN'; address: string; city: string; capacityMetricTons: number; temperatureControlled: boolean };
+    deliveryProfile?: { nid: string; district: string; upazila: string; permanentAddress?: string; address: string; preferredArea: string; serviceDistricts: string[]; assignedAreas: string[]; vehicleType: 'Motorcycle' | 'Pickup Van' | 'Cargo Auto' | 'Mini Truck'; vehicleRegNumber: string; canPickup: boolean; canDeliver: boolean };
+    warehouseProfile?: { managerNid: string; name: string; type: 'CENTRAL' | 'REGIONAL_GODOWN'; address: string; city: string; area: string; capacityMetricTons: number; temperatureControlled: boolean };
   }): Promise<{ message: string; user: User }> {
     const res = await fetch(`${API_BASE_URL}/register/`, {
       method: 'POST',
