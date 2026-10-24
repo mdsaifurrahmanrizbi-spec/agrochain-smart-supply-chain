@@ -21,6 +21,11 @@ export const Register: React.FC = () => {
     email: '',
     password: '',
     nid: '',
+    district: 'Dhaka',
+    upazila: '',
+    permanentAddress: '',
+    serviceDistricts: ['Dhaka'] as string[],
+    serviceAreas: 'Tejgaon, Shantinagar',
     address: '',
     preferredArea: 'Tejgaon & Gulshan, Dhaka',
     vehicleType: 'Pickup Van' as const,
@@ -31,6 +36,8 @@ export const Register: React.FC = () => {
     warehouseType: 'REGIONAL_GODOWN' as 'CENTRAL' | 'REGIONAL_GODOWN',
     warehouseAddress: '',
     warehouseCity: 'Dhaka',
+    warehouseArea: 'Tejgaon',
+    warehouseNid: '',
     warehouseCapacity: '50',
     temperatureControlled: false,
   });
@@ -58,9 +65,9 @@ export const Register: React.FC = () => {
         password: formData.password,
         role: selectedRole,
         phone: formData.phone.trim(),
-        location: formData.address.trim(),
-        ...(selectedRole === 'delivery' ? { deliveryProfile: { nid: formData.nid.trim(), address: formData.address.trim(), preferredArea: formData.preferredArea, assignedAreas: [formData.preferredArea], vehicleType: formData.vehicleType, vehicleRegNumber: formData.vehicleRegNumber.trim(), canPickup: formData.canPickup, canDeliver: formData.canDeliver } } : {}),
-        ...(selectedRole === 'warehouse' ? { warehouseProfile: { name: formData.warehouseName.trim(), type: formData.warehouseType, address: formData.warehouseAddress.trim(), city: formData.warehouseCity, capacityMetricTons: Number(formData.warehouseCapacity), temperatureControlled: formData.temperatureControlled } } : {}),
+        location: (selectedRole === 'warehouse' ? formData.warehouseAddress : formData.address).trim(),
+        ...(selectedRole === 'delivery' ? { deliveryProfile: { nid: formData.nid.trim(), district: formData.district, upazila: formData.upazila.trim(), permanentAddress: formData.permanentAddress.trim(), address: formData.address.trim(), preferredArea: formData.preferredArea, assignedAreas: formData.serviceAreas.split(',').map(area => area.trim()).filter(Boolean), serviceDistricts: formData.serviceDistricts, vehicleType: formData.vehicleType, vehicleRegNumber: formData.vehicleRegNumber.trim(), canPickup: formData.canPickup, canDeliver: formData.canDeliver } } : {}),
+        ...(selectedRole === 'warehouse' ? { warehouseProfile: { managerNid: formData.warehouseNid.trim(), name: formData.warehouseName.trim(), type: formData.warehouseType, address: formData.warehouseAddress.trim(), city: formData.warehouseCity, area: formData.warehouseArea.trim(), capacityMetricTons: Number(formData.warehouseCapacity), temperatureControlled: formData.temperatureControlled } } : {}),
       });
 
       setSubmittedMessage(
@@ -229,31 +236,50 @@ export const Register: React.FC = () => {
                     <span>Delivery & Logistics Fleet Credentials</span>
                   </div>
 
-                  <div>
-                    <label className="block text-slate-700 font-semibold mb-1">Full Residential / Business Address</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="House, road, area, city or district"
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
-                    />
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="font-bold text-slate-800">Identity & Address Verification</h4>
+                      <p className="text-slate-500 mt-1">Provide your identity details and current operating address for admin review.</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-700 font-semibold mb-1">National ID (NID) Number</label>
+                        <input type="text" inputMode="numeric" pattern="([0-9]{10}|[0-9]{13}|[0-9]{17})" title="Enter a 10, 13 or 17 digit NID number" required placeholder="10, 13 or 17 digits" value={formData.nid} onChange={e => setFormData({...formData, nid:e.target.value.replace(/\\D/g, '').slice(0,17)})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600" />
+                      </div>
+                      <div>
+                        <label className="block text-slate-700 font-semibold mb-1">Home District</label>
+                        <select required value={formData.district} onChange={e => setFormData({...formData, district:e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg">
+                          {['Bagerhat','Bandarban','Barguna','Barishal','Bhola','Bogura','Brahmanbaria','Chandpur','Chapainawabganj','Chattogram','Chuadanga','Cumilla',"Cox's Bazar",'Dhaka','Dinajpur','Faridpur','Feni','Gaibandha','Gazipur','Gopalganj','Habiganj','Jamalpur','Jashore','Jhalokati','Jhenaidah','Joypurhat','Khagrachhari','Khulna','Kishoreganj','Kurigram','Kushtia','Lakshmipur','Lalmonirhat','Madaripur','Magura','Manikganj','Meherpur','Moulvibazar','Munshiganj','Mymensingh','Naogaon','Narail','Narayanganj','Narsingdi','Natore','Netrokona','Nilphamari','Noakhali','Pabna','Panchagarh','Patuakhali','Pirojpur','Rajbari','Rajshahi','Rangamati','Rangpur','Satkhira','Shariatpur','Sherpur','Sirajganj','Sunamganj','Sylhet','Tangail','Thakurgaon'].map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-700 font-semibold mb-1">Current Upazila / Thana</label>
+                        <input required placeholder="e.g. Tejgaon" value={formData.upazila} onChange={e => setFormData({...formData, upazila:e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" />
+                      </div>
+                      <div>
+                        <label className="block text-slate-700 font-semibold mb-1">Permanent Address (optional)</label>
+                        <input placeholder="Permanent address" value={formData.permanentAddress} onChange={e => setFormData({...formData, permanentAddress:e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-semibold mb-1">Current Full Address</label>
+                      <input type="text" required placeholder="House/road, area, upazila, district" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600" />
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-semibold mb-1">Districts You Can Serve</label>
+                      <p className="text-slate-500 mb-2">Select one or more districts. Delivery requests can be matched to these areas after approval.</p>
+                      <select multiple required value={formData.serviceDistricts} onChange={e => setFormData({...formData, serviceDistricts:Array.from(e.target.selectedOptions, option => option.value)})} className="w-full min-h-36 px-3 py-2 bg-white border border-slate-200 rounded-lg">
+                        {['Bagerhat','Bandarban','Barguna','Barishal','Bhola','Bogura','Brahmanbaria','Chandpur','Chapainawabganj','Chattogram','Chuadanga','Cumilla',"Cox's Bazar",'Dhaka','Dinajpur','Faridpur','Feni','Gaibandha','Gazipur','Gopalganj','Habiganj','Jamalpur','Jashore','Jhalokati','Jhenaidah','Joypurhat','Khagrachhari','Khulna','Kishoreganj','Kurigram','Kushtia','Lakshmipur','Lalmonirhat','Madaripur','Magura','Manikganj','Meherpur','Moulvibazar','Munshiganj','Mymensingh','Naogaon','Narail','Narayanganj','Narsingdi','Natore','Netrokona','Nilphamari','Noakhali','Pabna','Panchagarh','Patuakhali','Pirojpur','Rajbari','Rajshahi','Rangamati','Rangpur','Satkhira','Shariatpur','Sherpur','Sirajganj','Sunamganj','Sylhet','Tangail','Thakurgaon'].map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                      <p className="text-slate-500 mt-1">Tip: hold Ctrl (Windows) or Command (Mac) to select multiple districts.</p>
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-semibold mb-1">Service Areas (comma-separated)</label>
+                      <input required placeholder="Tejgaon, Shantinagar, Gulshan" value={formData.serviceAreas} onChange={e => setFormData({...formData, serviceAreas:e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-700 font-semibold mb-1">National ID (NID No.)</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="17-digit NID Number"
-                        value={formData.nid}
-                        onChange={(e) => setFormData({ ...formData, nid: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
-                      />
-                    </div>
-
                     <div>
                       <label className="block text-slate-700 font-semibold mb-1">Vehicle Type</label>
                       <select
@@ -322,7 +348,7 @@ export const Register: React.FC = () => {
                 </div>
               )}
 
-              {selectedRole === 'warehouse' && (<div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-3"><div className="font-bold text-emerald-900">Warehouse / Godown Application Details</div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="block text-slate-700 font-semibold mb-1">Warehouse / Godown Name</label><input required value={formData.warehouseName} onChange={e => setFormData({...formData, warehouseName:e.target.value})} placeholder="Warehouse name" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><div><label className="block text-slate-700 font-semibold mb-1">Facility Type</label><select value={formData.warehouseType} onChange={e => setFormData({...formData, warehouseType:e.target.value as 'CENTRAL' | 'REGIONAL_GODOWN'})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg"><option value="REGIONAL_GODOWN">Regional Godown</option><option value="CENTRAL">Central Warehouse</option></select></div><div><label className="block text-slate-700 font-semibold mb-1">Full Facility Address</label><input required value={formData.warehouseAddress} onChange={e => setFormData({...formData, warehouseAddress:e.target.value})} placeholder="Full address" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><div><label className="block text-slate-700 font-semibold mb-1">City / District</label><input required value={formData.warehouseCity} onChange={e => setFormData({...formData, warehouseCity:e.target.value})} placeholder="City or district" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><div><label className="block text-slate-700 font-semibold mb-1">Storage Capacity (metric tons)</label><input required type="number" min="1" max="100000" value={formData.warehouseCapacity} onChange={e => setFormData({...formData, warehouseCapacity:e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><label className="flex items-center gap-2 text-slate-700 font-medium"><input type="checkbox" checked={formData.temperatureControlled} onChange={e => setFormData({...formData, temperatureControlled:e.target.checked})} />Temperature-controlled / cold storage</label></div><p className="text-xs text-amber-800">Warehouse applications remain pending until reviewed by an administrator.</p></div>)}
+              {selectedRole === 'warehouse' && (<div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-3"><div className="font-bold text-emerald-900">Warehouse / Godown Application Details</div><p className="text-slate-600">Manager identity and facility address are required. The warehouse will be activated only after admin approval.</p><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="block text-slate-700 font-semibold mb-1">Manager National ID (NID)</label><input required type="text" inputMode="numeric" pattern="([0-9]{10}|[0-9]{13}|[0-9]{17})" title="Enter a 10, 13 or 17 digit NID number" value={formData.warehouseNid} onChange={e => setFormData({...formData,warehouseNid:e.target.value.replace(/\\D/g,'').slice(0,17)})} placeholder="10, 13 or 17 digits" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><div><label className="block text-slate-700 font-semibold mb-1">Warehouse / Godown Name</label><input required value={formData.warehouseName} onChange={e => setFormData({...formData, warehouseName:e.target.value})} placeholder="Warehouse name" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><div><label className="block text-slate-700 font-semibold mb-1">Facility Type</label><select value={formData.warehouseType} onChange={e => setFormData({...formData, warehouseType:e.target.value as 'CENTRAL' | 'REGIONAL_GODOWN'})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg"><option value="REGIONAL_GODOWN">Regional Godown</option><option value="CENTRAL">Central Warehouse</option></select></div><div><label className="block text-slate-700 font-semibold mb-1">Full Facility Address</label><input required value={formData.warehouseAddress} onChange={e => setFormData({...formData, warehouseAddress:e.target.value})} placeholder="Full address" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><div><label className="block text-slate-700 font-semibold mb-1">City / District</label><input required value={formData.warehouseCity} onChange={e => setFormData({...formData, warehouseCity:e.target.value})} placeholder="City or district" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><div><label className="block text-slate-700 font-semibold mb-1">Storage Capacity (metric tons)</label><input required type="number" min="1" max="100000" value={formData.warehouseCapacity} onChange={e => setFormData({...formData, warehouseCapacity:e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg" /></div><label className="flex items-center gap-2 text-slate-700 font-medium"><input type="checkbox" checked={formData.temperatureControlled} onChange={e => setFormData({...formData, temperatureControlled:e.target.checked})} />Temperature-controlled / cold storage</label></div><p className="text-xs text-amber-800">Warehouse applications remain pending until reviewed by an administrator.</p></div>)}
 
               <button
                 type="submit"

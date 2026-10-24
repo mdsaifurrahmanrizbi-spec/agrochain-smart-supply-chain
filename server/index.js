@@ -97,6 +97,29 @@ app.post('/api/register/', async (req, res) => {
     return res.status(400).json({ message: 'This role cannot be registered publicly' });
   }
 
+  const deliveryProfile = req.body?.deliveryProfile && typeof req.body.deliveryProfile === 'object' ? req.body.deliveryProfile : null;
+  const warehouseProfile = req.body?.warehouseProfile && typeof req.body.warehouseProfile === 'object' ? req.body.warehouseProfile : null;
+  const validNid = value => typeof value === 'string' && /^(?:\d{10}|\d{13}|\d{17})$/.test(value.trim());
+
+  if (requestedRole === 'delivery') {
+    if (!deliveryProfile || !validNid(deliveryProfile.nid) || !deliveryProfile.address?.trim() ||
+        !deliveryProfile.district?.trim() || !deliveryProfile.upazila?.trim() ||
+        !Array.isArray(deliveryProfile.serviceDistricts) || deliveryProfile.serviceDistricts.length < 1 ||
+        !Array.isArray(deliveryProfile.assignedAreas) || deliveryProfile.assignedAreas.length < 1 ||
+        !deliveryProfile.vehicleRegNumber?.trim() ||
+        (!deliveryProfile.canPickup && !deliveryProfile.canDeliver)) {
+      return res.status(400).json({ message: 'Complete the NID, address, service districts/areas, vehicle registration and work-type fields.' });
+    }
+  }
+
+  if (requestedRole === 'warehouse') {
+    if (!warehouseProfile || !validNid(warehouseProfile.managerNid) || !warehouseProfile.name?.trim() ||
+        !warehouseProfile.address?.trim() || !warehouseProfile.city?.trim() || !warehouseProfile.area?.trim() ||
+        !Number.isFinite(Number(warehouseProfile.capacityMetricTons)) || Number(warehouseProfile.capacityMetricTons) < 1) {
+      return res.status(400).json({ message: 'Complete the manager NID and all warehouse address/capacity fields.' });
+    }
+  }
+
   const status = ['delivery', 'warehouse'].includes(requestedRole) ? 'PENDING' : 'ACTIVE';
 
   try {
@@ -121,9 +144,38 @@ app.post('/api/register/', async (req, res) => {
 
     const account = result.rows[0];
 
+    if (requestedRole === 'delivery') {
+      const partnerRecord = {
+        id, userId: id, name, email, phone, status: 'PENDING_APPROVAL',
+        nid: deliveryProfile.nid.trim(), district: deliveryProfile.district.trim(),
+        upazila: deliveryProfile.upazila.trim(), permanentAddress: String(deliveryProfile.permanentAddress || '').trim(),
+        address: deliveryProfile.address.trim(), preferredArea: String(deliveryProfile.preferredArea || '').trim(),
+        serviceDistricts: deliveryProfile.serviceDistricts, assignedAreas: deliveryProfile.assignedAreas,
+        vehicleType: deliveryProfile.vehicleType, vehicleRegNumber: deliveryProfile.vehicleRegNumber.trim(),
+        canPickup: Boolean(deliveryProfile.canPickup), canDeliver: Boolean(deliveryProfile.canDeliver),
+        createdAt: new Date().toISOString(),
+      };
+      await pool.query(
+        "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('deliveryPartners', $1, $2::jsonb, NOW(), NOW())",
+        [id, JSON.stringify(partnerRecord)]
+      );
+    } else if (requestedRole === 'warehouse') {
+      const warehouseRecord = {
+        id, userId: id, managerName: name, email, phone, status: 'PENDING_APPROVAL',
+        managerNid: warehouseProfile.managerNid.trim(), name: warehouseProfile.name.trim(),
+        type: warehouseProfile.type, address: warehouseProfile.address.trim(), city: warehouseProfile.city.trim(),
+        area: warehouseProfile.area.trim(), capacityMetricTons: Number(warehouseProfile.capacityMetricTons),
+        temperatureControlled: Boolean(warehouseProfile.temperatureControlled), createdAt: new Date().toISOString(),
+      };
+      await pool.query(
+        "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('warehouseApplications', $1, $2::jsonb, NOW(), NOW())",
+        [id, JSON.stringify(warehouseRecord)]
+      );
+    }
+
     return res.status(201).json({
-      message: requestedRole === 'delivery'
-        ? 'Delivery Partner application submitted. You can log in after an administrator approves your account.'
+      message: ['delivery', 'warehouse'].includes(requestedRole)
+        ? `${requestedRole === 'delivery' ? 'Delivery Partner' : 'Warehouse'} application submitted. You can log in after an administrator approves your account.`
         : 'Account created successfully. You can now log in.',
       user: {
         id: account.id,
