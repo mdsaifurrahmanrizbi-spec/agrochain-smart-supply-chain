@@ -335,6 +335,25 @@ export interface Warehouse {
   temperatureControlled: boolean;
 }
 
+export interface WarehouseApplication {
+  id: string;
+  managerId: string;
+  managerName: string;
+  managerEmail: string;
+  managerPhone: string;
+  warehouseName: string;
+  warehouseType: 'CENTRAL' | 'REGIONAL_GODOWN';
+  district: string;
+  upazila: string;
+  address: string;
+  capacityMetricTons: number;
+  temperatureControlled: boolean;
+  isMainWarehouse: boolean;
+  applicationStatus: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  submittedAt: string;
+  approvedAt?: string;
+}
+
 export interface WarehouseInventoryItem {
   id: string;
   warehouseId: string;
