@@ -124,7 +124,7 @@ export const BuyerTracking: React.FC = () => {
           <div className="text-xs text-slate-600 sm:text-right">
             <span className="text-[11px] text-slate-400 block">Delivery Destination</span>
             <strong className="text-slate-900">{(() => {
-              const address = (order.buyerAddress || '').trim().replace(/,\\s*$/, '');
+              const address = (order.buyerAddress || '').trim().replace(/,\s*$/, '');
               const district = (order.buyerCity || '').trim();
               if (!address) return district || 'Address not provided';
               if (!district || address.toLowerCase().includes(district.toLowerCase())) return address;
