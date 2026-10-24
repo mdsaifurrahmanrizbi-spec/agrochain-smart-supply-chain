@@ -178,6 +178,7 @@ export const DashboardLayout: React.FC = () => {
         <div className="h-16 flex items-center justify-between px-6 border-b border-emerald-900/60 bg-[#043d2e]">
           <Link to="/" className="flex items-center">
             <Logo variant="light" size="sm" />
+            <div className="ml-auto"><LanguageSwitcher compact /></div>
           </Link>
           <button
             onClick={() => setMobileSidebarOpen(false)}
