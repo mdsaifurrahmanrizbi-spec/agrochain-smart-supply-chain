@@ -85,28 +85,64 @@ export const Register: React.FC = () => {
   };
 
   return (
-    <div className="bg-slate-50 min-h-screen py-12 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-      <div className="max-w-xl w-full space-y-6">
+    <div className="min-h-screen bg-[#f5f7ef] px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+      <style>{`
+        @keyframes cropSway { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
+        @keyframes farmerWork { 0%,100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(3deg) translateY(3px); } }
+        @keyframes sunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+        @media (prefers-reduced-motion: reduce) { .agro-motion, .agro-motion * { animation: none !important; transition: none !important; } }
+      `}</style>
+      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl items-stretch overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-white shadow-[0_24px_80px_-28px_rgba(20,60,35,0.25)] lg:grid-cols-[0.92fr_1.08fr]">
+        <aside className="relative hidden min-h-[760px] overflow-hidden bg-[#123d2b] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.22),transparent_35%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-lime-300 text-emerald-950 shadow-lg shadow-black/10"><Sprout className="h-7 w-7" /></div>
+              <div><p className="text-xl font-black tracking-tight">AgroChain</p><p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-lime-200">From soil to your door</p></div>
+            </div>
+            <div className="mt-16 max-w-md">
+              <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-semibold tracking-wide text-lime-100"><span className="h-2 w-2 rounded-full bg-lime-300" /> GROW TOGETHER. THRIVE TOGETHER.</p>
+              <h1 className="text-4xl font-black leading-[1.12] tracking-tight xl:text-5xl">Good food starts with <span className="text-lime-300">good people.</span></h1>
+              <p className="mt-5 max-w-sm text-sm leading-7 text-emerald-50/75">Join Bangladesh’s connected agricultural community. Help fresh harvests reach homes with more trust, care and transparency.</p>
+            </div>
+          </div>
+          <div className="agro-motion relative mx-auto my-6 h-[270px] w-full max-w-[470px] overflow-hidden rounded-[1.6rem] border border-white/10 bg-gradient-to-b from-[#8fbd8b] via-[#d7e7a2] to-[#e8d99c] shadow-2xl shadow-black/20">
+            <div className="absolute right-12 top-8 h-14 w-14 rounded-full bg-[#fff2b5] shadow-[0_0_45px_15px_rgba(255,242,181,0.25)]" style={{animation:'sunDrift 5s ease-in-out infinite'}} />
+            <div className="absolute inset-x-0 bottom-0 h-24 rounded-[50%_50%_0_0] bg-[#69934f]" />
+            <div className="absolute -bottom-7 -left-8 h-32 w-[120%] rotate-[-5deg] rounded-[50%] bg-[#3c713d]" />
+            <div className="absolute -bottom-12 left-[-10%] h-28 w-[120%] rotate-[5deg] rounded-[50%] border-t-[16px] border-[#a4bd55] bg-[#245b35]" />
+            <div className="absolute bottom-7 left-4 right-4 flex items-end justify-between text-4xl sm:text-5xl">
+              {['🌾','🌿','🌾','🌱','🌾','🌿','🌾','🌱','🌾'].map((crop,i)=><span key={i} style={{display:'inline-block',transformOrigin:'bottom center',animation:'cropSway '+(2.2+(i%3)*0.45)+'s ease-in-out '+(i*0.13)+'s infinite'}}>{crop}</span>)}
+            </div>
+            <div className="absolute bottom-[68px] left-[43%] z-10 text-6xl drop-shadow-lg" style={{animation:'farmerWork 2.4s ease-in-out infinite'}}>👨🏽‍🌾</div>
+            <div className="absolute bottom-4 left-4 rounded-xl border border-white/50 bg-white/85 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-emerald-900 shadow-lg backdrop-blur">🌾 Harvesting a better future</div>
+            <div className="absolute right-4 top-4 rounded-full bg-white/80 px-3 py-1 text-[10px] font-bold text-emerald-900">BANGLADESH 🇧🇩</div>
+          </div>
+          <div className="relative z-10 grid grid-cols-3 gap-3 border-t border-white/15 pt-6">
+            <div><p className="text-lg font-extrabold text-lime-200">Farmers</p><p className="mt-1 text-[10px] text-white/60">Showcase your harvest</p></div>
+            <div><p className="text-lg font-extrabold text-lime-200">Buyers</p><p className="mt-1 text-[10px] text-white/60">Find fresh produce</p></div>
+            <div><p className="text-lg font-extrabold text-lime-200">Partners</p><p className="mt-1 text-[10px] text-white/60">Move goods smarter</p></div>
+          </div>
+        </aside>
+        <main className="flex w-full min-w-0 flex-col justify-center px-4 py-7 sm:px-8 sm:py-10 lg:px-10 xl:px-14">
+          <div className="mx-auto w-full max-w-2xl space-y-6">
         <div className="text-center">
           <div className="flex justify-center mb-3">
             <Logo size="lg" />
           </div>
-          <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            Create an AgroChain Account
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Join Bangladesh's transparent agricultural supply network
-          </p>
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-800"><Sprout className="h-3.5 w-3.5" /> Your journey starts here</div>
+          <h2 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Create your account<span className="text-emerald-700">.</span></h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Join Bangladesh’s agricultural community and bring your role in the harvest-to-home journey to life.</p>
         </div>
 
         {/* Role Selector Tabs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white p-1.5 rounded-xl border border-slate-200">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-2xl border border-slate-200/80 bg-slate-50 p-2">
           <button
             type="button"
             onClick={() => setSelectedRole('farmer')}
-            className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+            className={`py-3 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
               selectedRole === 'farmer'
-                ? 'bg-emerald-700 text-white shadow-xs'
+                ? 'bg-emerald-800 text-white shadow-md shadow-emerald-950/10'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
             }`}
           >
@@ -143,7 +179,7 @@ export const Register: React.FC = () => {
           <button type="button" onClick={() => setSelectedRole('warehouse')} className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${selectedRole === 'warehouse' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}><Truck className="w-4 h-4" /><span>Warehouse</span></button>
         </div>
         {/* Form Card */}
-        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_12px_40px_-28px_rgba(15,50,30,0.35)] sm:p-8">
           {submittedMessage ? (
             <div className="space-y-4 text-center py-4">
               <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center mx-auto">
@@ -182,7 +218,7 @@ export const Register: React.FC = () => {
                     placeholder="e.g. Md. Tariqul Islam"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10"
                   />
                 </div>
 
@@ -244,11 +280,11 @@ export const Register: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-slate-700 font-semibold mb-1">National ID (NID) Number</label>
-                        <input type="text" inputMode="numeric" pattern="([0-9]{10}|[0-9]{13}|[0-9]{17})" title="Enter a 10, 13 or 17 digit NID number" required placeholder="10, 13 or 17 digits" value={formData.nid} onChange={e => setFormData({...formData, nid:e.target.value.replace(/\\D/g, '').slice(0,17)})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600" />
+                        <input type="text" inputMode="numeric" pattern="([0-9]{10}|[0-9]{13}|[0-9]{17})" title="Enter a 10, 13 or 17 digit NID number" required placeholder="10, 13 or 17 digits" value={formData.nid} onChange={e => setFormData({...formData, nid:e.target.value.replace(/\\D/g, '').slice(0,17)})} className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10" />
                       </div>
                       <div>
                         <label className="block text-slate-700 font-semibold mb-1">Home District</label>
-                        <select required value={formData.district} onChange={e => setFormData({...formData, district:e.target.value})} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg">
+                        <select required value={formData.district} onChange={e => setFormData({...formData, district:e.target.value})} className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10">
                           {['Bagerhat','Bandarban','Barguna','Barishal','Bhola','Bogura','Brahmanbaria','Chandpur','Chapainawabganj','Chattogram','Chuadanga','Cumilla',"Cox's Bazar",'Dhaka','Dinajpur','Faridpur','Feni','Gaibandha','Gazipur','Gopalganj','Habiganj','Jamalpur','Jashore','Jhalokati','Jhenaidah','Joypurhat','Khagrachhari','Khulna','Kishoreganj','Kurigram','Kushtia','Lakshmipur','Lalmonirhat','Madaripur','Magura','Manikganj','Meherpur','Moulvibazar','Munshiganj','Mymensingh','Naogaon','Narail','Narayanganj','Narsingdi','Natore','Netrokona','Nilphamari','Noakhali','Pabna','Panchagarh','Patuakhali','Pirojpur','Rajbari','Rajshahi','Rangamati','Rangpur','Satkhira','Shariatpur','Sherpur','Sirajganj','Sunamganj','Sylhet','Tangail','Thakurgaon'].map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
                       </div>
@@ -353,7 +389,7 @@ export const Register: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2 shadow-xs"
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 py-3.5 font-bold text-white shadow-lg shadow-emerald-900/15 transition-all hover:-translate-y-0.5 hover:bg-emerald-900 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span>{isSubmitting ? "Creating Account..." : (['delivery', 'warehouse'].includes(selectedRole) ? "Submit for Approval" : "Complete Registration")}</span>
                 <ArrowRight className="w-4 h-4" />
@@ -368,6 +404,8 @@ export const Register: React.FC = () => {
             Sign In here
           </Link>
         </div>
+          </div>
+        </main>
       </div>
     </div>
   );
