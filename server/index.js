@@ -75,7 +75,7 @@ app.post('/api/register/', async (req, res) => {
   const allowedRegistrationRoles = new Set(['farmer', 'buyer', 'delivery', 'warehouse']);
 
   if (!name || name.length > 120) return res.status(400).json({ message: 'Name is required and must be at most 120 characters' });
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ message: 'Enter a valid email address' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ message: 'Enter a valid email address' });
   if (password.length < 12 || password.length > 128) return res.status(400).json({ message: 'Password must be 12 to 128 characters long' });
   if (!allowedRegistrationRoles.has(requestedRole)) return res.status(400).json({ message: 'This role cannot be registered publicly' });
 
@@ -87,7 +87,7 @@ app.post('/api/register/', async (req, res) => {
     const nid = typeof profile.nid === 'string' ? profile.nid.replace(/[ -]/g, '') : '';
     const areas = Array.isArray(profile.assignedAreas) ? profile.assignedAreas.filter((a) => typeof a === 'string' && a.trim()) : [];
     const districts = Array.isArray(profile.serviceDistricts) ? profile.serviceDistricts.filter((d) => typeof d === 'string' && d.trim()) : [];
-    if (!/^\\d{10,17}$/.test(nid)) return res.status(400).json({ message: 'A valid 10–17 digit NID number is required' });
+    if (!/^\d{10,17}$/.test(nid)) return res.status(400).json({ message: 'A valid 10–17 digit NID number is required' });
     if (typeof profile.address !== 'string' || !profile.address.trim() ||
         typeof profile.homeDistrict !== 'string' || !profile.homeDistrict.trim() ||
         typeof profile.homeUpazila !== 'string' || !profile.homeUpazila.trim()) {
