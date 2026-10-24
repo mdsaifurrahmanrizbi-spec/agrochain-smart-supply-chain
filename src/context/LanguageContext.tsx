@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 export type AppLanguage = 'bn' | 'en';
 type LanguageContextValue = { language: AppLanguage; setLanguage: (language: AppLanguage) => void; t: (english: string) => string; voiceLocale: 'bn-BD' | 'en-US' };
@@ -57,6 +57,8 @@ const translations: Record<string, string> = {
 };
 
 export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+  const originalTextRef = useRef(new WeakMap<Text, string>());
+  const originalAttributesRef = useRef(new WeakMap<Element, Map<string, string>>());
   const [language, setLanguageState] = useState<AppLanguage>(() => {
     try { return localStorage.getItem(STORAGE_KEY) === 'en' ? 'en' : localStorage.getItem(STORAGE_KEY) === 'bn' ? 'bn' : 'en'; }
     catch { return 'en'; }
@@ -67,8 +69,8 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
   }, []);
   useEffect(() => {
     document.documentElement.lang = language === 'bn' ? 'bn' : 'en';
-    const originalText = new WeakMap<Text, string>();
-    const originalAttributes = new WeakMap<Element, Map<string, string>>();
+    const originalText = originalTextRef.current;
+    const originalAttributes = originalAttributesRef.current;
     const translateElement = (root: Node) => {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       let node: Node | null;
@@ -126,9 +128,16 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
           } else if (node.nodeType === Node.ELEMENT_NODE) translateElement(node);
         });
         if (record.type === 'attributes' && record.target instanceof Element) translateElement(record.target);
+        if (record.type === 'characterData' && record.target instanceof Text) {
+          const textNode = record.target;
+          if (!originalText.has(textNode)) originalText.set(textNode, textNode.nodeValue || '');
+          const original = originalText.get(textNode) || '';
+          const trimmed = original.trim();
+          if (trimmed && textNode.parentElement && !textNode.parentElement.closest('script,style,textarea,[data-no-translate],.notranslate')) textNode.nodeValue = language === 'bn' ? (original === trimmed ? (translations[trimmed] || trimmed) : original.replace(trimmed, translations[trimmed] || trimmed)) : original;
+        }
       });
     });
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['placeholder', 'title', 'aria-label'] });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title', 'aria-label'] });
     return () => observer.disconnect();
   }, [language]);
   const value = useMemo<LanguageContextValue>(() => ({
