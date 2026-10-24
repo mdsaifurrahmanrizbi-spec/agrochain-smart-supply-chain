@@ -1614,7 +1614,7 @@ const events =
           sourceWarehouseName: targetOrder.warehouseName || 'Central Dhaka Agro-Logistics Center, Gazipur',
           destinationGodownId: routing.godown?.id || 'unassigned',
           destinationGodownName: routing.godown?.name || 'Unassigned - Manual Review Required',
-          customerArea: targetOrder.buyerCity,
+          customerArea: targetOrder.buyerArea || targetOrder.buyerCity,
           customerAddress: targetOrder.buyerAddress,
           customerName: targetOrder.buyerName,
           customerPhone: targetOrder.buyerPhone,
@@ -1941,7 +1941,7 @@ const events =
     // CRITICAL STEP: Automatic district + area-based delivery assignment.
     // Refresh approved partner records from PostgreSQL first; localStorage can be stale
     // or contain demo profiles and must not be the source of truth for real assignments.
-    const areaQuery = shipment.customerArea || order?.buyerArea || '';
+    const areaQuery = order?.buyerArea || shipment.customerArea || '';
     const destinationDistrict = order?.buyerCity || '';
     let currentPartners = store.deliveryPartners;
     try {
