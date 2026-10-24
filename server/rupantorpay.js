@@ -63,8 +63,23 @@ router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
       String(data.status).toLowerCase() === 'true' || String(data.status) === '1';
     if (!response.ok || !checkoutSucceeded || typeof data.payment_url !== 'string' ||
         !data.payment_url.startsWith('https://')) {
-      console.error('RupantorPay checkout rejected request:', response.status, data.message || 'No payment URL');
-      return res.status(502).json({ message: data.message || 'RupantorPay could not create a payment link' });
+      // Never log credentials or the complete request payload. Keep the gateway's
+      // HTTP/status/message details so configuration and merchant-account issues
+      // can be diagnosed without exposing secrets to the browser.
+      const providerMessage = typeof data.message === 'string' && data.message.trim()
+        ? data.message.trim().slice(0, 240)
+        : 'Gateway did not return a payment URL';
+      console.error('RupantorPay checkout rejected request:', {
+        httpStatus: response.status,
+        gatewayStatus: typeof data.status === 'string' || typeof data.status === 'number' || typeof data.status === 'boolean'
+          ? data.status
+          : 'missing',
+        message: providerMessage,
+      });
+      return res.status(502).json({
+        message: `RupantorPay rejected checkout (HTTP ${response.status}): ${providerMessage}`,
+        code: 'RUPANTORPAY_CHECKOUT_REJECTED',
+      });
     }
     return res.json({ paymentUrl: data.payment_url });
   } catch (error) {
