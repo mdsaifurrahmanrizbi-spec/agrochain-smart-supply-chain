@@ -60,7 +60,15 @@ export const VoiceInputAssistant: React.FC = () => {
     const next: VoiceField[] = Array.from(document.querySelectorAll('input, textarea'))
       .filter((element): element is HTMLInputElement | HTMLTextAreaElement => isVoiceEditable(element))
       .filter((element) => !element.closest('[data-voice-assistant-ignore]'))
-      .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+      .map((element) => {
+        if (!element.dataset.voicePaddingApplied) {
+          element.dataset.voiceOriginalPaddingRight = element.style.paddingRight;
+          const computedPadding = Number.parseFloat(window.getComputedStyle(element).paddingRight) || 0;
+          element.style.paddingRight = `${computedPadding + 34}px`;
+          element.dataset.voicePaddingApplied = 'true';
+        }
+        return { element, rect: element.getBoundingClientRect() };
+      })
       .filter(({ rect }) => rect.width > 0 && rect.height > 0);
     setFields(next);
   }, []);
@@ -84,6 +92,11 @@ export const VoiceInputAssistant: React.FC = () => {
       window.clearInterval(timer);
       if (frame) cancelAnimationFrame(frame);
       recognitionRef.current?.abort();
+      document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-voice-padding-applied="true"]').forEach((element) => {
+        element.style.paddingRight = element.dataset.voiceOriginalPaddingRight || '';
+        delete element.dataset.voicePaddingApplied;
+        delete element.dataset.voiceOriginalPaddingRight;
+      });
     };
   }, [refreshFields]);
 
@@ -196,7 +209,7 @@ export const VoiceInputAssistant: React.FC = () => {
               <Mic className="h-[17px] w-[17px]" />
             </button>
             {isPanelOpen && createPortal(
-              <section data-voice-assistant-ignore style={{ position: 'fixed', top: Math.max(8, rect.top - 8), right, transform: 'translateY(-100%)', zIndex: 90, width: 'min(300px, calc(100vw - 24px)' }} className="rounded-xl border border-emerald-100 bg-white p-3 shadow-xl">
+              <section data-voice-assistant-ignore style={{ position: 'fixed', top: Math.max(8, rect.top - 8), right, transform: 'translateY(-100%)', zIndex: 90, width: 'min(300px, calc(100vw - 24px))' }} className="rounded-xl border border-emerald-100 bg-white p-3 shadow-xl">
                 <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
                   <Languages className="h-4 w-4 text-emerald-700" /> Voice input
                   <select aria-label="Voice language" value={language} disabled={isListening} onChange={(event) => setLanguage(event.target.value as VoiceLanguage)} className="ml-auto rounded-md border border-slate-200 bg-white px-2 py-1 text-xs">
