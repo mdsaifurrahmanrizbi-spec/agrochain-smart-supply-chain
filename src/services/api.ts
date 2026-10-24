@@ -1281,7 +1281,7 @@ const events =
           description: `QC passed by ${qc.inspectorName}. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Remarks: ${qc.remarks}. Farm pickup unlocked.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
-          actorRole: 'Quality Inspector',
+          actorRole: 'Pickup Person / QC Inspector',
           actorName: qc.inspectorName,
           status: 'COMPLETED',
         });
@@ -1293,7 +1293,7 @@ const events =
           description: `QC failed. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Inspector remarks: ${qc.remarks}. Farm pickup BLOCKED.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
-          actorRole: 'Quality Inspector',
+          actorRole: 'Pickup Person / QC Inspector',
           actorName: qc.inspectorName,
           status: 'COMPLETED',
         });
@@ -1305,7 +1305,7 @@ const events =
           description: `Consignment placed on hold at farm by ${qc.inspectorName}. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Remarks: ${qc.remarks}. Secondary evaluation required; pickup paused.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
-          actorRole: 'Quality Inspector',
+          actorRole: 'Pickup Person / QC Inspector',
           actorName: qc.inspectorName,
           status: 'IN_PROGRESS',
         });
