@@ -99,7 +99,7 @@ app.post('/api/register/', async (req, res) => {
 
   const deliveryProfile = req.body?.deliveryProfile && typeof req.body.deliveryProfile === 'object' ? req.body.deliveryProfile : null;
   const warehouseProfile = req.body?.warehouseProfile && typeof req.body.warehouseProfile === 'object' ? req.body.warehouseProfile : null;
-  const validNid = value => typeof value === 'string' && /^(?:\\d{10}|\\d{13}|\\d{17})$/.test(value.trim());
+  const validNid = value => typeof value === 'string' && /^(?:\d{10}|\d{13}|\d{17})$/.test(value.trim());
 
   if (requestedRole === 'delivery') {
     if (!deliveryProfile || !validNid(deliveryProfile.nid) || !deliveryProfile.address?.trim() ||
