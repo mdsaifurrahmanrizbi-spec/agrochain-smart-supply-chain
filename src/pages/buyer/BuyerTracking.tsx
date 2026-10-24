@@ -170,9 +170,13 @@ export const BuyerTracking: React.FC = () => {
                     batch.farmerId === item.farmerId &&
                     batch.cropName.toLowerCase() === item.productName.toLowerCase()
                   );
+              const sourceFarm = sourceBatch
+                ? store.farms.find((farm) => farm.id === sourceBatch.farmId)
+                : undefined;
               const farmerName = item.farmerName || sourceProduct?.farmerName || sourceBatch?.farmerName;
-              const farmName = sourceProduct?.farmName || sourceBatch?.farmName;
-              const farmLocation = sourceProduct?.farmLocation;
+              const farmName = sourceProduct?.farmName || sourceBatch?.farmName || sourceFarm?.name;
+              const farmLocation = sourceProduct?.farmLocation ||
+                [sourceFarm?.upazila, sourceFarm?.district].filter(Boolean).join(', ');
               return (
                 <div key={item.productId} className="rounded-lg border border-emerald-100 bg-white p-3 sm:p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -194,7 +198,7 @@ export const BuyerTracking: React.FC = () => {
                       </div>
                       <div className="rounded-md bg-slate-50 p-2.5">
                         <div className="text-[11px] text-slate-500">Farm location</div>
-                        <div className="mt-0.5 text-sm font-medium text-slate-800">{farmLocation || sourceBatch?.farmName || 'Farm location not recorded'}</div>
+                        <div className="mt-0.5 text-sm font-medium text-slate-800">{farmLocation || 'Farm location not recorded'}</div>
                       </div>
                       <div className="rounded-md bg-slate-50 p-2.5">
                         <div className="text-[11px] text-slate-500">Batch reference</div>
