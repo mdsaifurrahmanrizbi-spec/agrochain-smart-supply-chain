@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { store } from '../../services/api';
+import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { TrackingTimeline } from '../../components/common/TrackingTimeline';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -30,7 +30,16 @@ export const BuyerTracking: React.FC = () => {
     myOrders[0] ||
     store.orders[0];
 
-  const events = store.trackingEvents[order?.id] || [];
+  const [events, setEvents] = useState(store.trackingEvents[order?.id || ''] || []);
+  useEffect(() => {
+    let active = true;
+    if (order?.id) {
+      agroApi.getTrackingEvents(order.id)
+        .then((freshEvents) => { if (active) setEvents(freshEvents); })
+        .catch((error) => console.error('Could not load order tracking history:', error));
+    }
+    return () => { active = false; };
+  }, [order?.id]);
 
   // Check if current user is the owner of this order (or demo viewing customer panel)
   const isCorrectCustomer = user?.role === 'buyer' || user?.role === 'admin' || !user;
