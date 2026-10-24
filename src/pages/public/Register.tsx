@@ -46,7 +46,7 @@ export const Register: React.FC = () => {
       if (!formData.vehicleRegNumber.trim()) return setRegistrationError('Vehicle registration number is required.');
     }
     if (selectedRole === 'warehouse') {
-      if (!formData.warehouseName.trim() || !formData.address.trim() || !formData.homeUpazila.trim()) return setRegistrationError('Warehouse name, full address and manager contact details are required.');
+      if (!formData.warehouseName.trim() || !formData.address.trim() || !formData.warehouseUpazila.trim()) return setRegistrationError('Warehouse name, full address and area/upazila are required.');
       if (Number(formData.warehouseCapacity) <= 0) return setRegistrationError('Enter a valid warehouse capacity.');
     }
     setIsSubmitting(true);
