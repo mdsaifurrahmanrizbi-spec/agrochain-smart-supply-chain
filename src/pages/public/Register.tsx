@@ -39,7 +39,7 @@ export const Register: React.FC = () => {
     setSubmittedMessage(null);
     if (formData.password.length < 12) return setRegistrationError('Password must be at least 12 characters long.');
     if (selectedRole === 'delivery') {
-      if (!/^\\d{10,17}$/.test(formData.nid.replace(/[- ]/g, ''))) return setRegistrationError('Enter a valid 10–17 digit NID number.');
+      if (!/^\d{10,17}$/.test(formData.nid.replace(/[- ]/g, ''))) return setRegistrationError('Enter a valid 10–17 digit NID number.');
       if (!formData.address.trim() || !formData.homeUpazila.trim()) return setRegistrationError('Enter your current address, district and upazila/thana.');
       if (!formData.serviceDistricts.length || !serviceAreaList.length) return setRegistrationError('Select at least one service district and enter at least one area for it.');
       if (!formData.canPickup && !formData.canDeliver) return setRegistrationError('Select at least one service: farm pickup or customer delivery.');
