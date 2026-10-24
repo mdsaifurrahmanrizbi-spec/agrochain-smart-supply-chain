@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { VoiceInputAssistant } from './components/common/VoiceInputAssistant';
 
 // Layouts
 import { PublicLayout } from './components/layouts/PublicLayout';
@@ -215,6 +216,7 @@ export default function App() {
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <VoiceInputAssistant />
         </BrowserRouter>
       </CartProvider>
     </AuthProvider>
