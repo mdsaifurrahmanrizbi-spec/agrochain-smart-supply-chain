@@ -48,6 +48,7 @@ export const Register: React.FC = () => {
     if (selectedRole === 'warehouse') {
       if (!formData.warehouseName.trim() || !formData.address.trim() || !formData.warehouseUpazila.trim()) return setRegistrationError('Warehouse name, full address and area/upazila are required.');
       if (Number(formData.warehouseCapacity) <= 0) return setRegistrationError('Enter a valid warehouse capacity.');
+      if (formData.warehouseType === 'CENTRAL' && (formData.warehouseDistrict !== 'Dhaka' || formData.warehouseUpazila.trim().toLowerCase() !== 'tejgaon')) return setRegistrationError('The main / central warehouse must be located in Dhaka, Tejgaon.');
     }
     setIsSubmitting(true);
     try {
