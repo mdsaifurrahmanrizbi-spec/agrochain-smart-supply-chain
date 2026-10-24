@@ -9,6 +9,8 @@ import {
   CreditCard,
   DollarSign,
   ArrowRight,
+  Plus,
+  Minus,
   Scale,
   MapPin,
   KeyRound,
@@ -34,6 +36,7 @@ export const BuyerCheckout: React.FC = () => {
     setDeliveryZone,
     totalWeightKg,
     clearCart,
+    updateQuantity,
   } = useCart();
 
   const { user } = useAuth();
@@ -212,7 +215,7 @@ export const BuyerCheckout: React.FC = () => {
       navigate(`/buyer/tracking/${created.id}`);
     } catch (err) {
       console.error('Could not place order:', err);
-      setError('Order could not be placed. Please try again.');
+      setError(err instanceof Error ? err.message : 'Order could not be placed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -443,10 +446,31 @@ export const BuyerCheckout: React.FC = () => {
             <div className="space-y-3 max-h-48 overflow-y-auto">
               {items.map((item) => (
                 <div key={item.product.id} className="flex items-center justify-between gap-3 text-slate-700">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="font-semibold text-slate-900 truncate">{item.product.name}</div>
                     <div className="text-[11px] text-slate-500">
-                      {item.quantity} {item.product.unit} × ৳{item.product.pricePerUnit}
+                      ৳{item.product.pricePerUnit} per {item.product.unit}
+                    </div>
+                    <div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-slate-200 p-1">
+                      <button
+                        type="button"
+                        aria-label={`Decrease ${item.product.name} quantity`}
+                        onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                        className="w-7 h-7 flex items-center justify-center rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="min-w-16 text-center font-semibold text-slate-800">
+                        {item.quantity} {item.product.unit}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Increase ${item.product.name} quantity`}
+                        onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                        className="w-7 h-7 flex items-center justify-center rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                   <span className="font-bold shrink-0">
