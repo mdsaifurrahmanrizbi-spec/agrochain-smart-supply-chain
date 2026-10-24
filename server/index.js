@@ -1150,16 +1150,64 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       }
     }
 
-    // Buyers may create only their own orders. Existing order state changes must
-    // use dedicated server-authoritative workflows (cancellation/payment/delivery).
+    // Buyers may create only their own orders. After creation, allow only the
+    // checkout workflow to attach its pending QC record and approved pickup assignment.
+    // Payment, totals, address, items, and other order fields remain immutable here.
     if (resource === 'orders' && role === 'buyer') {
-      if (!existing && data.buyerId !== req.auth.sub) {
+      if (!existing && String(data.buyerId || '') !== String(req.auth.sub)) {
         await client.query('ROLLBACK');
         return res.status(403).json({ message: 'You can only create orders for your own customer account' });
       }
       if (existing) {
-        await client.query('ROLLBACK');
-        return res.status(403).json({ message: 'Existing orders can only be changed through dedicated order workflows' });
+        if (String(existing.buyerId || '') !== String(req.auth.sub)) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'You can only update your own order workflow metadata' });
+        }
+
+        const checkoutMutableFields = new Set([
+          'qualityCheckId', 'qualityStatus', 'pickupPartnerId',
+          'pickupPartnerName', 'orderStatus', 'updatedAt',
+        ]);
+        const allFields = new Set([...Object.keys(existing), ...Object.keys(data)]);
+        const changedProtectedField = [...allFields].some((field) =>
+          !checkoutMutableFields.has(field) &&
+          JSON.stringify(existing[field]) !== JSON.stringify(data[field])
+        );
+        if (changedProtectedField) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'Order details cannot be changed after placement' });
+        }
+
+        if (data.qualityCheckId && data.qualityStatus === 'PENDING') {
+          const qcResult = await client.query(
+            "SELECT id, data FROM agrochain_records WHERE resource = 'qualityChecks' AND id = $1 AND data->>'orderId' = $2 LIMIT 1",
+            [String(data.qualityCheckId), id]
+          );
+          const qc = qcResult.rows[0]?.data;
+          if (!qc || qc.status !== 'PENDING' || qc.inspectorId ||
+              qc.inspectorName !== 'Unassigned Inspector') {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ message: 'Only a pending, unassigned QC record for this order may be linked' });
+          }
+        }
+
+        if (data.pickupPartnerId) {
+          const partnerResult = await client.query(
+            "SELECT data FROM agrochain_records WHERE resource = 'deliveryPartners' AND id = $1 LIMIT 1",
+            [String(data.pickupPartnerId)]
+          );
+          const partner = partnerResult.rows[0]?.data;
+          if (!partner || partner.approvalStatus !== 'APPROVED' || partner.canPickup !== true ||
+              data.orderStatus !== 'QC_SCHEDULED') {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ message: 'Pickup assignment requires an approved pickup-capable partner' });
+          }
+        }
+
+        if (data.orderStatus && !['CONFIRMED', 'QC_SCHEDULED'].includes(String(data.orderStatus))) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'Buyers cannot advance an order beyond checkout confirmation' });
+        }
       }
     }
 
