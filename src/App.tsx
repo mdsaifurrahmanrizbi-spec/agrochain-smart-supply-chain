@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-r
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { VoiceInputAssistant } from './components/common/VoiceInputAssistant';
+import { LanguageProvider } from './context/LanguageContext';
 
 // Layouts
 import { PublicLayout } from './components/layouts/PublicLayout';
@@ -98,6 +99,7 @@ function HomeRoute() {
 
 export default function App() {
   return (
+    <LanguageProvider>
     <AuthProvider>
       <CartProvider>
         <BrowserRouter>
@@ -220,5 +222,6 @@ export default function App() {
         </BrowserRouter>
       </CartProvider>
     </AuthProvider>
+    </LanguageProvider>
   );
 }
