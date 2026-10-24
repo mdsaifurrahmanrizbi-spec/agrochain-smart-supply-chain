@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Languages, Mic, MicOff, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Languages, Mic, MicOff } from 'lucide-react';
 
 type SpeechAlternative = { transcript: string };
 type SpeechResult = { isFinal: boolean; length: number; [index: number]: SpeechAlternative };
@@ -19,6 +20,7 @@ type SpeechRecognitionLike = {
 };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 type VoiceLanguage = 'bn-BD' | 'en-US';
+type VoiceField = { element: HTMLInputElement | HTMLTextAreaElement; rect: DOMRect };
 
 declare global {
   interface Window {
@@ -27,97 +29,116 @@ declare global {
   }
 }
 
-const isVoiceEditable = (element: EventTarget | Element | null): element is HTMLInputElement | HTMLTextAreaElement => {
-  if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) return false;
+const isVoiceEditable = (element: Element): element is HTMLInputElement | HTMLTextAreaElement => {
+  if (element instanceof HTMLTextAreaElement) {
+    return !element.disabled && !element.readOnly && element.getAttribute('aria-hidden') !== 'true';
+  }
+  if (!(element instanceof HTMLInputElement)) return false;
   if (element.disabled || element.readOnly || element.getAttribute('aria-hidden') === 'true') return false;
-  if (element instanceof HTMLTextAreaElement) return true;
   return ['text', 'search', 'tel', 'url', 'email'].includes(element.type);
 };
 
+const fieldKey = (element: HTMLInputElement | HTMLTextAreaElement) => {
+  if (!element.dataset.voiceFieldId) {
+    element.dataset.voiceFieldId = `voice-${Math.random().toString(36).slice(2)}`;
+  }
+  return element.dataset.voiceFieldId;
+};
+
 export const VoiceInputAssistant: React.FC = () => {
-  const [target, setTarget] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  const [fields, setFields] = useState<VoiceField[]>([]);
+  const [activeField, setActiveField] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const [language, setLanguage] = useState<VoiceLanguage>('bn-BD');
-  const [interimText, setInterimText] = useState('');
+  const [isListening, setIsListening] = useState(false);
   const [notice, setNotice] = useState('');
+  const [interimText, setInterimText] = useState('');
+  const [panelField, setPanelField] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const targetRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
-  const listeningRef = useRef(false);
+  const activeFieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+
+  const refreshFields = useCallback(() => {
+    const next: VoiceField[] = Array.from(document.querySelectorAll('input, textarea'))
+      .filter((element): element is HTMLInputElement | HTMLTextAreaElement => isVoiceEditable(element))
+      .filter((element) => !element.closest('[data-voice-assistant-ignore]'))
+      .map((element) => {
+        if (!element.dataset.voicePaddingApplied) {
+          element.dataset.voiceOriginalPaddingRight = element.style.paddingRight;
+          const computedPadding = Number.parseFloat(window.getComputedStyle(element).paddingRight) || 0;
+          element.style.paddingRight = `${computedPadding + 34}px`;
+          element.dataset.voicePaddingApplied = 'true';
+        }
+        return { element, rect: element.getBoundingClientRect() };
+      })
+      .filter(({ rect }) => rect.width > 0 && rect.height > 0);
+    setFields(next);
+  }, []);
 
   useEffect(() => {
-    const onFocusIn = (event: FocusEvent) => {
-      const element = event.target;
-      if (isVoiceEditable(element)) {
-        targetRef.current = element;
-        setTarget(element);
-        setNotice('');
-      } else if (element instanceof HTMLElement && !element.closest('[data-voice-assistant]')) {
-        // Keep the last editable field available when the user opens the floating microphone.
-      }
+    let frame = 0;
+    const scheduleRefresh = () => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(refreshFields);
     };
-    const onSelectionChange = () => {
-      const active = document.activeElement;
-      if (isVoiceEditable(active)) {
-        targetRef.current = active;
-        setTarget(active);
-      }
-    };
-    document.addEventListener('focusin', onFocusIn);
-    document.addEventListener('selectionchange', onSelectionChange);
+    refreshFields();
+    const observer = new MutationObserver(scheduleRefresh);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'readonly', 'type', 'class', 'style', 'aria-hidden'] });
+    window.addEventListener('resize', scheduleRefresh);
+    window.addEventListener('scroll', scheduleRefresh, true);
+    const timer = window.setInterval(scheduleRefresh, 1200);
     return () => {
-      document.removeEventListener('focusin', onFocusIn);
-      document.removeEventListener('selectionchange', onSelectionChange);
-      listeningRef.current = false;
+      observer.disconnect();
+      window.removeEventListener('resize', scheduleRefresh);
+      window.removeEventListener('scroll', scheduleRefresh, true);
+      window.clearInterval(timer);
+      if (frame) cancelAnimationFrame(frame);
       recognitionRef.current?.abort();
+      document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-voice-padding-applied="true"]').forEach((element) => {
+        element.style.paddingRight = element.dataset.voiceOriginalPaddingRight || '';
+        delete element.dataset.voicePaddingApplied;
+        delete element.dataset.voiceOriginalPaddingRight;
+      });
     };
-  }, []);
-
-  const stopListening = useCallback(() => {
-    listeningRef.current = false;
-    setIsListening(false);
-    recognitionRef.current?.stop();
-  }, []);
+  }, [refreshFields]);
 
   const insertTranscript = useCallback((transcript: string) => {
-    const element = targetRef.current;
-    if (!element || !element.isConnected || element.disabled || element.readOnly) {
-      setNotice('আগে যে text field-এ লিখতে চান, সেটিতে ক্লিক করুন।');
-      return;
-    }
-
+    const element = activeFieldRef.current;
+    if (!element || !element.isConnected || element.disabled || element.readOnly) return;
     const start = typeof element.selectionStart === 'number' ? element.selectionStart : element.value.length;
     const end = typeof element.selectionEnd === 'number' ? element.selectionEnd : element.value.length;
     const before = element.value.slice(0, start);
     const after = element.value.slice(end);
-    const needsSpace = before.length > 0 && !/\s$/.test(before) && !/^\s/.test(transcript);
+    const needsSpace = before.length > 0 && !/\\s$/.test(before) && !/^\\s/.test(transcript);
     const inserted = (needsSpace ? ' ' : '') + transcript;
-    const nextValue = before + inserted + after;
+    const value = before + inserted + after;
     const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
-    if (setter) setter.call(element, nextValue);
-    else element.value = nextValue;
+    if (setter) setter.call(element, value);
+    else element.value = value;
     element.dispatchEvent(new Event('input', { bubbles: true }));
-    const cursor = start + inserted.length;
-    try { element.setSelectionRange(cursor, cursor); } catch { /* Some input types do not expose a text selection. */ }
-    setNotice('Voice text যোগ হয়েছে—চাইলে edit করে submit করুন।');
+    try {
+      const cursor = start + inserted.length;
+      element.setSelectionRange(cursor, cursor);
+    } catch {
+      // Some text input types do not support selection APIs.
+    }
+    setNotice('Text যোগ হয়েছে। Edit করে submit করতে পারো।');
+    refreshFields();
+  }, [refreshFields]);
+
+  const stopListening = useCallback(() => {
+    recognitionRef.current?.stop();
+    setIsListening(false);
+    setInterimText('');
   }, []);
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback((element: HTMLInputElement | HTMLTextAreaElement) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setNotice('এই browser-এ voice recognition support নেই। Chrome বা Edge-এর latest version ব্যবহার করুন।');
-      setIsOpen(true);
+      setNotice('এই browser voice recognition support করে না। Latest Chrome বা Edge ব্যবহার করুন।');
       return;
     }
-    const activeTarget = targetRef.current;
-    if (!activeTarget || !activeTarget.isConnected) {
-      setNotice('প্রথমে একটি text field-এ ক্লিক করুন, তারপর microphone চাপুন।');
-      setIsOpen(true);
-      return;
-    }
-
-    recognitionRef.current?.abort();
+    activeFieldRef.current = element;
+    setActiveField(element);
     const recognition = new SpeechRecognition();
     recognition.lang = language;
     recognition.continuous = true;
@@ -126,96 +147,95 @@ export const VoiceInputAssistant: React.FC = () => {
       let interim = '';
       let finalText = '';
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const text = event.results[i][0]?.transcript || '';
-        if (event.results[i].isFinal) finalText += text;
-        else interim += text;
+        const transcript = event.results[i][0]?.transcript || '';
+        if (event.results[i].isFinal) finalText += transcript;
+        else interim += transcript;
       }
       setInterimText(interim);
       if (finalText.trim()) insertTranscript(finalText.trim());
     };
     recognition.onerror = (event) => {
-      listeningRef.current = false;
       setIsListening(false);
       setInterimText('');
       const messages: Record<string, string> = {
-        'not-allowed': 'Microphone permission দিন, তারপর আবার চেষ্টা করুন।',
-        'service-not-allowed': 'Browser microphone access অনুমোদন করছে না। Site permission পরীক্ষা করুন।',
-        'no-speech': 'কোনো কথা শনাক্ত হয়নি। আবার চেষ্টা করুন।',
-        'audio-capture': 'Microphone পাওয়া যাচ্ছে না। Device connection পরীক্ষা করুন।',
-        network: 'Voice recognition service-এ সমস্যা হয়েছে। Internet সংযোগ পরীক্ষা করুন।',
+        'not-allowed': 'Microphone permission দিন, তারপর আবার চেষ্টা করুন.',
+        'service-not-allowed': 'Browser microphone access অনুমোদন করছে না.',
+        'no-speech': 'কোনো কথা শনাক্ত হয়নি। আবার চেষ্টা করুন.',
+        'audio-capture': 'Microphone পাওয়া যাচ্ছে না। Device পরীক্ষা করুন.',
+        network: 'Voice recognition service-এ সমস্যা হয়েছে। Internet পরীক্ষা করুন.',
       };
-      setNotice(messages[event.error] || 'Voice recognition বন্ধ হয়েছে। আবার চেষ্টা করুন।');
+      setNotice(messages[event.error] || 'Voice recognition বন্ধ হয়েছে। আবার চেষ্টা করুন.');
     };
     recognition.onend = () => {
-      listeningRef.current = false;
       setIsListening(false);
       setInterimText('');
     };
+    recognitionRef.current?.abort();
     recognitionRef.current = recognition;
-    listeningRef.current = true;
-    setIsListening(true);
-    setIsOpen(true);
     setNotice(language === 'bn-BD' ? 'বাংলায় বলুন…' : 'Speak in English…');
+    setIsListening(true);
     try {
       recognition.start();
     } catch {
-      listeningRef.current = false;
       setIsListening(false);
-      setNotice('Microphone চালু করা যায়নি। আবার চেষ্টা করুন।');
+      setNotice('Microphone চালু করা যায়নি। আবার চেষ্টা করুন.');
     }
   }, [insertTranscript, language]);
 
-  if (!target && !isOpen) return null;
-
   return (
-    <div data-voice-assistant className="fixed bottom-5 right-5 z-[100] flex flex-col items-end gap-2 print:hidden">
-      {isOpen && (
-        <section className="w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-2xl">
-          <div className="flex items-center justify-between gap-3 bg-emerald-800 px-4 py-3 text-white">
-            <div className="flex items-center gap-2">
-              <span className={`flex h-9 w-9 items-center justify-center rounded-full ${isListening ? 'bg-rose-500' : 'bg-white/15'}`}>
-                {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-              </span>
-              <div>
-                <p className="text-sm font-bold">AgroChain Voice Input</p>
-                <p className="text-[11px] text-emerald-100">বাংলা ও English</p>
-              </div>
-            </div>
-            <button type="button" onClick={() => { stopListening(); setIsOpen(false); }} aria-label="Close voice input" className="rounded-lg p-1.5 hover:bg-white/10">
-              <X className="h-4 w-4" />
+    <>
+      {fields.map(({ element, rect }) => {
+        const key = fieldKey(element);
+        const isPanelOpen = panelField === element;
+        const right = Math.max(8, window.innerWidth - rect.right + 5);
+        const top = rect.top + Math.max(0, (rect.height - 30) / 2);
+        return createPortal(
+          <React.Fragment key={key}>
+            <button
+              type="button"
+              data-voice-assistant
+              aria-label="এই field-এ voice দিয়ে লিখুন"
+              title="Voice to text"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setPanelField((current) => current === element ? null : element);
+                setNotice('');
+                setActiveField(element);
+                activeFieldRef.current = element;
+              }}
+              style={{ position: 'fixed', top, right, zIndex: 80, width: 30, height: 30 }}
+              className={`flex items-center justify-center rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 ${isListening && activeField === element ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+            >
+              <Mic className="h-[17px] w-[17px]" />
             </button>
-          </div>
-          <div className="space-y-3 p-4">
-            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-              <Languages className="h-4 w-4 text-emerald-700" />
-              Voice language
-              <select value={language} disabled={isListening} onChange={(event) => setLanguage(event.target.value as VoiceLanguage)} className="ml-auto rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs">
-                <option value="bn-BD">বাংলা</option>
-                <option value="en-US">English</option>
-              </select>
-            </label>
-            <p className="text-xs leading-5 text-slate-600">যে text field-এ লিখতে চান, সেটিতে ক্লিক করে microphone চাপুন। কথা শেষ হলে Stop করুন; text edit করে তারপর submit করুন।</p>
-            {interimText && <div className="rounded-lg bg-emerald-50 p-2 text-xs text-emerald-900"><span className="font-semibold">শুনছি: </span>{interimText}</div>}
-            {notice && <p role="status" aria-live="polite" className="rounded-lg bg-slate-50 p-2 text-xs leading-5 text-slate-600">{notice}</p>}
-            <div className="flex gap-2">
-              {!isListening ? (
-                <button type="button" onClick={startListening} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-800">
-                  <Mic className="h-4 w-4" /> Start speaking
-                </button>
-              ) : (
-                <button type="button" onClick={stopListening} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-rose-700">
-                  <MicOff className="h-4 w-4" /> Stop listening
-                </button>
-              )}
-            </div>
-            <p className="text-[10px] leading-4 text-slate-400">Voice recognition depends on browser support and internet access. Microphone permission is required.</p>
-          </div>
-        </section>
-      )}
-      <button type="button" onClick={() => setIsOpen((value) => !value)} aria-label="Open AgroChain voice input" title="Voice to text" className="flex h-12 items-center gap-2 rounded-full bg-emerald-700 px-4 text-sm font-bold text-white shadow-lg ring-4 ring-white transition hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-400">
-        <Mic className="h-5 w-5" />
-        <span>Voice to Text</span>
-      </button>
-    </div>
+            {isPanelOpen && createPortal(
+              <section data-voice-assistant-ignore style={{ position: 'fixed', top: Math.max(8, rect.top - 8), right, transform: 'translateY(-100%)', zIndex: 90, width: 'min(300px, calc(100vw - 24px))' }} className="rounded-xl border border-emerald-100 bg-white p-3 shadow-xl">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <Languages className="h-4 w-4 text-emerald-700" /> Voice input
+                  <select aria-label="Voice language" value={language} disabled={isListening} onChange={(event) => setLanguage(event.target.value as VoiceLanguage)} className="ml-auto rounded-md border border-slate-200 bg-white px-2 py-1 text-xs">
+                    <option value="bn-BD">বাংলা</option>
+                    <option value="en-US">English</option>
+                  </select>
+                </div>
+                <p className="mb-2 text-xs text-slate-600">এই field-এ কথা বলুন। Text পরে edit করতে পারবেন।</p>
+                {interimText && <p className="mb-2 rounded bg-emerald-50 p-2 text-xs text-emerald-900">{interimText}</p>}
+                {notice && <p role="status" aria-live="polite" className="mb-2 text-xs text-slate-600">{notice}</p>}
+                <div className="flex gap-2">
+                  {!isListening ? (
+                    <button type="button" onClick={() => startListening(element)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800"><Mic className="h-4 w-4" /> Start speaking</button>
+                  ) : (
+                    <button type="button" onClick={stopListening} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"><MicOff className="h-4 w-4" /> Stop</button>
+                  )}
+                  <button type="button" onClick={() => { stopListening(); setPanelField(null); }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600">Close</button>
+                </div>
+                <p className="mt-2 text-[10px] leading-4 text-slate-400">Browser support and microphone permission required.</p>
+              </section>,
+              document.body
+            )}
+          </React.Fragment>,
+          document.body
+        );
+      })}
+    </>
   );
 };
