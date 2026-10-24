@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import type { DeliveryPartner } from '../../types';
@@ -32,6 +32,14 @@ export const WarehousePartnerApprovals: React.FC = () => {
   const [partners, setPartners] = useState<DeliveryPartner[]>(() =>
     store.deliveryPartners.filter(canManagePartner)
   );
+
+  useEffect(() => {
+    let mounted = true;
+    agroApi.getDeliveryPartners().then(() => {
+      if (mounted) setPartners(store.deliveryPartners.filter(canManagePartner));
+    }).catch((error) => console.warn('Could not load partner applications.', error));
+    return () => { mounted = false; };
+  }, [user?.id, user?.role]);
   const [notice, setNotice] = useState<string | null>(null);
   const [infoModalPartner, setInfoModalPartner] =
     useState<DeliveryPartner | null>(null);

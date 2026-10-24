@@ -210,7 +210,8 @@ export const agroApi = {
     name: string;
     email: string;
     password: string;
-    role: 'farmer' | 'buyer' | 'delivery';
+    role: 'farmer' | 'buyer' | 'delivery' | 'warehouse';
+    profile?: Record<string, unknown>;
   }): Promise<{ message: string; user: User }> {
     const res = await fetch(`${API_BASE_URL}/register/`, {
       method: 'POST',
@@ -291,6 +292,39 @@ export const agroApi = {
     if (!res.ok) throw new Error(data.message || `Admin password recovery failed (${res.status})`);
     if (typeof data.message !== 'string') throw new Error('The server returned an invalid recovery response');
     return data as { message: string };
+  },
+
+  async getWarehouseApplications(): Promise<Array<Record<string, any>>> {
+    return getBackendRecords<Record<string, any>>('warehouseApplications');
+  },
+
+  async approveWarehouseApplication(application: Record<string, any>): Promise<void> {
+    const warehouseId = `wh-${application.id}`;
+    const warehouse = {
+      id: warehouseId,
+      name: application.warehouseName,
+      code: `WH-${String(application.district || 'BD').slice(0, 3).toUpperCase()}-${String(application.id).slice(-5).toUpperCase()}`,
+      type: application.warehouseType === 'CENTRAL' ? 'CENTRAL' : 'REGIONAL_GODOWN',
+      location: `${application.address}, ${application.upazila}, ${application.district}`,
+      managerName: application.managerName,
+      managerId: application.managerId,
+      capacityMetricTons: Number(application.capacityMetricTons),
+      currentStockMetricTons: 0,
+      temperatureControlled: application.temperatureControlled === true,
+      district: application.district,
+      upazila: application.upazila,
+      status: 'ACTIVE',
+      isMainWarehouse: application.isMainWarehouse === true,
+    };
+    await saveBackendRecord('warehouses', warehouse);
+    const updatedApplication = {
+      ...application,
+      id: String(application.id),
+      applicationStatus: 'APPROVED',
+      approvedAt: new Date().toISOString(),
+    };
+    await saveBackendRecord('warehouseApplications', updatedApplication);
+    await this.updateAccountStatus(application.managerId, 'ACTIVE');
   },
 
   async getAdminUsers(): Promise<AdminAccount[]> {
@@ -1084,7 +1118,15 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
 
   // UPDATE 2: Delivery Partner Approvals (Admin & Warehouse Manager)
   async getDeliveryPartners(): Promise<DeliveryPartner[]> {
-    return store.deliveryPartners;
+    try {
+      const partners = await getBackendRecords<DeliveryPartner>('deliveryPartners');
+      store.deliveryPartners = partners;
+      localStorage.setItem('agro_delivery_partners', JSON.stringify(partners));
+      return partners;
+    } catch (error) {
+      console.warn('Could not refresh delivery partners from the backend.', error);
+      return store.deliveryPartners;
+    }
   },
 
   async updatePartnerApproval(
@@ -1106,6 +1148,10 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       partner.approvalNotes = notes;
     }
 
+    await saveBackendRecord('deliveryPartners', partner);
+    if (approverRole === 'ADMIN') {
+      await this.updateAccountStatus(partnerId, status === 'APPROVED' ? 'ACTIVE' : 'SUSPENDED');
+    }
     localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
     return partner;
   },
@@ -1570,7 +1616,7 @@ const events =
           sourceWarehouseName: targetOrder.warehouseName || 'Central Dhaka Agro-Logistics Center, Gazipur',
           destinationGodownId: routing.godown?.id || 'unassigned',
           destinationGodownName: routing.godown?.name || 'Unassigned - Manual Review Required',
-          customerArea: targetOrder.buyerCity,
+          customerArea: targetOrder.buyerArea || targetOrder.buyerCity,
           customerAddress: targetOrder.buyerAddress,
           customerName: targetOrder.buyerName,
           customerPhone: targetOrder.buyerPhone,
@@ -1894,9 +1940,23 @@ const events =
       status: 'COMPLETED',
     });
 
-    // CRITICAL STEP: Automatic Area-Based Delivery Partner Assignment
-    const areaQuery = shipment.customerArea || (order?.buyerAddress || '');
-    const assignResult = autoAssignDeliveryPartner(areaQuery, shipment.customerAddress, store.deliveryPartners);
+    // CRITICAL STEP: Automatic district + area-based delivery assignment.
+    // Refresh approved partner records from PostgreSQL first; localStorage can be stale
+    // or contain demo profiles and must not be the source of truth for real assignments.
+    const areaQuery = order?.buyerArea || shipment.customerArea || '';
+    const destinationDistrict = order?.buyerCity || '';
+    let currentPartners = store.deliveryPartners;
+    try {
+      currentPartners = await this.getDeliveryPartners();
+    } catch (error) {
+      console.warn('Could not refresh delivery partner profiles before assignment.', error);
+    }
+    const assignResult = autoAssignDeliveryPartner(
+      areaQuery,
+      shipment.customerAddress || order?.buyerAddress || '',
+      currentPartners,
+      destinationDistrict
+    );
 
     let assignedPartner: DeliveryPartner | undefined = undefined;
 

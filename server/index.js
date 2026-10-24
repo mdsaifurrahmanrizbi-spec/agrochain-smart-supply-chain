@@ -18,6 +18,8 @@ const allowedOrigins = new Set([
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
   'https://bucolic-llama-369eaf.netlify.app',
+  'https://phenomenal-sawine-3144eb.netlify.app',
+  'https://agrochain-smart-supply-chain.vercel.app',
   ...(process.env.CORS_ORIGINS || '')
     .split(',')
     .map((origin) => origin.trim())
@@ -64,81 +66,125 @@ app.get('/api/roles/', (req, res) => {
   res.json(roles);
 });
 
-// Public registration: self-service roles only.
+// Public registration for customer, farmer, delivery and warehouse applications.
 app.post('/api/register/', async (req, res) => {
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
-  const email = typeof req.body?.email === 'string'
-    ? req.body.email.trim().toLowerCase()
-    : '';
-  const password = typeof req.body?.password === 'string'
-    ? req.body.password
-    : '';
-  const requestedRole = typeof req.body?.role === 'string'
-    ? req.body.role.trim().toLowerCase()
-    : '';
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  const requestedRole = typeof req.body?.role === 'string' ? req.body.role.trim().toLowerCase() : '';
+  const profile = req.body?.profile && typeof req.body.profile === 'object' && !Array.isArray(req.body.profile)
+    ? req.body.profile : {};
+  const allowedRegistrationRoles = new Set(['farmer', 'buyer', 'delivery', 'warehouse']);
 
-  const allowedRegistrationRoles = new Set(['farmer', 'buyer', 'delivery']);
+  if (!name || name.length > 120) return res.status(400).json({ message: 'Name is required and must be at most 120 characters' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ message: 'Enter a valid email address' });
+  if (password.length < 12 || password.length > 128) return res.status(400).json({ message: 'Password must be 12 to 128 characters long' });
+  if (!allowedRegistrationRoles.has(requestedRole)) return res.status(400).json({ message: 'This role cannot be registered publicly' });
 
-  if (!name || name.length > 120) {
-    return res.status(400).json({ message: 'Name is required and must be at most 120 characters' });
+  const phone = typeof profile.phone === 'string' ? profile.phone.trim() : '';
+  if (['delivery', 'warehouse'].includes(requestedRole) && (!phone || phone.length > 30)) {
+    return res.status(400).json({ message: 'A valid phone number is required for logistics accounts' });
+  }
+  if (requestedRole === 'delivery') {
+    const nid = typeof profile.nid === 'string' ? profile.nid.replace(/[ -]/g, '') : '';
+    const areas = Array.isArray(profile.assignedAreas) ? profile.assignedAreas.filter((a) => typeof a === 'string' && a.trim()) : [];
+    const districts = Array.isArray(profile.serviceDistricts) ? profile.serviceDistricts.filter((d) => typeof d === 'string' && d.trim()) : [];
+    if (!/^\d{10,17}$/.test(nid)) return res.status(400).json({ message: 'A valid 10–17 digit NID number is required' });
+    if (typeof profile.address !== 'string' || !profile.address.trim() ||
+        typeof profile.homeDistrict !== 'string' || !profile.homeDistrict.trim() ||
+        typeof profile.homeUpazila !== 'string' || !profile.homeUpazila.trim()) {
+      return res.status(400).json({ message: 'Current address, home district and upazila/thana are required' });
+    }
+    if (!districts.length || !areas.length || !profile.vehicleRegNumber ||
+        (!profile.canPickup && !profile.canDeliver)) {
+      return res.status(400).json({ message: 'Choose service districts and areas, a vehicle registration number, and at least one service type' });
+    }
+  }
+  if (requestedRole === 'warehouse') {
+    if (typeof profile.warehouseName !== 'string' || !profile.warehouseName.trim() ||
+        typeof profile.address !== 'string' || !profile.address.trim() ||
+        typeof profile.district !== 'string' || !profile.district.trim() ||
+        typeof profile.upazila !== 'string' || !profile.upazila.trim() ||
+        !Number.isFinite(Number(profile.capacityMetricTons)) || Number(profile.capacityMetricTons) <= 0) {
+      return res.status(400).json({ message: 'Warehouse name, full address, district, area and positive capacity are required' });
+    }
+    if (profile.warehouseType === 'CENTRAL' &&
+        (profile.district !== 'Dhaka' || String(profile.upazila).trim().toLowerCase() !== 'tejgaon')) {
+      return res.status(400).json({ message: 'The main / central warehouse must be located in Dhaka, Tejgaon' });
+    }
   }
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
-    return res.status(400).json({ message: 'Enter a valid email address' });
-  }
-
-  if (password.length < 12 || password.length > 128) {
-    return res.status(400).json({ message: 'Password must be 12 to 128 characters long' });
-  }
-
-  if (!allowedRegistrationRoles.has(requestedRole)) {
-    return res.status(400).json({ message: 'This role cannot be registered publicly' });
-  }
-
-  const status = requestedRole === 'delivery' ? 'PENDING' : 'ACTIVE';
-
+  const status = ['delivery', 'warehouse'].includes(requestedRole) ? 'PENDING' : 'ACTIVE';
+  const client = await pool.connect();
   try {
-    const existing = await pool.query(
-      'SELECT id FROM auth_users WHERE email = $1 AND role = $2',
-      [email, requestedRole]
-    );
-
+    await client.query('BEGIN');
+    const existing = await client.query('SELECT id FROM auth_users WHERE email = $1 AND role = $2', [email, requestedRole]);
     if (existing.rowCount > 0) {
+      await client.query('ROLLBACK');
       return res.status(409).json({ message: 'An account with this email already exists' });
     }
-
+    const crypto = await import('node:crypto');
+    const id = 'usr_' + crypto.randomUUID();
     const passwordHash = await bcrypt.hash(password, 12);
-    const id = 'usr_' + (await import('node:crypto')).randomUUID();
-
-    const result = await pool.query(
+    const result = await client.query(
       `INSERT INTO auth_users (id, name, email, password_hash, role, status)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, name, email, role, status, created_at`,
       [id, name, email, passwordHash, requestedRole, status]
     );
-
     const account = result.rows[0];
 
-    return res.status(201).json({
-      message: requestedRole === 'delivery'
-        ? 'Delivery Partner application submitted. You can log in after an administrator approves your account.'
-        : 'Account created successfully. You can now log in.',
-      user: {
-        id: account.id,
-        name: account.name,
-        email: account.email,
-        role: account.role,
-        status: account.status,
-        createdAt: account.created_at,
-      },
-    });
-  } catch (error) {
-    if (error.code === '23505') {
-      return res.status(409).json({ message: 'An account with this email already exists' });
+    if (requestedRole === 'delivery') {
+      const partner = {
+        id, name, email, phone, nid: String(profile.nid).trim(), address: String(profile.address).trim(),
+        permanentAddress: String(profile.permanentAddress || '').trim(),
+        homeDistrict: String(profile.homeDistrict), homeUpazila: String(profile.homeUpazila).trim(),
+        preferredArea: String(profile.preferredArea || ''),
+        assignedAreas: profile.assignedAreas, serviceDistricts: profile.serviceDistricts,
+        serviceAreasByDistrict: profile.serviceAreasByDistrict || {},
+        vehicleType: profile.vehicleType, vehicleRegNumber: String(profile.vehicleRegNumber).trim(),
+        canPickup: profile.canPickup === true, canDeliver: profile.canDeliver === true,
+        approvalStatus: 'PENDING_APPROVAL', approvalNotes: '', rating: 0,
+        activeJobsCount: 0, completedJobsTotal: 0, codCollectedToday: 0, codPendingDeposit: 0,
+      };
+      await client.query(
+        `INSERT INTO agrochain_records (resource, id, data) VALUES ('deliveryPartners', $1, $2::jsonb)
+         ON CONFLICT (resource, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [id, JSON.stringify(partner)]
+      );
+    } else if (requestedRole === 'warehouse') {
+      const application = {
+        id, managerId: id, managerName: name, managerEmail: email, managerPhone: phone,
+        warehouseName: String(profile.warehouseName).trim(), warehouseType: profile.warehouseType === 'CENTRAL' ? 'CENTRAL' : 'REGIONAL_GODOWN',
+        district: String(profile.district), upazila: String(profile.upazila).trim(),
+        address: String(profile.address).trim(), capacityMetricTons: Number(profile.capacityMetricTons),
+        temperatureControlled: profile.temperatureControlled === true,
+        isMainWarehouse: profile.isMainWarehouse === true,
+        applicationStatus: 'PENDING_APPROVAL', submittedAt: new Date().toISOString(),
+      };
+      await client.query(
+        `INSERT INTO agrochain_records (resource, id, data) VALUES ('warehouseApplications', $1, $2::jsonb)
+         ON CONFLICT (resource, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [id, JSON.stringify(application)]
+      );
     }
 
+    await client.query('COMMIT');
+    return res.status(201).json({
+      message: requestedRole === 'delivery'
+        ? 'Delivery Partner application submitted with your NID, address, vehicle and service areas. Sign-in will be enabled after admin approval.'
+        : requestedRole === 'warehouse'
+          ? 'Warehouse application submitted. It will become operational only after admin review and approval.'
+          : 'Account created successfully. You can now log in.',
+      user: { id: account.id, name: account.name, email: account.email, role: account.role, status: account.status, createdAt: account.created_at },
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (error.code === '23505') return res.status(409).json({ message: 'An account with this email already exists' });
     console.error('Registration failed:', error.message);
     return res.status(500).json({ message: 'Registration could not be completed' });
+  } finally {
+    client.release();
   }
 });
 
@@ -656,6 +702,7 @@ const allowedResources = new Set([
   'batches',
   'products',
   'warehouses',
+  'warehouseApplications',
   'inventory',
   'deliveryPartners',
   'orders',
@@ -688,6 +735,7 @@ const resourceWriteRoles = {
 };
 
 function canReadResource(role, resource) {
+  if (resource === 'warehouseApplications') return role === 'admin';
   if (resource === 'users') return role === 'admin';
   if (resource === 'settlements') return ['admin', 'farmer', 'warehouse'].includes(role);
   if (resource === 'codRecords') return ['admin', 'warehouse'].includes(role);
@@ -695,6 +743,7 @@ function canReadResource(role, resource) {
 }
 
 function canWriteResource(role, resource) {
+  if (resource === 'warehouseApplications') return role === 'admin';
   return resourceWriteRoles[resource]?.includes(role) === true;
 }
 

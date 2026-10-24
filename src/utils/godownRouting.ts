@@ -191,7 +191,8 @@ export function selectDestinationLocalGodown(
 export function autoAssignDeliveryPartner(
   customerArea: string,
   customerAddress: string,
-  partners: DeliveryPartner[]
+  partners: DeliveryPartner[],
+  customerDistrict: string = ''
 ): DeliveryPartnerAssignmentResult {
   // Consider both the area and the full address.
   // This avoids relying exclusively on the godown service area.
@@ -222,6 +223,29 @@ export function autoAssignDeliveryPartner(
       return false;
     }
 
+    // Rule 2a: If the order district is known, require the partner to
+    // have selected that district. Do not let an area name in another
+    // district qualify by itself.
+    const requestedDistrict = cleanText(customerDistrict);
+    if (requestedDistrict) {
+      const registeredDistricts = Array.isArray((partner as any).serviceDistricts)
+        ? (partner as any).serviceDistricts.map((d: string) => cleanText(d))
+        : [];
+      const districtsFromAreas = (Array.isArray(partner.assignedAreas) ? partner.assignedAreas : [])
+        .filter((area): area is string => typeof area === 'string')
+        .map((area) => cleanText(area.split(',').slice(1).join(',')))
+        .filter(Boolean);
+      const knownDistricts = [...registeredDistricts, ...districtsFromAreas];
+      // Legacy profiles without district metadata remain eligible only
+      // when the area explicitly includes the requested district.
+      if (knownDistricts.length > 0 && !knownDistricts.includes(requestedDistrict)) {
+        return false;
+      }
+      if (knownDistricts.length === 0) {
+        return false;
+      }
+    }
+
     // Rule 3: Validate active job count and capacity.
     const activeJobs = Number(partner.activeJobsCount ?? 0);
 
@@ -244,11 +268,13 @@ export function autoAssignDeliveryPartner(
         : '';
 
     const servesCustomer = targets.some((target) => {
-      const matchesAssignedArea = assignedAreas.some(
-        (area) =>
-          typeof area === 'string' &&
-          areaMatches(target, area)
-      );
+      const matchesAssignedArea = assignedAreas.some((area) => {
+        if (typeof area !== 'string') return false;
+        // Registration stores areas as "Area, District". Match the specific
+        // area label first so "Tejgaon, Dhaka" can match an order for "Tejgaon".
+        const areaLabel = area.split(',')[0]?.trim() || '';
+        return areaMatches(target, areaLabel) || areaMatches(areaLabel, target);
+      });
 
       const matchesPreferredArea =
         preferredArea.length > 0 &&

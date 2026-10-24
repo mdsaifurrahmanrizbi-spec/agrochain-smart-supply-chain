@@ -268,6 +268,8 @@ export interface DeliveryPartner {
   nid: string;
   address: string;
   preferredArea: string;
+  /** Districts selected by the partner during registration. */
+  serviceDistricts?: string[];
   assignedAreas: string[];
     warehouseId?: string;
   vehicleType: 'Motorcycle' | 'Pickup Van' | 'Cargo Auto' | 'Mini Truck';
@@ -333,6 +335,25 @@ export interface Warehouse {
   capacityMetricTons: number;
   currentStockMetricTons: number;
   temperatureControlled: boolean;
+}
+
+export interface WarehouseApplication {
+  id: string;
+  managerId: string;
+  managerName: string;
+  managerEmail: string;
+  managerPhone: string;
+  warehouseName: string;
+  warehouseType: 'CENTRAL' | 'REGIONAL_GODOWN';
+  district: string;
+  upazila: string;
+  address: string;
+  capacityMetricTons: number;
+  temperatureControlled: boolean;
+  isMainWarehouse: boolean;
+  applicationStatus: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  submittedAt: string;
+  approvedAt?: string;
 }
 
 export interface WarehouseInventoryItem {
