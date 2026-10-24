@@ -980,6 +980,33 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     // Delivery accounts may perform QC only when their partner profile is assigned
     // to this order's active pickup job. Never trust a client-supplied inspector ID.
     let assignedPickupQcPartner = null;
+    let authorizedPickupQcOrder = false;
+    if (resource === 'orders' && role === 'delivery' && existing && data.qualityStatus !== existing.qualityStatus) {
+      const accountResult = await client.query('SELECT email FROM auth_users WHERE id = $1 LIMIT 1', [req.auth.sub]);
+      const accountEmail = accountResult.rows[0]?.email || req.auth.email || '';
+      const partnerResult = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'deliveryPartners' AND (id = $1 OR lower(data->>'email') = lower($2)) LIMIT 1",
+        [req.auth.sub, accountEmail]
+      );
+      const partnerId = partnerResult.rows[0]?.id;
+      if (partnerId) {
+        const pickupResult = await client.query(
+          "SELECT id FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'PICKUP' AND data->>'partnerId' = $2 LIMIT 1",
+          [id, partnerId]
+        );
+        const qcResult = await client.query(
+          "SELECT data FROM agrochain_records WHERE resource = 'qualityChecks' AND data->>'orderId' = $1 AND data->>'inspectorId' = $2 LIMIT 1",
+          [id, partnerId]
+        );
+        const qc = qcResult.rows[0]?.data;
+        authorizedPickupQcOrder = Boolean(pickupResult.rows[0] && qc && qc.status === data.qualityStatus &&
+          ['APPROVED', 'REJECTED', 'RECHECK_REQUIRED'].includes(String(qc.status)));
+      }
+      if (!authorizedPickupQcOrder) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Only the assigned pickup person may update order QC status after recording the inspection' });
+      }
+    }
     if (resource === 'qualityChecks' && role === 'delivery' && existing?.orderId) {
       const accountResult = await client.query('SELECT email FROM auth_users WHERE id = $1 LIMIT 1', [req.auth.sub]);
       const accountEmail = accountResult.rows[0]?.email || req.auth.email || '';
@@ -1298,7 +1325,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       'RECHECK_REQUIRED',
     ];
     const privilegedQcRoles = ['admin', 'inspector'];
-    const mayDecideQc = privilegedQcRoles.includes(role) || Boolean(assignedPickupQcPartner);
+    const mayDecideQc = privilegedQcRoles.includes(role) || Boolean(assignedPickupQcPartner) || authorizedPickupQcOrder;
     const finalQcStatuses = ['APPROVED', 'REJECTED'];
 
     if (
