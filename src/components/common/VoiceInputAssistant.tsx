@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Languages, Mic, MicOff } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 type SpeechAlternative = { transcript: string };
 type SpeechResult = { isFinal: boolean; length: number; [index: number]: SpeechAlternative };
@@ -46,15 +47,18 @@ const fieldKey = (element: HTMLInputElement | HTMLTextAreaElement) => {
 };
 
 export const VoiceInputAssistant: React.FC = () => {
+  const { language: appLanguage, voiceLocale } = useLanguage();
   const [fields, setFields] = useState<VoiceField[]>([]);
   const [activeField, setActiveField] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
-  const [language, setLanguage] = useState<VoiceLanguage>('bn-BD');
+  const [language, setLanguage] = useState<VoiceLanguage>('en-US');
   const [isListening, setIsListening] = useState(false);
   const [notice, setNotice] = useState('');
   const [interimText, setInterimText] = useState('');
   const [panelField, setPanelField] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const activeFieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+
+  useEffect(() => { setLanguage(voiceLocale); }, [voiceLocale]);
 
   const refreshFields = useCallback(() => {
     const next: VoiceField[] = Array.from(document.querySelectorAll('input, textarea'))
