@@ -85,7 +85,9 @@ async function saveBackendRecord<T extends { id: string }>(
   );
 
   if (!response.ok) {
-    throw new Error(`Failed to save ${resource}: ${response.status}`);
+    const payload = await response.json().catch(() => ({}));
+    const detail = typeof payload.message === 'string' ? `: ${payload.message}` : '';
+    throw new Error(`Failed to save ${resource}: ${response.status}${detail}`);
   }
 }
 
@@ -639,88 +641,41 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     store.orders.unshift(newOrder);
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
 
-    // Every confirmed order enters the QC queue before any pickup job can be created.
-    // Measurements remain explicitly unrecorded until an inspector performs the physical inspection.
+    // The backend atomically creates and links a pending QC queue record when
+    // the buyer's order is first inserted. Avoid duplicate QC writes and immediate
+    // order rewrites, which caused checkout 403s after the first insert.
     const firstItem = newOrder.items[0];
     const relatedBatch = store.batches.find((batch) =>
       batch.farmerId === firstItem?.farmerId &&
       (batch.cropName === firstItem?.productName || batch.id === firstItem?.productId)
     );
-    const existingQc = store.qualityChecks.find((qc) => qc.orderId === newOrder.id);
-    if (!existingQc) {
-      const pendingQc: QualityCheck = {
-        id: `qc-${Date.now()}`,
-        orderId: newOrder.id,
-        batchId: relatedBatch?.id || firstItem?.productId || `unassigned-${newOrder.id}`,
-        batchCode: relatedBatch?.batchCode || 'BATCH-PENDING-ASSIGNMENT',
-        cropName: newOrder.items.map((item) => item.productName).join(', '),
-        farmerName: newOrder.items.map((item) => item.farmerName).filter(Boolean).join(', ') || 'Farmer not assigned',
-        farmLocation: store.products.find((product) => product.batchId === relatedBatch?.id || product.id === firstItem?.productId)?.farmLocation || 'Farm location pending verification',
-        inspectorId: '',
-        inspectorName: 'Unassigned Inspector',
-        inspectionDate: '',
-        inspectionLocation: 'FARM',
-        grade: 'Not graded',
-        moistureContentPercent: 0,
-        pesticideResiduePpm: 0,
-        foreignMatterPercent: 0,
-        status: 'PENDING',
-        remarks: 'Awaiting physical QC inspection. Measurements and grade have not been recorded.',
-      };
-      await saveBackendRecord('qualityChecks', pendingQc);
-      store.qualityChecks.unshift(pendingQc);
-      newOrder.qualityCheckId = pendingQc.id;
-      newOrder.qualityStatus = 'PENDING';
-      await saveBackendRecord('orders', newOrder);
-      localStorage.setItem('agro_quality_checks', JSON.stringify(store.qualityChecks));
-      localStorage.setItem('agro_orders', JSON.stringify(store.orders));
-    }
+    const pendingQc: QualityCheck = {
+      id: newOrder.qualityCheckId || `qc-order-${newOrder.id}`,
+      orderId: newOrder.id,
+      batchId: relatedBatch?.id || firstItem?.productId || `unassigned-${newOrder.id}`,
+      batchCode: relatedBatch?.batchCode || 'BATCH-PENDING-ASSIGNMENT',
+      cropName: newOrder.items.map((item) => item.productName).join(', '),
+      farmerName: newOrder.items.map((item) => item.farmerName).filter(Boolean).join(', ') || 'Farmer not assigned',
+      farmLocation: store.products.find((product) => product.batchId === relatedBatch?.id || product.id === firstItem?.productId)?.farmLocation || 'Farm location pending verification',
+      inspectorId: '',
+      inspectorName: 'Unassigned Inspector',
+      inspectionDate: '',
+      inspectionLocation: 'FARM',
+      grade: 'Not graded',
+      moistureContentPercent: 0,
+      pesticideResiduePpm: 0,
+      foreignMatterPercent: 0,
+      status: 'PENDING',
+      remarks: 'Awaiting physical QC inspection. Measurements and grade have not been recorded.',
+    };
+    newOrder.qualityCheckId = pendingQc.id;
+    newOrder.qualityStatus = 'PENDING';
+    store.qualityChecks.unshift(pendingQc);
+    localStorage.setItem('agro_quality_checks', JSON.stringify(store.qualityChecks));
+    localStorage.setItem('agro_orders', JSON.stringify(store.orders));
 
-    // Assign a pickup person by farm service area immediately after order confirmation.
-    // The assigned pickup person is also responsible for performing the farm-gate QC.
-    const farmLocation = store.qualityChecks.find((qc) => qc.orderId === newOrder.id)?.farmLocation
-      || store.products.find((product) => product.batchId === relatedBatch?.id || product.id === firstItem?.productId)?.farmLocation
-      || '';
-    const existingPickupJob = store.jobs.find((job) => job.orderId === newOrder.id && job.type === 'PICKUP');
-    if (!existingPickupJob) {
-      const normalizeArea = (value: string) => value.toLowerCase().replace(/[,/]/g, ' ').replace(/\s+/g, ' ').trim();
-      const originArea = normalizeArea(farmLocation);
-      const pickupPartner = store.deliveryPartners.find((candidate) => {
-        if (candidate.approvalStatus !== 'APPROVED' || !candidate.canPickup) return false;
-        const areas = [...(candidate.assignedAreas || []), candidate.preferredArea || '']
-          .map(normalizeArea)
-          .filter(Boolean);
-        if (!areas.length || !originArea || originArea.includes('pending verification')) return false;
-        return areas.some((area) => originArea.includes(area) || area.includes(originArea));
-      });
-      if (pickupPartner) {
-        const assignedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
-        const pickupJob: LogisticsJob = {
-          id: `job-${Date.now()}-pkp`,
-          jobCode: `JOB-PKP-${Math.floor(1000 + Math.random() * 9000)}`,
-          orderId: newOrder.id,
-          orderNumber: newOrder.orderNumber,
-          partnerId: pickupPartner.id,
-          partnerName: pickupPartner.name,
-          type: 'PICKUP',
-          productSummary: newOrder.items.map((item) => `${item.quantity} ${item.unit} ${item.productName}`).join(', '),
-          originAddress: farmLocation || 'Farm location pending verification',
-          destinationAddress: newOrder.warehouseName || 'Central Warehouse',
-          assignedDate: assignedAt,
-          status: 'ASSIGNED',
-          codAmount: 0,
-          updatedAt: assignedAt,
-        };
-        store.jobs.unshift(pickupJob);
-        newOrder.pickupPartnerId = pickupPartner.id;
-        newOrder.pickupPartnerName = pickupPartner.name;
-        newOrder.orderStatus = 'QC_SCHEDULED';
-        await saveBackendRecord('jobs', pickupJob);
-        await saveBackendRecord('orders', newOrder);
-        localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
-        localStorage.setItem('agro_orders', JSON.stringify(store.orders));
-      }
-    }
+    // Pickup assignment is handled by the authorized dispatch workflow, not by
+    // a second buyer order write based on stale local partner data.
 
     // Initialize tracking timeline for this order
     const initialTimeline: TrackingEvent[] = [
