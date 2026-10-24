@@ -11,6 +11,7 @@ function gatewayHeaders() {
   if (!apiKey) throw new Error('RUPANTORPAY_API_KEY is not configured');
   return {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
     'X-API-KEY': apiKey,
     'X-CLIENT': new URL(FRONTEND_URL).host,
   };
@@ -70,6 +71,23 @@ router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
     } catch {
       data = {};
     }
+    // HTML is unexpected for this JSON API. Log only safe page metadata to
+    // distinguish redirects, WAF pages, and server error templates.
+    const htmlTitle = !parsedJson
+      ? (rawBody.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '')
+          .replace(/<[^>]*>/g, ' ')
+          .replace(/&(?:amp|lt|gt|quot|#39);/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 120)
+      : '';
+    let finalResponseLocation = 'unavailable';
+    try {
+      const finalUrl = new URL(response.url);
+      finalResponseLocation = `${finalUrl.origin}${finalUrl.pathname}`;
+    } catch {
+      // Keep a non-sensitive fallback.
+    }
 
     // Only accept the documented top-level success fields and a trusted gateway
     // URL. Diagnostics intentionally record shape only, never raw response data.
@@ -97,6 +115,9 @@ router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
         httpStatus: response.status,
         contentType,
         parsedJson,
+        redirected: response.redirected,
+        finalResponseLocation,
+        htmlTitle: htmlTitle || 'missing',
         responseKeys: objectKeys(data),
         nestedObjectKeys: Object.fromEntries(
           Object.entries(data).filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value))
