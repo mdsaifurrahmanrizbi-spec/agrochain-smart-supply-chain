@@ -1116,7 +1116,15 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
 
   // UPDATE 2: Delivery Partner Approvals (Admin & Warehouse Manager)
   async getDeliveryPartners(): Promise<DeliveryPartner[]> {
-    return store.deliveryPartners;
+    try {
+      const partners = await getBackendRecords<DeliveryPartner>('deliveryPartners');
+      store.deliveryPartners = partners;
+      localStorage.setItem('agro_delivery_partners', JSON.stringify(partners));
+      return partners;
+    } catch (error) {
+      console.warn('Could not refresh delivery partners from the backend.', error);
+      return store.deliveryPartners;
+    }
   },
 
   async updatePartnerApproval(
@@ -1138,6 +1146,10 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       partner.approvalNotes = notes;
     }
 
+    await saveBackendRecord('deliveryPartners', partner);
+    if (approverRole === 'ADMIN') {
+      await this.updateAccountStatus(partnerId, status === 'APPROVED' ? 'ACTIVE' : 'SUSPENDED');
+    }
     localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
     return partner;
   },
