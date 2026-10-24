@@ -18,6 +18,8 @@ const allowedOrigins = new Set([
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
   'https://bucolic-llama-369eaf.netlify.app',
+  'https://phenomenal-sawine-3144eb.netlify.app',
+  'https://agrochain-smart-supply-chain.vercel.app',
   ...(process.env.CORS_ORIGINS || '')
     .split(',')
     .map((origin) => origin.trim())
