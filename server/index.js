@@ -76,8 +76,10 @@ app.post('/api/register/', async (req, res) => {
   const requestedRole = typeof req.body?.role === 'string'
     ? req.body.role.trim().toLowerCase()
     : '';
+  const phone = typeof req.body?.phone === 'string' ? req.body.phone.trim().slice(0, 32) : '';
+  const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 500) : '';
 
-  const allowedRegistrationRoles = new Set(['farmer', 'buyer', 'delivery']);
+  const allowedRegistrationRoles = new Set(['farmer', 'buyer', 'delivery', 'warehouse']);
 
   if (!name || name.length > 120) {
     return res.status(400).json({ message: 'Name is required and must be at most 120 characters' });
@@ -95,7 +97,7 @@ app.post('/api/register/', async (req, res) => {
     return res.status(400).json({ message: 'This role cannot be registered publicly' });
   }
 
-  const status = requestedRole === 'delivery' ? 'PENDING' : 'ACTIVE';
+  const status = ['delivery', 'warehouse'].includes(requestedRole) ? 'PENDING' : 'ACTIVE';
 
   try {
     const existing = await pool.query(
@@ -658,6 +660,7 @@ const allowedResources = new Set([
   'warehouses',
   'inventory',
   'deliveryPartners',
+  'warehouseApplications',
   'orders',
   'jobs',
   'qualityChecks',
