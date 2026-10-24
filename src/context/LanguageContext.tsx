@@ -397,7 +397,8 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
           if (current === null) return;
           if (!saved!.has(attr)) saved!.set(attr, current);
           const original = saved!.get(attr) || current;
-          root.setAttribute(attr, language === 'bn' ? (translations[original] || original) : original);
+          const translated = language === 'bn' ? (translations[original] || original) : original;
+          if (current !== translated) root.setAttribute(attr, translated);
         });
       }
       if (root instanceof Element || root instanceof Document) {
@@ -410,7 +411,8 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
             if (current === null) return;
             if (!saved.has(attr)) saved.set(attr, current);
             const original = saved.get(attr) || current;
-            element.setAttribute(attr, language === 'bn' ? (translations[original] || original) : original);
+            const translated = language === 'bn' ? (translations[original] || original) : original;
+            if (current !== translated) element.setAttribute(attr, translated);
           });
           originalAttributes.set(element, saved);
         });
@@ -425,7 +427,10 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
             if (!originalText.has(textNode)) originalText.set(textNode, textNode.nodeValue || '');
             const original = originalText.get(textNode) || '';
             const trimmed = original.trim();
-            if (trimmed && language === 'bn' && translations[trimmed] && textNode.parentElement && !textNode.parentElement.closest('script,style,textarea,[data-no-translate],.notranslate')) textNode.nodeValue = original === trimmed ? translations[trimmed] : original.replace(trimmed, translations[trimmed]);
+            if (trimmed && language === 'bn' && translations[trimmed] && textNode.parentElement && !textNode.parentElement.closest('script,style,textarea,[data-no-translate],.notranslate')) {
+              const translated = original === trimmed ? translations[trimmed] : original.replace(trimmed, translations[trimmed]);
+              if (textNode.nodeValue !== translated) textNode.nodeValue = translated;
+            }
           } else if (node.nodeType === Node.ELEMENT_NODE) translateElement(node);
         });
         if (record.type === 'attributes' && record.target instanceof Element) translateElement(record.target);
@@ -434,7 +439,10 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
           if (!originalText.has(textNode)) originalText.set(textNode, textNode.nodeValue || '');
           const original = originalText.get(textNode) || '';
           const trimmed = original.trim();
-          if (trimmed && textNode.parentElement && !textNode.parentElement.closest('script,style,textarea,[data-no-translate],.notranslate')) textNode.nodeValue = language === 'bn' ? (original === trimmed ? (translations[trimmed] || trimmed) : original.replace(trimmed, translations[trimmed] || trimmed)) : original;
+          if (trimmed && textNode.parentElement && !textNode.parentElement.closest('script,style,textarea,[data-no-translate],.notranslate')) {
+            const translated = language === 'bn' ? (original === trimmed ? (translations[trimmed] || trimmed) : original.replace(trimmed, translations[trimmed] || trimmed)) : original;
+            if (textNode.nodeValue !== translated) textNode.nodeValue = translated;
+          }
         }
       });
     });
