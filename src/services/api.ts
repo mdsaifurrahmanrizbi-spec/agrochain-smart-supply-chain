@@ -760,7 +760,21 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
 
   // Tracking Timeline
   async getTrackingEvents(orderId: string): Promise<TrackingEvent[]> {
-    return store.trackingEvents[orderId] || [];
+    try {
+      const backendEvents = await getBackendRecords<TrackingEvent>('trackingEvents');
+      const matching = backendEvents
+        .filter((event) => event.orderId === orderId)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      if (matching.length > 0) {
+        store.trackingEvents[orderId] = matching;
+        localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
+        return matching;
+      }
+    } catch (error) {
+      console.warn('Could not load tracking history from backend; using cached events.', error);
+    }
+    return [...(store.trackingEvents[orderId] || [])]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   },
 
   // Logistics Jobs
