@@ -99,7 +99,7 @@ export const VoiceInputAssistant: React.FC = () => {
     else element.value = nextValue;
     element.dispatchEvent(new Event('input', { bubbles: true }));
     const cursor = start + inserted.length;
-    element.setSelectionRange(cursor, cursor);
+    try { element.setSelectionRange(cursor, cursor); } catch { /* Some input types do not expose a text selection. */ }
     setNotice('Voice text যোগ হয়েছে—চাইলে edit করে submit করুন।');
   }, []);
 
