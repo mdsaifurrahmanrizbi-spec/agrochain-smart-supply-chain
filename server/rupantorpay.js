@@ -53,27 +53,59 @@ router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
         success_url: `${FRONTEND_URL}/buyer/payment-result?orderId=${encodeURIComponent(orderId)}`,
         cancel_url: `${FRONTEND_URL}/buyer/payment-result?orderId=${encodeURIComponent(orderId)}&cancelled=1`,
         webhook_url: `${process.env.API_PUBLIC_URL || 'https://agrochain-api.onrender.com'}/api/payment/rupantorpay/webhook`,
+        // RupantorPay's docs disagree between metadata and meta_data; send both
+        // aliases so the order reference survives either documented variant.
         metadata: { order_id: orderId, buyer_id: req.auth.sub },
+        meta_data: { order_id: orderId, buyer_id: req.auth.sub },
       }),
     });
-    const data = await response.json().catch(() => ({}));
-    // RupantorPay has returned both numeric (1) and boolean/string success
-    // values across its API responses. Accept documented success representations.
+    const contentType = response.headers.get('content-type') || 'unknown';
+    const rawBody = await response.text();
+    let data = {};
+    let parsedJson = false;
+    try {
+      data = JSON.parse(rawBody);
+      parsedJson = Boolean(data && typeof data === 'object' && !Array.isArray(data));
+      if (!parsedJson) data = {};
+    } catch {
+      data = {};
+    }
+
+    // Only accept the documented top-level success fields and a trusted gateway
+    // URL. Diagnostics intentionally record shape only, never raw response data.
     const checkoutSucceeded = data.status === 1 || data.status === true ||
       String(data.status).toLowerCase() === 'true' || String(data.status) === '1';
-    if (!response.ok || !checkoutSucceeded || typeof data.payment_url !== 'string' ||
-        !data.payment_url.startsWith('https://')) {
-      // Never log credentials or the complete request payload. Keep the gateway's
-      // HTTP/status/message details so configuration and merchant-account issues
-      // can be diagnosed without exposing secrets to the browser.
+    let paymentUrl = '';
+    if (typeof data.payment_url === 'string') {
+      try {
+        const parsedUrl = new URL(data.payment_url);
+        if (parsedUrl.protocol === 'https:' && parsedUrl.hostname === 'payment.rupantorpay.com') {
+          paymentUrl = parsedUrl.toString();
+        }
+      } catch {
+        // Invalid gateway URL: fail closed.
+      }
+    }
+    if (!response.ok || !checkoutSucceeded || !paymentUrl) {
       const providerMessage = typeof data.message === 'string' && data.message.trim()
         ? data.message.trim().slice(0, 240)
         : 'Gateway did not return a payment URL';
+      const objectKeys = (value) => value && typeof value === 'object' && !Array.isArray(value)
+        ? Object.keys(value).slice(0, 30)
+        : [];
       console.error('RupantorPay checkout rejected request:', {
         httpStatus: response.status,
+        contentType,
+        parsedJson,
+        responseKeys: objectKeys(data),
+        nestedObjectKeys: Object.fromEntries(
+          Object.entries(data).filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value))
+            .slice(0, 10).map(([key, value]) => [key, objectKeys(value)])
+        ),
         gatewayStatus: typeof data.status === 'string' || typeof data.status === 'number' || typeof data.status === 'boolean'
           ? data.status
           : 'missing',
+        hasPaymentUrl: typeof data.payment_url === 'string',
         message: providerMessage,
       });
       return res.status(502).json({
@@ -81,7 +113,7 @@ router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
         code: 'RUPANTORPAY_CHECKOUT_REJECTED',
       });
     }
-    return res.json({ paymentUrl: data.payment_url });
+    return res.json({ paymentUrl });
   } catch (error) {
     console.error('RupantorPay checkout failed:', error.message);
     return res.status(500).json({
