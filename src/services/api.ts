@@ -1938,9 +1938,23 @@ const events =
       status: 'COMPLETED',
     });
 
-    // CRITICAL STEP: Automatic Area-Based Delivery Partner Assignment
-    const areaQuery = shipment.customerArea || (order?.buyerAddress || '');
-    const assignResult = autoAssignDeliveryPartner(areaQuery, shipment.customerAddress, store.deliveryPartners);
+    // CRITICAL STEP: Automatic district + area-based delivery assignment.
+    // Refresh approved partner records from PostgreSQL first; localStorage can be stale
+    // or contain demo profiles and must not be the source of truth for real assignments.
+    const areaQuery = shipment.customerArea || order?.buyerArea || '';
+    const destinationDistrict = order?.buyerCity || '';
+    let currentPartners = store.deliveryPartners;
+    try {
+      currentPartners = await this.getDeliveryPartners();
+    } catch (error) {
+      console.warn('Could not refresh delivery partner profiles before assignment.', error);
+    }
+    const assignResult = autoAssignDeliveryPartner(
+      areaQuery,
+      shipment.customerAddress || order?.buyerAddress || '',
+      currentPartners,
+      destinationDistrict
+    );
 
     let assignedPartner: DeliveryPartner | undefined = undefined;
 
