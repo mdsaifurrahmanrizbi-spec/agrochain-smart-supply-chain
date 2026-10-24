@@ -714,7 +714,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
         store.jobs.unshift(pickupJob);
         newOrder.pickupPartnerId = pickupPartner.id;
         newOrder.pickupPartnerName = pickupPartner.name;
-        newOrder.orderStatus = 'PICKUP_ASSIGNED';
+        newOrder.orderStatus = 'QC_SCHEDULED';
         await saveBackendRecord('jobs', pickupJob);
         await saveBackendRecord('orders', newOrder);
         localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
@@ -1278,7 +1278,7 @@ const events =
           id: `trk-${Date.now()}-qc`,
           orderId: order.id,
           title: 'FARM QUALITY CHECK APPROVED',
-          description: `Agronomist ${qc.inspectorName} verified produce at farm gate (${update.grade || qc.grade}, Moisture: ${update.moistureContentPercent || qc.moistureContentPercent}%). Farm pickup unlocked.`,
+          description: `QC passed by ${qc.inspectorName}. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Remarks: ${qc.remarks}. Farm pickup unlocked.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
           actorRole: 'Quality Inspector',
@@ -1290,7 +1290,7 @@ const events =
           id: `trk-${Date.now()}-qcfail`,
           orderId: order.id,
           title: 'FARM QUALITY CHECK REJECTED',
-          description: `Inspection failed quality standards: ${update.remarks || qc.remarks}. Farm pickup BLOCKED. Seller notified for batch replacement.`,
+          description: `QC failed. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Inspector remarks: ${qc.remarks}. Farm pickup BLOCKED.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
           actorRole: 'Quality Inspector',
@@ -1302,7 +1302,7 @@ const events =
           id: `trk-${Date.now()}-qcrecheck`,
           orderId: order.id,
           title: 'FARM QUALITY RECHECK REQUIRED',
-          description: `Consignment placed on hold at farm. Secondary moisture evaluation requested. Pickup paused.`,
+          description: `Consignment placed on hold at farm by ${qc.inspectorName}. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Remarks: ${qc.remarks}. Secondary evaluation required; pickup paused.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
           actorRole: 'Quality Inspector',
