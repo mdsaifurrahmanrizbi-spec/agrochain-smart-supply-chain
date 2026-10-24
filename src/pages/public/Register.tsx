@@ -281,18 +281,6 @@ export const Register: React.FC = () => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-slate-700 font-semibold mb-1">National ID (NID No.)</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="17-digit NID Number"
-                        value={formData.nid}
-                        onChange={(e) => setFormData({ ...formData, nid: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
-                      />
-                    </div>
-
-                    <div>
                       <label className="block text-slate-700 font-semibold mb-1">Vehicle Type</label>
                       <select
                         value={formData.vehicleType}
