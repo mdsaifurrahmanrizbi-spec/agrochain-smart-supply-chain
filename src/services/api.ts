@@ -210,7 +210,8 @@ export const agroApi = {
     name: string;
     email: string;
     password: string;
-    role: 'farmer' | 'buyer' | 'delivery';
+    role: 'farmer' | 'buyer' | 'delivery' | 'warehouse';
+    profile?: Record<string, unknown>;
   }): Promise<{ message: string; user: User }> {
     const res = await fetch(`${API_BASE_URL}/register/`, {
       method: 'POST',
