@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { agroApi, store } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { TrackingTimeline } from '../../components/common/TrackingTimeline';
 import { Search, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -9,6 +10,8 @@ export const AdminOrders: React.FC = () => {
   const [settlements, setSettlements] = useState(store.settlements);
   const [payoutAccounts, setPayoutAccounts] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
+  const [trackingOrder, setTrackingOrder] = useState<(typeof store.orders)[number] | null>(null);
+  const [trackingEvents, setTrackingEvents] = useState(store.trackingEvents[store.orders[0]?.id || ''] || []);
 
   useEffect(() => {
     let mounted = true;
@@ -29,6 +32,16 @@ export const AdminOrders: React.FC = () => {
       ])));
     }).catch((error) => console.warn('Could not load authorized farmer payout accounts.', error));
   }, [orders]);
+  const openTracking = async (order: (typeof store.orders)[number]) => {
+    setTrackingOrder(order);
+    setTrackingEvents(store.trackingEvents[order.id] || []);
+    try {
+      setTrackingEvents(await agroApi.getTrackingEvents(order.id));
+    } catch (error) {
+      console.warn('Could not load order tracking history for admin.', error);
+    }
+  };
+
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'COD' | 'ONLINE' | 'PENDING' | 'PAID'>('ALL');
   const [view, setView] = useState<'ACTIVE' | 'SUCCESSFUL'>('ACTIVE');
 
@@ -108,6 +121,7 @@ export const AdminOrders: React.FC = () => {
                     <td className="py-3 px-4 font-mono font-bold text-slate-900">
                       <div>{ord.orderNumber}</div>
                       <div className="text-[10px] text-slate-400 font-normal">{ord.createdAt}</div>
+                      <button type="button" onClick={() => openTracking(ord)} className="mt-1 text-[10px] font-bold text-emerald-700 hover:underline">View full tracking</button>
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-semibold text-slate-900">{ord.buyerName}</div>
@@ -163,6 +177,21 @@ export const AdminOrders: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {trackingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4">
+          <section role="dialog" aria-modal="true" aria-labelledby="admin-tracking-title" className="my-6 w-full max-w-4xl rounded-2xl bg-white p-5 shadow-xl sm:p-7">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="admin-tracking-title" className="text-lg font-bold text-slate-900">Full shipment tracking</h2>
+                <p className="mt-1 text-xs text-slate-500">Order {trackingOrder.orderNumber} · {trackingOrder.buyerName} · {trackingOrder.buyerCity}</p>
+              </div>
+              <button type="button" onClick={() => setTrackingOrder(null)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">Close</button>
+            </div>
+            <TrackingTimeline events={trackingEvents} orderNumber={trackingOrder.orderNumber} currentStatus={trackingOrder.orderStatus} />
+          </section>
+        </div>
+      )}
     </div>
   );
 };

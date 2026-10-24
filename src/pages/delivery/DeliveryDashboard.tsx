@@ -70,32 +70,6 @@ export const DeliveryDashboard: React.FC = () => {
     }
   };
 
-  const handleQuickApproveFarmQc = async (orderId: string) => {
-    setErrorMsg(null);
-    try {
-      const order = store.orders.find((o) => o.id === orderId || o.orderNumber === orderId);
-      if (!order) throw new Error('Order not found');
-
-      const qc = store.qualityChecks.find((q) => q.id === order.qualityCheckId || q.orderId === order.id);
-      if (qc) {
-        await agroApi.updateQualityCheck(qc.id, {
-          status: 'APPROVED',
-          certificateNumber: `QC-CERT-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-          remarks: 'Farm moisture and organic integrity verified on site. Cleared for pickup.',
-        });
-      } else {
-        order.qualityStatus = 'APPROVED';
-        order.orderStatus = 'QC_APPROVED';
-      }
-
-      setJobs([...store.jobs.filter((j) => j.partnerId === partnerId)]);
-      setNotice(`Farm Quality Control marked APPROVED! Farm pickup is now unlocked.`);
-      setTimeout(() => setNotice(null), 4000);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to approve QC.');
-      setTimeout(() => setErrorMsg(null), 4000);
-    }
-  };
 
   const openOtpModal = (job: LogisticsJob, order?: Order) => {
     const ord = order || store.orders.find((o) => o.id === job.orderId || o.orderNumber === job.orderNumber);
@@ -366,15 +340,7 @@ export const DeliveryDashboard: React.FC = () => {
                               <span className="px-2 py-0.5 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded">
                                 QC Pending (On Hold)
                               </span>
-{import.meta.env.DEV && (
-                                <button
-                                  onClick={() => handleQuickApproveFarmQc(ord?.id || job.orderId)}
-                                  title="Simulate Inspector QC Approval (Development Only)"
-                                  className="px-2 py-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded border border-emerald-300"
-                                >
-                                  Approve QC (Demo)
-                                </button>
-                              )}
+
                             </div>
                           )}
                         </>

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { store } from '../../services/api';
+import React, { useEffect, useState } from 'react';
+import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { TrackingTimeline } from '../../components/common/TrackingTimeline';
 import { Truck, Package, Clock, MapPin, CheckCircle } from 'lucide-react';
@@ -15,7 +15,17 @@ export const FarmerTracking: React.FC = () => {
   const [selectedOrderId, setSelectedOrderId] = useState<string>(myOrders[0]?.id || 'ord-1001');
 
   const selectedOrder = store.orders.find((o) => o.id === selectedOrderId);
-  const events = store.trackingEvents[selectedOrderId] || [];
+  const [events, setEvents] = useState(store.trackingEvents[selectedOrderId] || []);
+
+  useEffect(() => {
+    let active = true;
+    if (selectedOrderId) {
+      agroApi.getTrackingEvents(selectedOrderId)
+        .then((freshEvents) => { if (active) setEvents(freshEvents); })
+        .catch((error) => console.error('Could not load farmer tracking history:', error));
+    }
+    return () => { active = false; };
+  }, [selectedOrderId]);
 
   return (
     <div className="space-y-6">

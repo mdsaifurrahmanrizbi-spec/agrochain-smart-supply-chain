@@ -676,6 +676,52 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       localStorage.setItem('agro_orders', JSON.stringify(store.orders));
     }
 
+    // Assign a pickup person by farm service area immediately after order confirmation.
+    // The assigned pickup person is also responsible for performing the farm-gate QC.
+    const farmLocation = store.qualityChecks.find((qc) => qc.orderId === newOrder.id)?.farmLocation
+      || store.products.find((product) => product.batchId === relatedBatch?.id || product.id === firstItem?.productId)?.farmLocation
+      || '';
+    const existingPickupJob = store.jobs.find((job) => job.orderId === newOrder.id && job.type === 'PICKUP');
+    if (!existingPickupJob) {
+      const normalizeArea = (value: string) => value.toLowerCase().replace(/[,/]/g, ' ').replace(/\s+/g, ' ').trim();
+      const originArea = normalizeArea(farmLocation);
+      const pickupPartner = store.deliveryPartners.find((candidate) => {
+        if (candidate.approvalStatus !== 'APPROVED' || !candidate.canPickup) return false;
+        const areas = [...(candidate.assignedAreas || []), candidate.preferredArea || '']
+          .map(normalizeArea)
+          .filter(Boolean);
+        if (!areas.length || !originArea || originArea.includes('pending verification')) return false;
+        return areas.some((area) => originArea.includes(area) || area.includes(originArea));
+      });
+      if (pickupPartner) {
+        const assignedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
+        const pickupJob: LogisticsJob = {
+          id: `job-${Date.now()}-pkp`,
+          jobCode: `JOB-PKP-${Math.floor(1000 + Math.random() * 9000)}`,
+          orderId: newOrder.id,
+          orderNumber: newOrder.orderNumber,
+          partnerId: pickupPartner.id,
+          partnerName: pickupPartner.name,
+          type: 'PICKUP',
+          productSummary: newOrder.items.map((item) => `${item.quantity} ${item.unit} ${item.productName}`).join(', '),
+          originAddress: farmLocation || 'Farm location pending verification',
+          destinationAddress: newOrder.warehouseName || 'Central Warehouse',
+          assignedDate: assignedAt,
+          status: 'ASSIGNED',
+          codAmount: 0,
+          updatedAt: assignedAt,
+        };
+        store.jobs.unshift(pickupJob);
+        newOrder.pickupPartnerId = pickupPartner.id;
+        newOrder.pickupPartnerName = pickupPartner.name;
+        newOrder.orderStatus = 'QC_SCHEDULED';
+        await saveBackendRecord('jobs', pickupJob);
+        await saveBackendRecord('orders', newOrder);
+        localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
+        localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+      }
+    }
+
     // Initialize tracking timeline for this order
     const initialTimeline: TrackingEvent[] = [
       {
@@ -690,7 +736,21 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
         status: 'COMPLETED',
       },
     ];
-    await saveBackendRecord('trackingEvents', initialTimeline[0]);
+    const assignedPickup = store.jobs.find((job) => job.orderId === newOrder.id && job.type === 'PICKUP');
+    if (assignedPickup) {
+      initialTimeline.unshift({
+        id: `trk-${Date.now()}-pkp`,
+        orderId: newOrder.id,
+        title: 'PICKUP PERSON ASSIGNED — QC REQUIRED',
+        description: `${assignedPickup.partnerName} was automatically assigned based on the farm service area. This pickup person must inspect and pass QC before collecting the produce.`,
+        location: assignedPickup.originAddress,
+        timestamp: assignedPickup.assignedDate,
+        actorRole: 'AgroChain System',
+        actorName: 'Area-based Auto Assignment',
+        status: 'COMPLETED',
+      });
+    }
+    for (const event of initialTimeline) await saveBackendRecord('trackingEvents', event);
     store.trackingEvents[newOrder.id] = initialTimeline;
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
 
@@ -700,7 +760,21 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
 
   // Tracking Timeline
   async getTrackingEvents(orderId: string): Promise<TrackingEvent[]> {
-    return store.trackingEvents[orderId] || [];
+    try {
+      const backendEvents = await getBackendRecords<TrackingEvent>('trackingEvents');
+      const matching = backendEvents
+        .filter((event) => event.orderId === orderId)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      if (matching.length > 0) {
+        store.trackingEvents[orderId] = matching;
+        localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
+        return matching;
+      }
+    } catch (error) {
+      console.warn('Could not load tracking history from backend; using cached events.', error);
+    }
+    return [...(store.trackingEvents[orderId] || [])]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   },
 
   // Logistics Jobs
@@ -1204,10 +1278,10 @@ const events =
           id: `trk-${Date.now()}-qc`,
           orderId: order.id,
           title: 'FARM QUALITY CHECK APPROVED',
-          description: `Agronomist ${qc.inspectorName} verified produce at farm gate (${update.grade || qc.grade}, Moisture: ${update.moistureContentPercent || qc.moistureContentPercent}%). Farm pickup unlocked.`,
+          description: `QC passed by ${qc.inspectorName}. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Remarks: ${qc.remarks}. Farm pickup unlocked.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
-          actorRole: 'Quality Inspector',
+          actorRole: 'Pickup Person / QC Inspector',
           actorName: qc.inspectorName,
           status: 'COMPLETED',
         });
@@ -1216,10 +1290,10 @@ const events =
           id: `trk-${Date.now()}-qcfail`,
           orderId: order.id,
           title: 'FARM QUALITY CHECK REJECTED',
-          description: `Inspection failed quality standards: ${update.remarks || qc.remarks}. Farm pickup BLOCKED. Seller notified for batch replacement.`,
+          description: `QC failed. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Inspector remarks: ${qc.remarks}. Farm pickup BLOCKED.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
-          actorRole: 'Quality Inspector',
+          actorRole: 'Pickup Person / QC Inspector',
           actorName: qc.inspectorName,
           status: 'COMPLETED',
         });
@@ -1228,10 +1302,10 @@ const events =
           id: `trk-${Date.now()}-qcrecheck`,
           orderId: order.id,
           title: 'FARM QUALITY RECHECK REQUIRED',
-          description: `Consignment placed on hold at farm. Secondary moisture evaluation requested. Pickup paused.`,
+          description: `Consignment placed on hold at farm by ${qc.inspectorName}. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Remarks: ${qc.remarks}. Secondary evaluation required; pickup paused.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
-          actorRole: 'Quality Inspector',
+          actorRole: 'Pickup Person / QC Inspector',
           actorName: qc.inspectorName,
           status: 'IN_PROGRESS',
         });
