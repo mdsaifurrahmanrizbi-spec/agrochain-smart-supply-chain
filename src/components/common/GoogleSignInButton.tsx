@@ -58,8 +58,16 @@ export const GoogleSignInButton: React.FC<Props> = ({ mode, language, disabled =
             return;
           }
           void credentialHandlerRef.current(response.credential).catch((error: unknown) => {
-            const message = error instanceof Error ? error.message : messages[language].network;
-            errorHandlerRef.current(message || messages[language].network);
+            const message = error instanceof Error ? error.message : '';
+            if (language === 'bn') {
+              if (/Please sign in with your email and password|not available for this role/i.test(message)) errorHandlerRef.current('এই ভূমিকার জন্য Google ব্যবহার করা যাবে না। ইমেইল ও পাসওয়ার্ড দিয়ে সাইন ইন করুন।');
+              else if (/verified|email/i.test(message)) errorHandlerRef.current('Google ইমেইল যাচাই করা যায়নি। যাচাইকৃত Google অ্যাকাউন্ট ব্যবহার করুন।');
+              else if (/cancel|popup|closed/i.test(message)) errorHandlerRef.current(messages.bn.cancelled);
+              else errorHandlerRef.current(messages.bn.network);
+            } else {
+              if (message) errorHandlerRef.current(message);
+              else errorHandlerRef.current(messages.en.network);
+            }
           });
         },
       });
