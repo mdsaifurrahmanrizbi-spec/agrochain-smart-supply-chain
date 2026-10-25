@@ -1,12 +1,16 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useCallback, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
 import { UserRole } from '../../types';
+import { agroApi } from '../../services/api';
+import { useLanguage } from '../../context/LanguageContext';
+import { GoogleSignInButton } from '../../components/common/GoogleSignInButton';
 import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2, Sprout, Leaf, Eye, EyeOff } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const { login, switchDemoRole } = useAuth();
+  const { login, switchDemoRole, setAuthenticatedSession } = useAuth();
+  const { language } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
   const availableRoles: UserRole[] = location.pathname.startsWith('/admin-portal')
@@ -53,6 +57,28 @@ export const Login: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const handleGoogleCredential = useCallback(async (credential: string) => {
+    setError('');
+    setLoading(true);
+    try {
+      const result = await agroApi.googleAuth(credential, selectedRole === 'farmer' || selectedRole === 'buyer' ? selectedRole : undefined);
+      if ('needsProfile' in result && result.needsProfile) {
+        sessionStorage.setItem('agro_google_profile_token', result.profileToken);
+        sessionStorage.setItem('agro_google_profile_name', result.name || '');
+        sessionStorage.setItem('agro_google_profile_email', result.email || '');
+        navigate('/google-profile');
+        return;
+      }
+      setAuthenticatedSession(result.token, result.user);
+      const paths: Record<UserRole, string> = { admin: '/admin/dashboard', farmer: '/farmer/dashboard', buyer: '/buyer/dashboard', delivery: '/delivery/dashboard', warehouse: '/warehouse/dashboard', inspector: '/inspector/dashboard' };
+      navigate(paths[result.user.role] || '/', { replace: true });
+    } finally {
+      setLoading(false);
+    }
+  }, [navigate, selectedRole, setAuthenticatedSession]);
+
+  const handleGoogleError = useCallback((message: string) => setError(message), []);
 
   const handleQuickDemo = (role: UserRole, emailStr: string, path: string) => {
     setEmail(emailStr);
@@ -146,6 +172,13 @@ export const Login: React.FC = () => {
                   <span>{loading ? 'Authenticating...' : 'Sign In'}</span><ArrowRight className="h-4 w-4" />
                 </button>
               </form>
+
+              {(location.pathname === '/login' && (selectedRole === 'farmer' || selectedRole === 'buyer')) && (
+                <div className="mt-5 border-t border-slate-100 pt-5">
+                  <p className="mb-3 text-center text-xs text-slate-500">{language === 'bn' ? 'অথবা Google দিয়ে চালিয়ে যান' : 'Or continue with Google'}</p>
+                  <GoogleSignInButton mode="signin" language={language === 'bn' ? 'bn' : 'en'} disabled={loading} onCredential={handleGoogleCredential} onError={handleGoogleError} />
+                </div>
+              )}
 
               {import.meta.env.DEV && (
                 <div className="mt-6 border-t border-slate-100 pt-5">
