@@ -113,11 +113,11 @@ export const Login: React.FC = () => {
               <p className="mt-5 max-w-md text-sm leading-7 text-emerald-50/80">Sign in to connect farmers, buyers and delivery partners in one trusted agricultural marketplace.</p>
             </div>
           </div>
-          <div className="login-agro-motion relative mx-auto my-8 h-[255px] w-full max-w-[470px] overflow-hidden rounded-[1.6rem] border border-white/15 bg-gradient-to-b from-[#8fbd8b] via-[#d7e7a2] to-[#e8d99c] shadow-2xl shadow-black/20">
-            <div className="absolute right-12 top-7 h-14 w-14 rounded-full bg-[#fff2b5] shadow-[0_0_45px_15px_rgba(255,242,181,0.28)]" style={{animation:'loginSunDrift 5s ease-in-out infinite'}} />
+          <div className="login-agro-motion agro-login-scene relative mx-auto my-8 h-[255px] w-full max-w-[470px] overflow-hidden rounded-[1.6rem] border border-white/15 bg-gradient-to-b from-[#8fbd8b] via-[#d7e7a2] to-[#e8d99c] shadow-2xl shadow-black/20">
+            <div className="agro-login-sun absolute right-12 top-7 h-14 w-14 rounded-full bg-[#fff2b5] shadow-[0_0_45px_15px_rgba(255,242,181,0.28)]" style={{animation:'loginSunDrift 5s ease-in-out infinite'}} />
             <div className="absolute inset-x-0 bottom-0 h-24 rounded-[50%_50%_0_0] bg-[#69934f]" />
             <div className="absolute -bottom-7 -left-8 h-32 w-[120%] rotate-[-5deg] rounded-[50%] bg-[#3c713d]" />
-            <div className="absolute -bottom-12 left-[-10%] h-28 w-[120%] rotate-[5deg] rounded-[50%] border-t-[16px] border-[#a4bd55] bg-[#245b35]" />
+            <div className="agro-login-road absolute -bottom-12 left-[-10%] h-28 w-[120%] rotate-[5deg] rounded-[50%] border-t-[16px] border-[#a4bd55] bg-[#245b35]" />
             <div className="absolute bottom-7 left-4 right-4 flex items-end justify-between text-4xl sm:text-5xl" aria-hidden="true">
               {['🌾','🌿','🌾','🌱','🌾','🌿','🌾'].map((crop, index) => <span key={index} style={{animation:'loginCropSway 2.8s ease-in-out infinite',animationDelay:`${index * 0.22}s`,transformOrigin:'bottom center'}}>{crop}</span>)}
             </div>
