@@ -18,9 +18,9 @@ export const BuyerProfile: React.FC = () => {
   const { user, updateProfile } = useAuth();
   const [saved, setSaved] = useState(false);
 
-  const [name, setName] = useState(user?.name || 'Tasnim Rahman');
-  const [phone, setPhone] = useState(user?.phone || '+880 1755-432109');
-  const [location, setLocation] = useState(user?.location || 'Banani DOHS, Dhaka');
+  const [name, setName] = useState(user?.name || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [location, setLocation] = useState(user?.location || '');
 
   const storageKey = `agrochain_delivery_addresses_${user?.id || user?.email || 'buyer'}`;
 
@@ -81,11 +81,21 @@ export const BuyerProfile: React.FC = () => {
     }
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateProfile({ name, phone, location });
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 3000);
+    setNotice('');
+    try {
+      const savedUser = await updateProfile({ name, phone, location });
+      setName(savedUser.name || '');
+      setPhone(savedUser.phone || '');
+      setLocation(savedUser.location || '');
+      setSaved(true);
+      setNotice('Profile changes saved to your account.');
+      window.setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      setSaved(false);
+      setNotice(error instanceof Error ? error.message : 'Could not save profile changes.');
+    }
   };
 
   const startAdd = () => {
@@ -218,6 +228,7 @@ export const BuyerProfile: React.FC = () => {
               <input
                 type="tel"
                 required
+                placeholder="Enter your registered phone number"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
@@ -231,7 +242,7 @@ export const BuyerProfile: React.FC = () => {
               <input
                 type="email"
                 disabled
-                value={user?.email || 'tasnim.buyer@gmail.com'}
+                value={user?.email || ''}
                 className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500"
               />
             </div>
@@ -244,6 +255,7 @@ export const BuyerProfile: React.FC = () => {
             <input
               type="text"
               required
+              placeholder="Enter your primary address or delivery area"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
