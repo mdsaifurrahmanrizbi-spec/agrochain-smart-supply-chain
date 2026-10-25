@@ -7,6 +7,7 @@ export interface User {
   phone: string;
   role: UserRole;
   avatar?: string;
+  authProvider?: 'password' | 'google' | 'password+google';
   location: string;
   status: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
   isWarehouseManager?: boolean;
