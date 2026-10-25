@@ -183,7 +183,7 @@ app.post('/api/auth/google/complete-profile/', async (req, res) => {
   const phone = typeof req.body?.phone === 'string' ? req.body.phone.trim() : '';
   if (!profileToken) return res.status(400).json({ message: 'Google profile session is missing. Start Google sign-in again.' });
   if (!googleAllowedRoles.has(role)) return res.status(403).json({ message: 'Google accounts are only available for Farmer/Seller and Buyer/Customer.' });
-  if (!/^\\+8801[3-9]\\d{8}$/.test(phone)) return res.status(400).json({ message: 'Enter a valid Bangladesh mobile number (+8801XXXXXXXXX).' });
+  if (!/^\+8801[3-9]\d{8}$/.test(phone)) return res.status(400).json({ message: 'Enter a valid Bangladesh mobile number (+8801XXXXXXXXX).' });
 
   try {
     const claims = jwt.verify(profileToken, googleProfileTokenSecret(), {
@@ -217,9 +217,9 @@ app.post('/api/auth/google/complete-profile/', async (req, res) => {
     const profile = { id, name: account.name, phone, location: '', avatar: account.avatar || '', authProvider: 'google', updatedAt: new Date().toISOString() };
     await pool.query(
       `INSERT INTO agrochain_records (resource, id, data, created_at, updated_at)
-       VALUES ('buyerProfiles', $1, $2::jsonb, NOW(), NOW())
+       VALUES ($1, $2, $3::jsonb, NOW(), NOW())
        ON CONFLICT (resource, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-      [id, JSON.stringify(profile)]
+      [role === 'farmer' ? 'farmerProfiles' : 'buyerProfiles', id, JSON.stringify(profile)]
     );
     const user = { ...publicAuthUser(account), phone, avatar: account.avatar || undefined };
     return res.status(201).json({ token: createAuthToken(user), user });
