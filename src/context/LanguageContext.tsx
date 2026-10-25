@@ -415,10 +415,8 @@ const translations: Record<string, string> = {
   'Track':'অনুসরণ করুন',
   'Cancel Order':'অর্ডার বাতিল করুন',
   'Orders can be cancelled only before pickup. After pickup, the cancellation option is removed and the server blocks cancellation.':'পণ্য সংগ্রহের আগে অর্ডার বাতিল করা যাবে। সংগ্রহের পর বাতিলের বিকল্প সরিয়ে দেওয়া হয় এবং সার্ভার থেকেও বাতিল করা বন্ধ থাকে।',
-  'Order Items':'অর্ডারের পণ্য',
   'Shipment Tracking':'চালান অনুসরণ',
   'Confirmed':'নিশ্চিত',
-  'Cancelled':'বাতিল',
   'CANCELLED':'বাতিল',
   'CONFIRMED':'নিশ্চিত',
   'PENDING':'অপেক্ষমাণ',
@@ -431,8 +429,6 @@ const translations: Record<string, string> = {
   'kg':'কেজি',
   'Welcome back!':'আবারও স্বাগতম!',
   'Your Orders':'আপনার অর্ডারসমূহ',
-  'Payment Method':'পেমেন্ট পদ্ধতি',
-  'Delivery Status':'ডেলিভারির অবস্থা',
   'Product Origin':'পণ্যের উৎস',
   'Farmer Details':'কৃষকের বিবরণ',
   'Farm Location':'খামারের অবস্থান',
@@ -462,8 +458,6 @@ const translations: Record<string, string> = {
   'Payment pending':'পেমেন্ট অপেক্ষমাণ',
   'Payment status':'পেমেন্টের অবস্থা',
   'Delivery partner':'ডেলিভারি পার্টনার',
-  'Farmer / Seller':'কৃষক / বিক্রেতা',
-  'Customer / Buyer':'গ্রাহক / ক্রেতা'
 
 };
 
