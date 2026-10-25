@@ -77,7 +77,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'md' })
     bg = 'bg-rose-50 text-rose-800 border-rose-200';
   }
 
-  const statusLabels: Record<string, string> = { CONFIRMED: 'নিশ্চিত', CANCELLED: 'বাতিল', CANCELED: 'বাতিল', PENDING: 'অপেক্ষমাণ', PENDING_APPROVAL: 'অনুমোদনের অপেক্ষায়', DELIVERED: 'পৌঁছে দেওয়া হয়েছে', VERIFIED: 'যাচাইকৃত', APPROVED: 'অনুমোদিত', REJECTED: 'প্রত্যাখ্যাত', FAILED: 'ব্যর্থ', PAID: 'পরিশোধিত', UNPAID: 'অপরিশোধিত', IN_TRANSIT: 'পথে রয়েছে', OUT_FOR_DELIVERY: 'ডেলিভারির জন্য পথে', PICKUP_ASSIGNED: 'সংগ্রহের দায়িত্ব দেওয়া হয়েছে', PROCESSING: 'প্রক্রিয়াধীন', ACTIVE: 'সক্রিয়', COMPLETED: 'সম্পন্ন' };\n  if (language === 'bn') label = statusLabels[normalized] || t(label);\n\n  const sizeClasses = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs';
+  const statusLabels: Record<string, string> = { CONFIRMED: 'নিশ্চিত', CANCELLED: 'বাতিল', CANCELED: 'বাতিল', PENDING: 'অপেক্ষমাণ', PENDING_APPROVAL: 'অনুমোদনের অপেক্ষায়', DELIVERED: 'পৌঁছে দেওয়া হয়েছে', VERIFIED: 'যাচাইকৃত', APPROVED: 'অনুমোদিত', REJECTED: 'প্রত্যাখ্যাত', FAILED: 'ব্যর্থ', PAID: 'পরিশোধিত', UNPAID: 'অপরিশোধিত', IN_TRANSIT: 'পথে রয়েছে', OUT_FOR_DELIVERY: 'ডেলিভারির জন্য পথে', PICKUP_ASSIGNED: 'সংগ্রহের দায়িত্ব দেওয়া হয়েছে', PROCESSING: 'প্রক্রিয়াধীন', ACTIVE: 'সক্রিয়', COMPLETED: 'সম্পন্ন' };
+  if (language === 'bn') label = statusLabels[normalized] || t(label);\n\n  const sizeClasses = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs';
 
   return (
     <span
