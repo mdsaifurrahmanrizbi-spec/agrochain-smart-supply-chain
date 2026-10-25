@@ -462,6 +462,67 @@ const translations: Record<string, string> = {
   'Connecting Farmers to Markets Through Smarter Supply Chains':'স্মার্ট সরবরাহ ব্যবস্থার মাধ্যমে কৃষকদের বাজারের সঙ্গে যুক্ত করা',
   'Discover quality agricultural products, track every step of their journey, and experience a transparent farm-to-market ecosystem with independent pickup and delivery networks.':'মানসম্মত কৃষিপণ্য খুঁজুন, পণ্যের প্রতিটি ধাপ অনুসরণ করুন এবং স্বতন্ত্র সংগ্রহ ও ডেলিভারি নেটওয়ার্কের মাধ্যমে খামার থেকে বাজার পর্যন্ত স্বচ্ছ ব্যবস্থা উপভোগ করুন।',
   'Search Chinigura rice, Bogura potatoes, Rajshahi mango...':'চিনিগুঁড়া চাল, বগুড়ার আলু, রাজশাহীর আম খুঁজুন...',
+  "Enter your email address":"আপনার ইমেইল ঠিকানা লিখুন",
+  "Consumer & Buyer Portal":"ক্রেতা ও ভোক্তা পোর্টাল",
+  "Tracking fresh agricultural harvests direct from Bogura, Rajshahi, and Dinajpur farms to your door.":"বগুড়া, রাজশাহী ও দিনাজপুরের খামার থেকে তাজা কৃষিপণ্য সরাসরি আপনার দোরগোড়ায় পৌঁছানোর যাত্রা অনুসরণ করুন।",
+  "My Cart":"আমার কার্ট",
+  "Total Orders Placed":"মোট অর্ডার",
+  "Consignment history":"পণ্য পাঠানোর ইতিহাস",
+  "Consignments In Transit":"পথে রয়েছে এমন চালান",
+  "Real-time vehicle trace active":"যানবাহনের অবস্থান সরাসরি দেখা যাচ্ছে",
+  "Successfully Delivered":"সফলভাবে পৌঁছে দেওয়া হয়েছে",
+  "Doorstep verified produce":"যাচাইকৃত কৃষিপণ্য আপনার দোরগোড়ায়",
+  "Total Spent (BDT)":"মোট খরচ (টাকা)",
+  "Direct fair farmer transactions":"কৃষকের সঙ্গে সরাসরি ন্যায্য লেনদেন",
+  "Live Delivery En Route":"ডেলিভারি পথে রয়েছে",
+  "Consignment":"চালান",
+  "View Vertical Timeline":"ধাপে ধাপে অগ্রগতি দেখুন",
+  "Contents":"পণ্যের বিবরণ",
+  "Origin":"উৎপত্তিস্থল",
+  "Vehicle":"যানবাহন",
+  "Current Status":"বর্তমান অবস্থা",
+  "Out for Delivery":"ডেলিভারির জন্য পথে",
+  "Estimated Arrival":"সম্ভাব্য পৌঁছানোর সময়",
+  "Your Agricultural Orders":"আপনার কৃষিপণ্যের অর্ডার",
+  "Ordered on":"অর্ডারের তারিখ",
+  "Online":"অনলাইন",
+  "DELIVERED":"পৌঁছে দেওয়া হয়েছে",
+  "IN_TRANSIT":"পথে রয়েছে",
+  "OUT_FOR_DELIVERY":"ডেলিভারির জন্য পথে",
+  "Diamant Red Potato":"ডায়াম্যান্ট লাল আলু",
+  "Active Panel":"সক্রিয় প্যানেল",
+  "Workspace":"কর্মক্ষেত্র",
+  "Select language":"ভাষা নির্বাচন করুন",
+  "AgroChain Homepage":"AgroChain-এর মূল পাতা",
+  "Sign Out":"সাইন আউট",
+  "System Notifications":"সিস্টেমের বিজ্ঞপ্তি",
+  "New Pickup Assigned":"নতুন পণ্য সংগ্রহের দায়িত্ব দেওয়া হয়েছে",
+  "Quality Check Approved":"মান যাচাই অনুমোদিত",
+  "Delivery Verification Required":"ডেলিভারি যাচাই প্রয়োজন",
+  "GROW TOGETHER. THRIVE TOGETHER.":"একসঙ্গে বেড়ে উঠি, একসঙ্গে সমৃদ্ধ হই",
+  "Good food starts with":"ভালো খাবারের শুরু ভালো মানুষের হাত ধরে",
+  "Join Bangladesh’s connected agricultural community. Help fresh harvests reach homes with more trust, care and transparency.":"বাংলাদেশের সংযুক্ত কৃষি সম্প্রদায়ে যোগ দিন। আস্থা, যত্ন ও স্বচ্ছতার সঙ্গে তাজা ফসল ঘরে ঘরে পৌঁছে দিতে সহায়তা করুন।",
+  "Showcase your harvest":"আপনার ফসল তুলে ধরুন",
+  "Buyers":"ক্রেতা",
+  "Find fresh produce":"তাজা কৃষিপণ্য খুঁজুন",
+  "Partners":"পার্টনার",
+  "Move goods smarter":"আরও দক্ষভাবে পণ্য পরিবহন করুন",
+  "Full Legal Name":"পূর্ণ আইনগত নাম",
+  "Phone Number (Mobile Banking)":"ফোন নম্বর (মোবাইল ব্যাংকিং)",
+  "Email Address":"ইমেইল ঠিকানা",
+  "Create Password":"পাসওয়ার্ড তৈরি করুন",
+  "At least 12 characters":"কমপক্ষে ১২টি অক্ষর",
+  "Identity & Address Verification":"পরিচয় ও ঠিকানা যাচাই",
+  "Provide your identity details and current operating address for admin review.":"অ্যাডমিনের যাচাইয়ের জন্য পরিচয় ও বর্তমান কার্যকর ঠিকানার তথ্য দিন।",
+  "Registration Processed":"নিবন্ধন প্রক্রিয়া সম্পন্ন",
+  "Continue to Sign In":"সাইন ইন করতে এগিয়ে যান",
+  "Account created successfully. You can now sign in.":"অ্যাকাউন্ট তৈরি হয়েছে। এখন সাইন ইন করতে পারবেন।",
+  "Password must be at least 12 characters long.":"পাসওয়ার্ড কমপক্ষে ১২ অক্ষরের হতে হবে।",
+  "Registration failed. Please try again.":"নিবন্ধন ব্যর্থ হয়েছে। আবার চেষ্টা করুন।",
+  "Securely connecting you to your agricultural network.":"আপনাকে নিরাপদে কৃষি নেটওয়ার্কের সঙ্গে যুক্ত করা হচ্ছে।",
+  "AgroChain Secure Access":"AgroChain নিরাপদ প্রবেশ",
+  "All 6 Panels":"সব ৬টি প্যানেল",
+  "name@domain.com":"name@domain.com",
   'Join as Farmer':'কৃষক হিসেবে যুক্ত হন',
   'Become a Delivery Partner':'ডেলিভারি পার্টনার হন',
   'Verified Farmers':'যাচাইকৃত কৃষক',
@@ -545,7 +606,68 @@ const translations: Record<string, string> = {
   'Search Chinigura rice':'চিনিগুঁড়া চাল খুঁজুন',
   'EN':'ইং',
   'বাং':'বাং',
+  // Shared navigation and workspace labels used across every role panel
+  'User Workspace':'ব্যবহারকারী ওয়ার্কস্পেস',
+  'Farmer Workspace':'কৃষক প্যানেল',
+  'Admin Workspace':'অ্যাডমিন প্যানেল',
+  'Delivery Workspace':'ডেলিভারি প্যানেল',
+  'Warehouse Workspace':'গুদাম প্যানেল',
+  'Inspector Workspace':'পরিদর্শক প্যানেল',
+  'Registered Farmers':'নিবন্ধিত কৃষক',
+  'Agricultural Products':'কৃষিপণ্য',
+  'Orders & Shipments':'অর্ডার ও চালান',
+  'Delivery Fleet':'ডেলিভারি নেটওয়ার্ক',
+  'Regional Warehouses':'আঞ্চলিক গুদাম',
+  'Local Godown Operations':'স্থানীয় গুদাম পরিচালনা',
+  'Delivery Verifications':'ডেলিভারি যাচাই',
+  'COD Deposit Audits':'ক্যাশ অন ডেলিভারি জমার নিরীক্ষা',
+  'Seller Settlements':'বিক্রেতার পাওনা নিষ্পত্তি',
+  'Platform Analytics':'প্ল্যাটফর্ম বিশ্লেষণ',
+  'Product Listings':'পণ্যের তালিকা',
+  'Crop Batches & QR':'ফসলের ব্যাচ ও QR',
+  'Customer Orders':'ক্রেতার অর্ডার',
+  'Pickup Tracking':'পণ্য সংগ্রহের ট্র্যাকিং',
+  'Sales Reports':'বিক্রয় প্রতিবেদন',
+  'Farmer Profile':'কৃষকের প্রোফাইল',
+  'Assigned Pickups':'বরাদ্দকৃত সংগ্রহ',
+  'Assigned Deliveries':'বরাদ্দকৃত ডেলিভারি',
+  'Active Jobs Hub':'চলমান কাজ',
+  'Job History':'কাজের ইতিহাস',
+  'COD Cash Collection':'ক্যাশ অন ডেলিভারি টাকা সংগ্রহ',
+  'Monthly Reports':'মাসিক প্রতিবেদন',
+  'Partner Profile':'পার্টনার প্রোফাইল',
+  'Local Godown Hub':'স্থানীয় গুদাম কেন্দ্র',
+  'Incoming Shipments':'আগত চালান',
+  'COD Orders & Cash Audit':'COD অর্ডার ও নগদ হিসাব নিরীক্ষা',
+  'Godown Inventory':'গুদামের মজুত',
+  'Warehouse Transfers':'গুদাম স্থানান্তর',
+  'Dispatch Management':'পণ্য পাঠানোর ব্যবস্থাপনা',
+  'Partner Approvals (Manager)':'পার্টনার অনুমোদন (ম্যানেজার)',
+  'Delivery & COD Audit':'ডেলিভারি ও COD নিরীক্ষা',
+  'Storage Reports':'সংরক্ষণ প্রতিবেদন',
+  'Assigned Inspections':'বরাদ্দকৃত পরিদর্শন',
+  'Inspection Workspace':'পরিদর্শন কর্মক্ষেত্র',
+  'QC Certificates & Log':'QC সনদ ও লগ',
+  'Actions':'কার্যক্রম',
+  'Add':'যোগ করুন',
+  'Create':'তৈরি করুন',
+  'Confirm':'নিশ্চিত করুন',
+  'In Transit':'পথে রয়েছে',
+  'Successful':'সফল',
+  'Origin:':'উৎপত্তিস্থল:',
+  'Vehicle:':'যানবাহন:',
+  'Estimated Arrival:':'সম্ভাব্য পৌঁছানোর সময়:',
+  'Payment:':'পেমেন্ট:',
+  'Language / ভাষা':'Language / ভাষা',
+};
 
+const translateText = (value: string): string => {
+  if (translations[value]) return translations[value];
+  // Translate a known English phrase at the start while preserving dynamic names/IDs.
+  const keys = Object.keys(translations).filter((key) => key.length > 3 && value.startsWith(key) && /[ ,:!?.-]/.test(value.charAt(key.length)));
+  if (!keys.length) return value;
+  const key = keys.sort((a, b) => b.length - a.length)[0];
+  return translations[key] + value.slice(key.length);
 };
 
 export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
@@ -574,7 +696,7 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
         const original = originalText.get(textNode) || '';
         const trimmed = original.trim();
         if (!trimmed) continue;
-        const translated = language === 'bn' ? (translations[trimmed] || trimmed) : trimmed;
+        const translated = language === 'bn' ? translateText(trimmed) : trimmed;
         if (textNode.nodeValue !== (original === trimmed ? translated : original.replace(trimmed, translated))) {
           textNode.nodeValue = original === trimmed ? translated : original.replace(trimmed, translated);
         }
@@ -588,7 +710,7 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
           if (current === null) return;
           if (!saved!.has(attr)) saved!.set(attr, current);
           const original = saved!.get(attr) || current;
-          const translated = language === 'bn' ? (translations[original] || original) : original;
+          const translated = language === 'bn' ? (translateText(original)) : original;
           if (current !== translated) root.setAttribute(attr, translated);
         });
       }
@@ -618,8 +740,8 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
             if (!originalText.has(textNode)) originalText.set(textNode, textNode.nodeValue || '');
             const original = originalText.get(textNode) || '';
             const trimmed = original.trim();
-            if (trimmed && language === 'bn' && translations[trimmed] && textNode.parentElement && !textNode.parentElement.closest('script,style,textarea,[data-no-translate],.notranslate')) {
-              const translated = original === trimmed ? translations[trimmed] : original.replace(trimmed, translations[trimmed]);
+            if (trimmed && language === 'bn' && translateText(trimmed) !== trimmed && textNode.parentElement && !textNode.parentElement.closest('script,style,textarea,[data-no-translate],.notranslate')) {
+              const translated = original === trimmed ? translateText(trimmed) : original.replace(trimmed, translations[trimmed]);
               if (textNode.nodeValue !== translated) textNode.nodeValue = translated;
             }
           } else if (node.nodeType === Node.ELEMENT_NODE) translateElement(node);
@@ -641,7 +763,7 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
     return () => observer.disconnect();
   }, [language]);
   const value = useMemo<LanguageContextValue>(() => ({
-    language, setLanguage, t: (english: string) => language === 'en' ? english : (translations[english] || english),
+    language, setLanguage, t: (english: string) => language === 'en' ? english : (translateText(english)),
     voiceLocale: language === 'bn' ? 'bn-BD' : 'en-US'
   }), [language, setLanguage]);
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
