@@ -1,13 +1,16 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
 import { agroApi } from '../../services/api';
 import { useLanguage } from '../../context/LanguageContext';
 import { GoogleSignInButton } from '../../components/common/GoogleSignInButton';
+import './AuthTheme.css';
 import { Sprout, ShoppingBag, Truck, Check, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 export const Register: React.FC = () => {
+  const [authTheme, setAuthTheme] = useState<'lime' | 'night'>(() => { try { return localStorage.getItem('agrochain-auth-theme') === 'night' ? 'night' : 'lime'; } catch { return 'lime'; } });
+  useEffect(() => { try { localStorage.setItem('agrochain-auth-theme', authTheme); } catch { /* storage unavailable */ } }, [authTheme]);
   const [searchParams] = useSearchParams();
   const initialRole = searchParams.get('role') || 'farmer';
   const navigate = useNavigate();
@@ -113,15 +116,16 @@ export const Register: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f7ef] px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+    <div className="agro-auth-page min-h-screen px-4 py-6 sm:px-6 lg:px-10 lg:py-8" data-theme={authTheme}>
+      <button type="button" className="agro-theme-toggle" onClick={() => setAuthTheme(authTheme === "lime" ? "night" : "lime")} aria-label="Toggle color theme">{authTheme === "lime" ? "☾ Night" : "☀ Lime"}</button>
       <style>{`
         @keyframes cropSway { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
         @keyframes farmerWork { 0%,100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(3deg) translateY(3px); } }
         @keyframes sunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
         @media (prefers-reduced-motion: reduce) { .agro-motion, .agro-motion * { animation: none !important; transition: none !important; } }
       `}</style>
-      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl items-stretch overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-white shadow-[0_24px_80px_-28px_rgba(20,60,35,0.25)] lg:grid-cols-[0.92fr_1.08fr]">
-        <aside className="relative hidden min-h-[760px] overflow-hidden bg-[#123d2b] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
+      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-[1040px] agro-auth-card items-stretch overflow-hidden rounded-[28px] border shadow-[0_24px_80px_-28px_rgba(20,60,35,0.25)] lg:grid-cols-[0.92fr_1.08fr]">
+        <aside className="agro-auth-illustration relative hidden min-h-[760px] overflow-hidden p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.22),transparent_35%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
           <div className="relative z-10">
             <div className="flex items-center gap-3">
@@ -152,7 +156,7 @@ export const Register: React.FC = () => {
             <div><p className="text-lg font-extrabold text-lime-200">Partners</p><p className="mt-1 text-[10px] text-white/60">Move goods smarter</p></div>
           </div>
         </aside>
-        <main className="flex w-full min-w-0 flex-col justify-center px-4 py-7 sm:px-8 sm:py-10 lg:px-10 xl:px-14">
+        <main className="agro-auth-form flex w-full min-w-0 flex-col justify-center px-4 py-7 sm:px-8 sm:py-10 lg:px-10 xl:px-14">
           <div className="mx-auto w-full max-w-2xl space-y-6">
         <div className="text-center">
           <div className="flex justify-center mb-3">
