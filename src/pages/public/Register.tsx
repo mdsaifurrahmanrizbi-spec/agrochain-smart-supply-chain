@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
 import { agroApi } from '../../services/api';
-import { Sprout, ShoppingBag, Truck, Check, AlertCircle, ArrowRight } from 'lucide-react';
+import { Sprout, ShoppingBag, Truck, Check, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 export const Register: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -42,6 +42,7 @@ export const Register: React.FC = () => {
     temperatureControlled: false,
   });
 
+  const [showPassword, setShowPassword] = useState(false);
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
   const [registrationError, setRegistrationError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -250,17 +251,22 @@ export const Register: React.FC = () => {
 
                 <div>
                   <label className="block text-slate-700 font-semibold mb-1">Create Password</label>
-                  <input
-                    type="password"
-                    required
-                    minLength={12}
-                    maxLength={128}
-                    autoComplete="new-password"
-                    placeholder="At least 12 characters"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      minLength={12}
+                      maxLength={128}
+                      autoComplete="new-password"
+                      placeholder="At least 12 characters"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full px-3 py-2 pr-11 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
+                    />
+                    <button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+                      {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
