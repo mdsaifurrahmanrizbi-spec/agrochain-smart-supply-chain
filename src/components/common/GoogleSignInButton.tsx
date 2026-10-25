@@ -29,6 +29,10 @@ const messages = {
 
 export const GoogleSignInButton: React.FC<Props> = ({ mode, language, disabled = false, onCredential, onError }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const credentialHandlerRef = useRef(onCredential);
+  const errorHandlerRef = useRef(onError);
+  credentialHandlerRef.current = onCredential;
+  errorHandlerRef.current = onError;
   const [loading, setLoading] = useState(true);
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
@@ -38,7 +42,7 @@ export const GoogleSignInButton: React.FC<Props> = ({ mode, language, disabled =
     if (!target) return;
     if (!clientId) {
       setLoading(false);
-      onError(messages[language].unavailable);
+      errorHandlerRef.current(messages[language].unavailable);
       return;
     }
 
@@ -50,12 +54,12 @@ export const GoogleSignInButton: React.FC<Props> = ({ mode, language, disabled =
         ux_mode: 'popup',
         callback: (response) => {
           if (!response.credential) {
-            onError(messages[language].cancelled);
+            errorHandlerRef.current(messages[language].cancelled);
             return;
           }
-          void onCredential(response.credential).catch((error: unknown) => {
+          void credentialHandlerRef.current(response.credential).catch((error: unknown) => {
             const message = error instanceof Error ? error.message : messages[language].network;
-            onError(message || messages[language].network);
+            errorHandlerRef.current(message || messages[language].network);
           });
         },
       });
@@ -77,7 +81,7 @@ export const GoogleSignInButton: React.FC<Props> = ({ mode, language, disabled =
       render();
     } else if (existing) {
       existing.addEventListener('load', render, { once: true });
-      existing.addEventListener('error', () => { if (!cancelled) { setLoading(false); onError(messages[language].network); } }, { once: true });
+      existing.addEventListener('error', () => { if (!cancelled) { setLoading(false); errorHandlerRef.current(messages[language].network); } }, { once: true });
     } else {
       const script = document.createElement('script');
       script.src = 'https://accounts.google.com/gsi/client';
@@ -93,7 +97,7 @@ export const GoogleSignInButton: React.FC<Props> = ({ mode, language, disabled =
       cancelled = true;
       if (target) target.replaceChildren();
     };
-  }, [clientId, language, mode, onCredential, onError]);
+  }, [clientId, language, mode]);
 
   return (
     <div className="w-full">
