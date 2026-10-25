@@ -1,0 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700&family=Poppins:wght@400;500;600;700;800;900&display=swap');
+.agro-auth-page{--auth-bg:#c5f044;--auth-card:#fff;--auth-text:#0c3d2b;--auth-muted:#617369;--auth-border:#dce8de;position:relative;isolation:isolate;color:var(--auth-text);background:var(--auth-bg);font-family:'Poppins','Noto Sans Bengali',system-ui,sans-serif;transition:background-color 300ms ease,color 300ms ease}
+.agro-auth-page[data-theme="night"]{--auth-bg:#061f18;--auth-card:rgba(14,49,38,.96);--auth-text:#eff9f0;--auth-muted:#afc6ba;--auth-border:rgba(205,244,216,.22);background:radial-gradient(ellipse at 82% 16%,rgba(39,133,83,.32),transparent 35%),radial-gradient(ellipse at 12% 78%,rgba(21,106,77,.22),transparent 35%),#061f18}
+.agro-auth-card{position:relative;width:100%;border-color:var(--auth-border);background:var(--auth-card);color:var(--auth-text);box-shadow:0 28px 90px -35px rgba(0,25,15,.42);animation:agro-auth-enter 500ms cubic-bezier(.2,.75,.25,1) both;transition:background-color 300ms ease,border-color 300ms ease,color 300ms ease}
+.agro-auth-illustration{background:#0c3d2b}
+.agro-auth-page[data-theme="lime"] .agro-auth-illustration{order:2;background:#0c3d2b}
+.agro-auth-page[data-theme="lime"] .agro-auth-form{order:1;background:#fff;color:#0c3d2b}
+.agro-auth-page[data-theme="night"] .agro-auth-illustration{order:1;background:radial-gradient(circle at 50% 55%,rgba(112,214,75,.22),transparent 36%),linear-gradient(150deg,#0d4433,#061f18)}
+.agro-auth-page[data-theme="night"] .agro-auth-form{order:2;background:rgba(13,43,34,.88);color:#eff9f0}
+.agro-theme-toggle{position:absolute;z-index:30;top:16px;right:18px;border:1px solid var(--auth-border);border-radius:999px;padding:8px 13px;color:var(--auth-text);background:var(--auth-card);box-shadow:0 4px 18px #00000014;font:600 12px/1.2 'Poppins','Noto Sans Bengali',sans-serif;cursor:pointer;transition:transform 200ms ease,box-shadow 200ms ease,background-color 300ms ease,color 300ms ease}
+.agro-theme-toggle:hover{transform:translateY(-2px)}
+.agro-auth-page button:not(:disabled){transition:transform 180ms ease,box-shadow 180ms ease,background-color 200ms ease,border-color 200ms ease,color 200ms ease}
+.agro-auth-page button:not(:disabled):hover{transform:translateY(-2px)}
+.agro-auth-page[data-theme="night"] button:not(:disabled):hover{box-shadow:0 0 22px #b8f13f24}
+.agro-auth-page input,.agro-auth-page select,.agro-auth-page textarea{font-family:inherit}
+.agro-auth-page[data-theme="night"] .agro-auth-form input:not([type="checkbox"]):not([type="radio"]),.agro-auth-page[data-theme="night"] .agro-auth-form select,.agro-auth-page[data-theme="night"] .agro-auth-form textarea{color:#f0fbf3;background-color:#173d31;border-color:#d7f6e13b}
+.agro-auth-page[data-theme="night"] .agro-auth-form input::placeholder,.agro-auth-page[data-theme="night"] .agro-auth-form textarea::placeholder{color:#9bb6a8}
+.agro-auth-page[data-theme="night"] .agro-auth-form label,.agro-auth-page[data-theme="night"] .agro-auth-form h1,.agro-auth-page[data-theme="night"] .agro-auth-form h2{color:inherit}
+.agro-auth-page[data-theme="night"] .agro-auth-form .text-slate-500,.agro-auth-page[data-theme="night"] .agro-auth-form .text-slate-600,.agro-auth-page[data-theme="night"] .agro-auth-form .text-slate-700{color:#b4cbbf}
+.agro-auth-page[data-theme="night"] .agro-auth-form .bg-white{background-color:#143b2f}
+.agro-auth-page[data-theme="night"] .agro-auth-form .bg-slate-50,.agro-auth-page[data-theme="night"] .agro-auth-form .bg-slate-50\/80{background-color:#e6ffef12}
+.agro-auth-page[data-theme="night"] .agro-auth-form .border-slate-200,.agro-auth-page[data-theme="night"] .agro-auth-form .border-slate-200\/80{border-color:#d7f6e13b}
+.agro-auth-page[data-theme="night"] .agro-auth-form .text-slate-900,.agro-auth-page[data-theme="night"] .agro-auth-form .text-slate-950{color:#f0fbf3}
+.agro-auth-page[data-theme="night"] .agro-auth-form .text-emerald-800,.agro-auth-page[data-theme="night"] .agro-auth-form .text-emerald-700{color:#c4f65b}
+@keyframes agro-auth-enter{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:859px){.agro-auth-illustration{display:none!important}.agro-auth-card{min-height:0!important}.agro-auth-page{padding-top:58px}}
+@media(prefers-reduced-motion:reduce){.agro-auth-card,.agro-auth-page *,.agro-auth-page *:before,.agro-auth-page *:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
