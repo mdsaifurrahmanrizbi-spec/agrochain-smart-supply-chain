@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
@@ -6,9 +6,12 @@ import { UserRole } from '../../types';
 import { agroApi } from '../../services/api';
 import { useLanguage } from '../../context/LanguageContext';
 import { GoogleSignInButton } from '../../components/common/GoogleSignInButton';
+import './AuthTheme.css';
 import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2, Sprout, Leaf, Eye, EyeOff } from 'lucide-react';
 
 export const Login: React.FC = () => {
+  const [authTheme, setAuthTheme] = useState<'lime' | 'night'>(() => { try { return localStorage.getItem('agrochain-auth-theme') === 'night' ? 'night' : 'lime'; } catch { return 'lime'; } });
+  useEffect(() => { try { localStorage.setItem('agrochain-auth-theme', authTheme); } catch { /* storage unavailable */ } }, [authTheme]);
   const { login, switchDemoRole, setAuthenticatedSession } = useAuth();
   const { language } = useLanguage();
   const navigate = useNavigate();
@@ -88,15 +91,16 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-screen bg-[#f5f7ef] px-4 py-5 sm:px-6 lg:px-10 lg:py-7">
+    <div className="agro-auth-page relative min-h-screen px-4 py-5 sm:px-6 lg:px-10 lg:py-7" data-theme={authTheme}>
+      <button type="button" className="agro-theme-toggle" onClick={() => setAuthTheme(authTheme === "lime" ? "night" : "lime")} aria-label="Toggle color theme">{authTheme === "lime" ? "☾ Night" : "☀ Lime"}</button>
       <style>{`
         @keyframes loginCropSway { 0%,100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-4px); } }
         @keyframes loginSunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
         @keyframes loginFieldGlow { 0%,100% { opacity:.25; } 50% { opacity:.55; } }
         @media (prefers-reduced-motion: reduce) { .login-agro-motion, .login-agro-motion * { animation: none !important; transition: none !important; } }
       `}</style>
-      <div className="mx-auto grid min-h-[calc(100vh-3.5rem)] max-w-7xl overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-white shadow-[0_24px_80px_-28px_rgba(20,60,35,0.28)] lg:grid-cols-[1.02fr_0.98fr]">
-        <aside className="relative hidden overflow-hidden bg-[#123d2b] p-10 text-white lg:flex lg:min-h-[700px] lg:flex-col lg:justify-between xl:p-14">
+      <div className="mx-auto grid min-h-[calc(100vh-3.5rem)] max-w-[1040px] agro-auth-card overflow-hidden rounded-[28px] border shadow-[0_24px_80px_-28px_rgba(20,60,35,0.28)] lg:grid-cols-[1.02fr_0.98fr]">
+        <aside className="agro-auth-illustration relative hidden overflow-hidden p-10 text-white lg:flex lg:min-h-[700px] lg:flex-col lg:justify-between xl:p-14">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.24),transparent_34%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
           <div className="relative z-10">
             <Link to="/" className="inline-flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-lime-300">
@@ -127,7 +131,7 @@ export const Login: React.FC = () => {
           <div className="relative z-10 flex items-center gap-3 text-xs text-emerald-50/75"><ShieldCheck className="h-4 w-4 text-lime-300" /><span>One connected platform for a better food supply chain.</span></div>
         </aside>
 
-        <main className="flex items-center justify-center px-5 py-9 sm:px-10 lg:px-12 xl:px-16">
+        <main className="agro-auth-form flex items-center justify-center px-5 py-9 sm:px-10 lg:px-12 xl:px-16">
           <div className="w-full max-w-md">
             <div className="mb-8 flex items-center justify-between gap-3 lg:mb-10">
               <Link to="/" className="inline-flex items-center gap-2 lg:hidden"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-800 text-white"><Sprout className="h-6 w-6" /></span><span className="text-lg font-black text-emerald-950">AgroChain</span></Link>
