@@ -25,3 +25,20 @@
 @keyframes agro-auth-enter{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:859px){.agro-auth-illustration{display:none!important}.agro-auth-card{min-height:0!important}.agro-auth-page{padding-top:58px}}
 @media(prefers-reduced-motion:reduce){.agro-auth-card,.agro-auth-page *,.agro-auth-page *:before,.agro-auth-page *:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* Motion is applied to existing illustration elements only. */
+.agro-login-sun{animation:agro-sun-pulse 3.2s ease-in-out infinite,agro-sun-rays 24s linear infinite;transform-origin:center}
+.agro-login-scene:before{content:"🚚";position:absolute;z-index:4;left:54%;bottom:18%;font-size:clamp(2.8rem,5vw,4.5rem);line-height:1;filter:drop-shadow(0 5px 4px #001b1240);animation:agro-truck-drive 8s ease-in-out infinite;pointer-events:none}
+.agro-login-road{animation:agro-road-scroll 1.1s linear infinite}
+.agro-register-scene:before{content:"";position:absolute;inset:0;pointer-events:none;z-index:3;background-image:radial-gradient(circle,#fff2a8 0 1.5px,transparent 2px),radial-gradient(circle,#fff2a8 0 1px,transparent 2px),radial-gradient(circle,#fff2a8 0 1.5px,transparent 2px),radial-gradient(circle,#fff2a8 0 1px,transparent 2px);background-size:170px 190px,230px 240px,290px 220px,330px 300px;background-position:20px 20px,80px 130px,190px 70px,120px 200px;animation:agro-fireflies 9s ease-in-out infinite alternate;opacity:.8}
+.agro-register-scene:after{content:"";position:absolute;right:15%;top:12%;width:82px;height:82px;border-radius:50%;pointer-events:none;background:rgba(255,239,166,.18);filter:blur(15px);animation:agro-moon-glow 3s ease-in-out infinite}
+.agro-register-sprout{animation:agro-sprout-sway 3.6s ease-in-out infinite;transform-origin:bottom center}
+@keyframes agro-sun-pulse{0%,100%{filter:drop-shadow(0 0 5px #fff2a455);opacity:.92}50%{filter:drop-shadow(0 0 24px #fff2a5);opacity:1}}
+@keyframes agro-sun-rays{to{rotate:360deg}}
+@keyframes agro-truck-drive{0%,100%{transform:translateX(-14px)}50%{transform:translateX(14px)}}
+@keyframes agro-road-scroll{to{background-position-x:-90px}}
+@keyframes agro-sprout-sway{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(3deg)}}
+@keyframes agro-fireflies{0%{transform:translate3d(-8px,5px,0);opacity:.35}50%{opacity:.9}100%{transform:translate3d(10px,-8px,0);opacity:.55}}
+@keyframes agro-moon-glow{0%,100%{opacity:.4;transform:scale(.9)}50%{opacity:1;transform:scale(1.12)}}
+@media(max-width:859px){.agro-login-scene:before,.agro-register-scene:before,.agro-register-scene:after{display:none}}
+@media(prefers-reduced-motion:reduce){.agro-login-sun,.agro-login-scene:before,.agro-login-road,.agro-register-scene:before,.agro-register-scene:after,.agro-register-sprout{animation:none!important}}
