@@ -37,9 +37,10 @@ export const Header: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-8 h-16">
           {/* Zone 1: Brand wordmark */}
-          <Link to="/" className="shrink-0 flex items-center">
-            <Logo size="md" />
-          </Link>
+          <div className="shrink-0 flex items-center gap-3">
+            <Link to="/" className="flex items-center"><Logo size="md" /></Link>
+            <LanguageSwitcher compact />
+          </div>
 
           {/* Zone 2: 4-5 clean single-line nav links */}
           <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600">
@@ -59,7 +60,6 @@ export const Header: React.FC = () => {
 
           {/* Zone 3: Cart + Primary Action */}
           <div className="flex items-center gap-3 shrink-0">
-            <LanguageSwitcher compact />
             {/* Cart Icon */}
             <Link
               to="/buyer/cart"
@@ -118,28 +118,28 @@ export const Header: React.FC = () => {
             onClick={() => setMobileMenuOpen(false)}
             className="block py-2 text-sm font-medium text-slate-700 hover:text-emerald-700"
           >
-            Agricultural Marketplace
+            {t('Agricultural Marketplace')}
           </Link>
           <Link
             to="/how-it-works"
             onClick={() => setMobileMenuOpen(false)}
             className="block py-2 text-sm font-medium text-slate-700 hover:text-emerald-700"
           >
-            Supply Chain Process
+            {t('Supply Chain Process')}
           </Link>
           <Link
             to="/about"
             onClick={() => setMobileMenuOpen(false)}
             className="block py-2 text-sm font-medium text-slate-700 hover:text-emerald-700"
           >
-            About Platform
+            {t('About Platform')}
           </Link>
           <Link
             to="/contact"
             onClick={() => setMobileMenuOpen(false)}
             className="block py-2 text-sm font-medium text-slate-700 hover:text-emerald-700"
           >
-            Regional Hubs
+            {t('Regional Hubs')}
           </Link>
           <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
             <button
