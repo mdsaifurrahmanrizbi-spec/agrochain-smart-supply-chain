@@ -673,12 +673,9 @@ const translations: Record<string, string> = {
   'Your Agricultural Orders':'আপনার কৃষিপণ্যের অর্ডার',
   'Ordered on':'অর্ডারের তারিখ',
   'Payment:':'পেমেন্ট:',
-  'Total Orders Placed':'মোট অর্ডার করা হয়েছে',
   'Consumer & Buyer Portal':'ক্রেতা পোর্টাল',
   'Tracking fresh agricultural harvests direct from Bogura, Rajshahi, and Dinajpur farms to your door.':'বগুড়া, রাজশাহী ও দিনাজপুরের খামার থেকে তাজা কৃষিপণ্য সরাসরি আপনার দোরগোড়ায় পৌঁছে দেওয়া হচ্ছে।',
   'Out for Delivery':'ডেলিভারির জন্য বের হয়েছে',
-  'Today':'আজ',
-  'kg':'কেজি',
   'Language / ভাষা':'Language / ভাষা',
 };
 
