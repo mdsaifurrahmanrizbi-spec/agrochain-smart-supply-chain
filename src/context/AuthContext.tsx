@@ -12,7 +12,7 @@ interface AuthContextType {
   login: (email: string, password: string, role: UserRole) => Promise<User>;
   logout: () => void;
   switchDemoRole: (targetRole: UserRole) => void;
-  updateProfile: (updated: Partial<User>) => void;
+  updateProfile: (updated: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,9 +66,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string, role: UserRole): Promise<User> => {
     const res = await agroApi.login(email, password, role);
     localStorage.setItem('agro_auth_token', res.token);
-    localStorage.setItem('agro_active_user', JSON.stringify(res.user));
-    setUser(res.user);
-    return res.user;
+    let verifiedUser = res.user;
+    try { verifiedUser = { ...res.user, ...(await agroApi.getMyProfile()) }; } catch { /* First-time profile may be empty. */ }
+    localStorage.setItem('agro_active_user', JSON.stringify(verifiedUser));
+    setUser(verifiedUser);
+    return verifiedUser;
   };
 
   const logout = () => {
@@ -92,9 +94,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('agro_active_user', JSON.stringify(targetUser));
   };
 
-  const updateProfile = (updated: Partial<User>) => {
-    if (!user) return;
-    const newUser = { ...user, ...updated };
+  const updateProfile = async (updated: Partial<User>) => {
+    if (!user) throw new Error('You must be logged in to update your profile');
+    let persisted: Partial<User> = updated;
+    if (localStorage.getItem('agro_auth_token')) persisted = await agroApi.updateMyProfile({ name: String(updated.name ?? user.name ?? ''), phone: String(updated.phone ?? user.phone ?? ''), location: String(updated.location ?? user.location ?? '') });
+    const newUser = { ...user, ...updated, ...persisted };
     setUser(newUser);
     localStorage.setItem('agro_active_user', JSON.stringify(newUser));
   };
