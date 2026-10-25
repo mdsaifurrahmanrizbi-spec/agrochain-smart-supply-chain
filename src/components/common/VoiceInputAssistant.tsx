@@ -21,7 +21,7 @@ type SpeechRecognitionLike = {
 };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 type VoiceLanguage = 'bn-BD' | 'en-US';
-type VoiceField = { element: HTMLInputElement | HTMLTextAreaElement; rect: DOMRect };
+type VoiceField = { element: HTMLInputElement | HTMLTextAreaElement; rect: DOMRect; wrapper: HTMLElement };
 
 declare global {
   interface Window {
@@ -65,13 +65,24 @@ export const VoiceInputAssistant: React.FC = () => {
       .filter((element): element is HTMLInputElement | HTMLTextAreaElement => isVoiceEditable(element))
       .filter((element) => !element.closest('[data-voice-assistant-ignore]'))
       .map((element) => {
+        let wrapper = element.parentElement?.dataset.voiceInputWrapper === 'true' ? element.parentElement : null;
+        if (!wrapper) {
+          const originalDisplay = window.getComputedStyle(element).display;
+          wrapper = document.createElement('span');
+          wrapper.dataset.voiceInputWrapper = 'true';
+          wrapper.style.position = 'relative';
+          wrapper.style.display = originalDisplay === 'inline' || originalDisplay === 'inline-block' ? 'inline-block' : 'block';
+          wrapper.style.width = '100%';
+          wrapper.style.minWidth = '0';
+          element.parentNode?.insertBefore(wrapper, element);
+          wrapper.appendChild(element);
+        }
         if (!element.dataset.voicePaddingApplied) {
           element.dataset.voiceOriginalPaddingRight = element.style.paddingRight;
-          const computedPadding = Number.parseFloat(window.getComputedStyle(element).paddingRight) || 0;
-          element.style.paddingRight = `${computedPadding + 34}px`;
+          element.style.paddingRight = '48px';
           element.dataset.voicePaddingApplied = 'true';
         }
-        return { element, rect: element.getBoundingClientRect() };
+        return { element, rect: element.getBoundingClientRect(), wrapper };
       })
       .filter(({ rect }) => rect.width > 0 && rect.height > 0);
     setFields(next);
@@ -100,6 +111,11 @@ export const VoiceInputAssistant: React.FC = () => {
         element.style.paddingRight = element.dataset.voiceOriginalPaddingRight || '';
         delete element.dataset.voicePaddingApplied;
         delete element.dataset.voiceOriginalPaddingRight;
+      });
+      document.querySelectorAll<HTMLElement>('[data-voice-input-wrapper="true"]').forEach((wrapper) => {
+        const input = wrapper.querySelector('input, textarea');
+        if (input?.parentElement === wrapper) wrapper.parentNode?.insertBefore(input, wrapper);
+        wrapper.remove();
       });
     };
   }, [refreshFields]);
@@ -188,13 +204,11 @@ export const VoiceInputAssistant: React.FC = () => {
 
   return (
     <>
-      {fields.map(({ element, rect }) => {
+      {fields.map(({ element, rect, wrapper }) => {
         const key = fieldKey(element);
         const isPanelOpen = panelField === element;
-        // Position the mic in document coordinates so it scrolls with its field
-        // instead of behaving like a viewport-fixed floating control.
-        const left = rect.right + window.scrollX - 35;
-        const top = rect.top + window.scrollY + Math.max(0, (rect.height - 30) / 2);
+        // The mic is rendered inside this field's positioned wrapper, so CSS keeps it anchored during scroll and resize.
+        const left = rect.right + window.scrollX - 36;
         return createPortal(
           <React.Fragment key={key}>
             <button
@@ -209,7 +223,7 @@ export const VoiceInputAssistant: React.FC = () => {
                 setActiveField(element);
                 activeFieldRef.current = element;
               }}
-              style={{ position: 'absolute', top, left, zIndex: 80, width: 30, height: 30 }}
+              style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', zIndex: 80, width: 36, height: 36 }}
               className={`flex items-center justify-center rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 ${isListening && activeField === element ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
             >
               <Mic className="h-[17px] w-[17px]" />
@@ -239,7 +253,7 @@ export const VoiceInputAssistant: React.FC = () => {
               document.body
             )}
           </React.Fragment>,
-          document.body
+          wrapper
         );
       })}
     </>
