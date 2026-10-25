@@ -143,7 +143,7 @@ export const BuyerDashboard: React.FC = () => {
                   {ord.items.map((i) => `${i.quantity} ${i.unit} ${i.productName}`).join(' + ')}
                 </p>
                 <div className="text-[11px] text-slate-400">
-                  {t('Ordered on')} {ord.createdAt} · {t('Payment')}: <strong className="text-slate-700 font-medium">{t(ord.paymentMethod === 'COD' || ord.paymentMethod === 'CASH_ON_DELIVERY' ? 'COD' : ord.paymentMethod === 'ONLINE' || ord.paymentMethod === 'ONLINE_PAYMENT' ? 'Online' : ord.paymentMethod)}</strong>
+                  {t('Ordered on')} {ord.createdAt} · {t('Payment')}: <strong className="text-slate-700 font-medium">{t((ord.paymentMethod as string) === 'COD' || (ord.paymentMethod as string) === 'CASH_ON_DELIVERY' ? 'COD' : (ord.paymentMethod as string) === 'ONLINE' || (ord.paymentMethod as string) === 'ONLINE_PAYMENT' ? 'Online' : ord.paymentMethod)}</strong>
                 </div>
               </div>
 
