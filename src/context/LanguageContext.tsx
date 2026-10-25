@@ -654,7 +654,41 @@ const translations: Record<string, string> = {
   'Confirm':'নিশ্চিত করুন',
   'In Transit':'পথে রয়েছে',
   'Successful':'সফল',
+  'My Cart':'আমার কার্ট',
+  'Total Orders Placed':'মোট অর্ডার করা হয়েছে',
+  'Consignment history':'চালানের ইতিহাস',
+  'Consignments In Transit':'পথে থাকা চালান',
+  'Real-time vehicle trace active':'যানবাহনের রিয়েল-টাইম অবস্থান চালু আছে',
+  'Successfully Delivered':'সফলভাবে পৌঁছে দেওয়া হয়েছে',
+  'Doorstep verified produce':'বাড়িতে পৌঁছে দেওয়া পণ্য যাচাইকৃত',
+  'Total Spent (BDT)':'মোট খরচ (টাকা)',
+  'Direct fair farmer transactions':'কৃষকের সঙ্গে সরাসরি ও ন্যায্য লেনদেন',
+  'Live Delivery En Route':'চলমান ডেলিভারি',
+  'View Vertical Timeline':'সম্পূর্ণ সময়রেখা দেখুন',
+  'Contents':'পণ্যের বিবরণ',
+  'Origin:':'উৎপত্তিস্থল:',
+  'Vehicle:':'যানবাহন:',
+  'Current Status':'বর্তমান অবস্থা',
+  'Estimated Arrival:':'সম্ভাব্য পৌঁছানোর সময়:',
+  'Your Agricultural Orders':'আপনার কৃষিপণ্যের অর্ডার',
+  'Ordered on':'অর্ডারের তারিখ',
+  'Payment:':'পেমেন্ট:',
+  'Total Orders Placed':'মোট অর্ডার করা হয়েছে',
+  'Consumer & Buyer Portal':'ক্রেতা পোর্টাল',
+  'Tracking fresh agricultural harvests direct from Bogura, Rajshahi, and Dinajpur farms to your door.':'বগুড়া, রাজশাহী ও দিনাজপুরের খামার থেকে তাজা কৃষিপণ্য সরাসরি আপনার দোরগোড়ায় পৌঁছে দেওয়া হচ্ছে।',
+  'Out for Delivery':'ডেলিভারির জন্য বের হয়েছে',
+  'Today':'আজ',
+  'kg':'কেজি',
   'Language / ভাষা':'Language / ভাষা',
+};
+
+const translateText = (value: string): string => {
+  if (translations[value]) return translations[value];
+  // Translate a known English phrase at the start while preserving dynamic names/IDs.
+  const keys = Object.keys(translations).filter((key) => key.length > 3 && value.startsWith(key) && /[ ,:!?.-]/.test(value.charAt(key.length)));
+  if (!keys.length) return value;
+  const key = keys.sort((a, b) => b.length - a.length)[0];
+  return translations[key] + value.slice(key.length);
 };
 
 export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
@@ -683,7 +717,7 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
         const original = originalText.get(textNode) || '';
         const trimmed = original.trim();
         if (!trimmed) continue;
-        const translated = language === 'bn' ? (translations[trimmed] || trimmed) : trimmed;
+        const translated = language === 'bn' ? translateText(trimmed) : trimmed;
         if (textNode.nodeValue !== (original === trimmed ? translated : original.replace(trimmed, translated))) {
           textNode.nodeValue = original === trimmed ? translated : original.replace(trimmed, translated);
         }
@@ -697,7 +731,7 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
           if (current === null) return;
           if (!saved!.has(attr)) saved!.set(attr, current);
           const original = saved!.get(attr) || current;
-          const translated = language === 'bn' ? (translations[original] || original) : original;
+          const translated = language === 'bn' ? (translateText(original)) : original;
           if (current !== translated) root.setAttribute(attr, translated);
         });
       }
@@ -727,8 +761,8 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
             if (!originalText.has(textNode)) originalText.set(textNode, textNode.nodeValue || '');
             const original = originalText.get(textNode) || '';
             const trimmed = original.trim();
-            if (trimmed && language === 'bn' && translations[trimmed] && textNode.parentElement && !textNode.parentElement.closest('script,style,textarea,[data-no-translate],.notranslate')) {
-              const translated = original === trimmed ? translations[trimmed] : original.replace(trimmed, translations[trimmed]);
+            if (trimmed && language === 'bn' && translateText(trimmed) !== trimmed && textNode.parentElement && !textNode.parentElement.closest('script,style,textarea,[data-no-translate],.notranslate')) {
+              const translated = original === trimmed ? translateText(trimmed) : original.replace(trimmed, translations[trimmed]);
               if (textNode.nodeValue !== translated) textNode.nodeValue = translated;
             }
           } else if (node.nodeType === Node.ELEMENT_NODE) translateElement(node);
@@ -750,7 +784,7 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
     return () => observer.disconnect();
   }, [language]);
   const value = useMemo<LanguageContextValue>(() => ({
-    language, setLanguage, t: (english: string) => language === 'en' ? english : (translations[english] || english),
+    language, setLanguage, t: (english: string) => language === 'en' ? english : (translateText(english)),
     voiceLocale: language === 'bn' ? 'bn-BD' : 'en-US'
   }), [language, setLanguage]);
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
