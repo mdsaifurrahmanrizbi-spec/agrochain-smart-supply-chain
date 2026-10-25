@@ -18,6 +18,7 @@ import { About } from './pages/public/About';
 import { HowItWorks } from './pages/public/HowItWorks';
 import { Contact } from './pages/public/Contact';
 import { Login } from './pages/public/Login';
+import { GoogleProfileCompletion } from './pages/public/GoogleProfileCompletion';
 import { Register } from './pages/public/Register';
 import { PasswordReset } from './pages/PasswordReset';
 
@@ -115,6 +116,7 @@ export default function App() {
               <Route path="/contact" element={<Contact />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/google-profile" element={<GoogleProfileCompletion />} />
               <Route path="/password-reset" element={<PasswordReset />} />
               <Route path="/warehouse-portal" element={<Navigate to="/warehouse-portal/login" replace />} />
               <Route path="/warehouse-portal/login" element={<Login />} />
