@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
 import { agroApi } from '../../services/api';
+import { useLanguage } from '../../context/LanguageContext';
+import { GoogleSignInButton } from '../../components/common/GoogleSignInButton';
 import { Sprout, ShoppingBag, Truck, Check, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 export const Register: React.FC = () => {
   const [searchParams] = useSearchParams();
   const initialRole = searchParams.get('role') || 'farmer';
   const navigate = useNavigate();
+  const { language } = useLanguage();
+  const { setAuthenticatedSession } = useAuth();
   // Public registration creates accounts through the backend, not demo roles.
 
   const [selectedRole, setSelectedRole] = useState<'farmer' | 'buyer' | 'delivery' | 'warehouse'>(
@@ -46,6 +50,29 @@ export const Register: React.FC = () => {
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
   const [registrationError, setRegistrationError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleGoogleCredential = useCallback(async (credential: string) => {
+    setRegistrationError(null);
+    setIsSubmitting(true);
+    try {
+      const result = await agroApi.googleAuth(credential, selectedRole === 'farmer' || selectedRole === 'buyer' ? selectedRole : undefined);
+      if ('needsProfile' in result && result.needsProfile) {
+        sessionStorage.setItem('agro_google_profile_token', result.profileToken);
+        sessionStorage.setItem('agro_google_profile_name', result.name || '');
+        sessionStorage.setItem('agro_google_profile_email', result.email || '');
+        navigate('/google-profile');
+        return;
+      }
+      if (!('token' in result) || !('user' in result)) throw new Error('The server returned an invalid Google authentication response');
+      const sessionResult = result as { token: string; user: import('../../types').User };
+      setAuthenticatedSession(sessionResult.token, sessionResult.user);
+      navigate(sessionResult.user.role === 'farmer' ? '/farmer/dashboard' : '/buyer/dashboard', { replace: true });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [navigate, selectedRole, setAuthenticatedSession]);
+
+  const handleGoogleError = useCallback((message: string) => setRegistrationError(message), []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,6 +206,12 @@ export const Register: React.FC = () => {
 
           <button type="button" onClick={() => setSelectedRole('warehouse')} className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${selectedRole === 'warehouse' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}><Truck className="w-4 h-4" /><span>Warehouse</span></button>
         </div>
+        {!submittedMessage && (selectedRole === 'farmer' || selectedRole === 'buyer') && (
+          <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="mb-3 text-center text-xs text-slate-500">{language === 'bn' ? 'অথবা Google দিয়ে সাইন আপ করুন' : 'Or sign up with Google'}</p>
+            <GoogleSignInButton mode="signup" language={language === 'bn' ? 'bn' : 'en'} disabled={isSubmitting} onCredential={handleGoogleCredential} onError={handleGoogleError} />
+          </div>
+        )}
         {/* Form Card */}
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_12px_40px_-28px_rgba(15,50,30,0.35)] sm:p-8">
           {submittedMessage ? (
@@ -201,7 +234,7 @@ export const Register: React.FC = () => {
               </div>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
               {registrationError && (
                 <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-800">
                   <div className="flex items-start gap-2">
