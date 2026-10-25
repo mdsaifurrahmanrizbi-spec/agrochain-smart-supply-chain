@@ -23,7 +23,7 @@ export const FarmerProfile: React.FC = () => {
         payoutAccountNumber,
         payoutBankName,
       });
-      updateProfile({
+      await updateProfile({
         name, phone, location,
         payoutMethod: payoutAccount.payoutMethod,
         payoutAccountNumber: payoutAccount.payoutAccountNumber,

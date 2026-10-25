@@ -391,6 +391,33 @@ export const agroApi = {
     return data as User;
   },
 
+
+  async getMyProfile(): Promise<Partial<User>> {
+    const response = await fetch(API_BASE_URL + '/me/profile/', { headers: authHeaders() });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.message || 'Could not load profile');
+    return payload as Partial<User>;
+  },
+  async updateMyProfile(input: { name: string; phone: string; location: string }): Promise<Partial<User>> {
+    const response = await fetch(API_BASE_URL + '/me/profile/', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(input) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.message || 'Could not save profile');
+    return payload as Partial<User>;
+  },
+  async getMyDeliveryAddresses<T>(): Promise<T[]> {
+    const response = await fetch(API_BASE_URL + '/me/addresses/', { headers: authHeaders() });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.message || 'Could not load delivery addresses');
+    if (!Array.isArray(payload)) throw new Error('Invalid delivery addresses response');
+    return payload as T[];
+  },
+  async saveMyDeliveryAddresses<T>(addresses: T[]): Promise<T[]> {
+    const response = await fetch(API_BASE_URL + '/me/addresses/', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ addresses }) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.message || 'Could not save delivery addresses');
+    if (!Array.isArray(payload)) throw new Error('Invalid delivery addresses response');
+    return payload as T[];
+  },
   async updateFarmerPayoutAccount(input: {
     payoutMethod: 'bKash' | 'Nagad' | 'Bank Transfer';
     payoutAccountNumber: string;

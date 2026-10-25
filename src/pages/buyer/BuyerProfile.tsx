@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { User, Phone, Mail, MapPin, Check, Plus, Pencil, Trash2, Star, X } from 'lucide-react';
+import { agroApi } from '../../services/api';
 
 type DeliveryAddress = {
   id: string;
@@ -17,10 +18,11 @@ type DeliveryAddress = {
 export const BuyerProfile: React.FC = () => {
   const { user, updateProfile } = useAuth();
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const [name, setName] = useState(user?.name || 'Tasnim Rahman');
-  const [phone, setPhone] = useState(user?.phone || '+880 1755-432109');
-  const [location, setLocation] = useState(user?.location || 'Banani DOHS, Dhaka');
+  const [name, setName] = useState(user?.name || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [location, setLocation] = useState(user?.location || '');
 
   const storageKey = `agrochain_delivery_addresses_${user?.id || user?.email || 'buyer'}`;
 
@@ -40,52 +42,77 @@ export const BuyerProfile: React.FC = () => {
 
   const [form, setForm] = useState(emptyForm);
 
+
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-
-      if (raw) {
-        const parsed = JSON.parse(raw) as DeliveryAddress[];
-        setAddresses(parsed);
-      } else {
-        const initialAddress: DeliveryAddress[] = [
-          {
-            id: 'address-default',
-            label: 'Home',
-            recipient: user?.name || '',
-            phone: user?.phone || '',
-            address: user?.location && !['Bangladesh', 'Dhaka, Bangladesh'].includes(user.location) ? user.location : '',
-            area: '',
-            district: 'Dhaka',
-            isDefault: true,
-          },
-        ];
-        setAddresses(initialAddress);
-        localStorage.setItem(storageKey, JSON.stringify(initialAddress));
+    let cancelled = false;
+    const loadProfileAndAddresses = async () => {
+      const hasSession = Boolean(localStorage.getItem('agro_auth_token'));
+      try {
+        if (hasSession) {
+          const profile = await agroApi.getMyProfile();
+          if (!cancelled) {
+            if (typeof profile.name === 'string') setName(profile.name);
+            if (typeof profile.phone === 'string') setPhone(profile.phone);
+            if (typeof profile.location === 'string') setLocation(profile.location);
+          }
+          let savedAddresses = await agroApi.getMyDeliveryAddresses<DeliveryAddress>();
+          if (savedAddresses.length === 0) {
+            const oldRaw = localStorage.getItem(storageKey);
+            if (oldRaw) {
+              try {
+                const oldAddresses = JSON.parse(oldRaw) as DeliveryAddress[];
+                if (Array.isArray(oldAddresses) && oldAddresses.length) {
+                  const normalized = oldAddresses.map((item, index) => ({ ...item, id: item.id || `address-migrated-${index}-${Date.now()}`, isDefault: item.isDefault === true }));
+                  const defaultIndex = normalized.findIndex((item) => item.isDefault);
+                  normalized.forEach((item, index) => { item.isDefault = defaultIndex < 0 ? index === 0 : index === defaultIndex; });
+                  savedAddresses = await agroApi.saveMyDeliveryAddresses(normalized);
+                }
+              } catch (migrationError) {
+                console.error('Could not migrate browser delivery addresses:', migrationError);
+              }
+            }
+          }
+          if (!cancelled) setAddresses(savedAddresses);
+          localStorage.setItem(storageKey, JSON.stringify(savedAddresses));
+        } else {
+          const raw = localStorage.getItem(storageKey);
+          const parsed = raw ? JSON.parse(raw) as DeliveryAddress[] : [];
+          if (!cancelled) setAddresses(Array.isArray(parsed) ? parsed : []);
+        }
+      } catch (error) {
+        console.error('Could not load buyer profile:', error);
+        if (!cancelled) setNotice(error instanceof Error ? error.message : 'Could not load saved profile data.');
       }
-    } catch (error) {
-      console.error('Could not load saved delivery addresses:', error);
-      setAddresses([]);
-    }
-  }, [storageKey, user?.name, user?.phone, user?.location]);
+    };
+    void loadProfileAndAddresses();
+    return () => { cancelled = true; };
+  }, [storageKey]);
 
-  const persistAddresses = (next: DeliveryAddress[]) => {
-    setAddresses(next);
-
+  const persistAddresses = async (next: DeliveryAddress[]) => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify(next));
-      setNotice('Delivery addresses saved successfully.');
+      const persisted = localStorage.getItem('agro_auth_token') ? await agroApi.saveMyDeliveryAddresses(next) : next;
+      setAddresses(persisted);
+      localStorage.setItem(storageKey, JSON.stringify(persisted));
+      setNotice(localStorage.getItem('agro_auth_token') ? 'Delivery addresses saved to your account.' : 'Demo addresses saved in this browser only.');
     } catch (error) {
-      console.error('Could not save delivery addresses:', error);
-      setNotice('Could not save addresses in this browser.');
+      setNotice(error instanceof Error ? error.message : 'Could not save delivery addresses.');
+      throw error;
     }
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateProfile({ name, phone, location });
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 3000);
+    setSaving(true);
+    setNotice('');
+    try {
+      await updateProfile({ name, phone, location });
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not save profile changes.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const startAdd = () => {
@@ -116,7 +143,7 @@ export const BuyerProfile: React.FC = () => {
     setNotice('');
   };
 
-  const handleSaveAddress = (e: React.FormEvent) => {
+  const handleSaveAddress = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const isNew = editingId === null;
@@ -142,9 +169,13 @@ export const BuyerProfile: React.FC = () => {
       next = next.map((item) => ({ ...item, isDefault: true }));
     }
 
-    persistAddresses(next);
-    setShowForm(false);
-    setEditingId(null);
+    try {
+      await persistAddresses(next);
+      setShowForm(false);
+      setEditingId(null);
+    } catch {
+      // Keep the form open so edits are not lost when saving fails.
+    }
   };
 
   const setDefaultAddress = (id: string) => {
@@ -153,7 +184,7 @@ export const BuyerProfile: React.FC = () => {
       isDefault: item.id === id,
     }));
 
-    persistAddresses(next);
+    void persistAddresses(next).catch(() => {});
   };
 
   const deleteAddress = (id: string) => {
@@ -171,7 +202,7 @@ export const BuyerProfile: React.FC = () => {
       }));
     }
 
-    persistAddresses(next);
+    void persistAddresses(next).catch(() => {});
   };
 
   return (
@@ -253,9 +284,10 @@ export const BuyerProfile: React.FC = () => {
           <div className="flex justify-end">
             <button
               type="submit"
+              disabled={saving}
               className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold"
             >
-              Save Profile
+              {saving ? 'Saving…' : 'Save Profile'}
             </button>
           </div>
         </form>
@@ -457,7 +489,7 @@ export const BuyerProfile: React.FC = () => {
       )}
 
       <p className="text-[11px] text-slate-500">
-        Note: Saved addresses currently stay in this browser. Checkout and backend order integration must be connected separately.
+        Signed-in delivery addresses are saved to your account and remain available after reload or login. Checkout address selection is a separate integration.
       </p>
     </div>
   );

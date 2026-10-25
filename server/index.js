@@ -681,6 +681,45 @@ app.get('/api/farmers/payout-accounts/', requireAuth, async (req, res) => {
   }
 });
 
+
+function profilePayload(record) { return record?.data && typeof record.data === 'object' ? record.data : {}; }
+app.get('/api/me/profile/', requireAuth, async (req, res) => {
+  try { const result = await pool.query("SELECT data FROM agrochain_records WHERE resource = 'buyerProfiles' AND id = $1 LIMIT 1", [req.auth.sub]); return res.json(profilePayload(result.rows[0])); }
+  catch (error) { console.error('Could not load profile:', error.message); return res.status(500).json({ message: 'Could not load profile' }); }
+});
+app.put('/api/me/profile/', requireAuth, async (req, res) => {
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const phone = typeof req.body?.phone === 'string' ? req.body.phone.trim().slice(0, 32) : '';
+  const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 500) : '';
+  if (!name || name.length > 120) return res.status(400).json({ message: 'Enter a valid full name' });
+  if (!phone || phone.length < 5) return res.status(400).json({ message: 'Enter a valid phone number' });
+  if (!location) return res.status(400).json({ message: 'Enter your primary residence or delivery area' });
+  try {
+    const existing = await pool.query("SELECT data FROM agrochain_records WHERE resource = 'buyerProfiles' AND id = $1 LIMIT 1", [req.auth.sub]);
+    const next = { ...profilePayload(existing.rows[0]), id: req.auth.sub, name, phone, location, updatedAt: new Date().toISOString() };
+    await pool.query(`INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('buyerProfiles', $1, $2::jsonb, NOW(), NOW()) ON CONFLICT (resource, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`, [req.auth.sub, JSON.stringify(next)]);
+    return res.json(next);
+  } catch (error) { console.error('Could not save profile:', error.message); return res.status(500).json({ message: 'Could not save profile changes' }); }
+});
+app.get('/api/me/addresses/', requireAuth, async (req, res) => {
+  try { const result = await pool.query("SELECT data FROM agrochain_records WHERE resource = 'buyerAddresses' AND id = $1 LIMIT 1", [req.auth.sub]); const data = profilePayload(result.rows[0]); return res.json(Array.isArray(data.addresses) ? data.addresses : []); }
+  catch (error) { console.error('Could not load delivery addresses:', error.message); return res.status(500).json({ message: 'Could not load delivery addresses' }); }
+});
+app.put('/api/me/addresses/', requireAuth, async (req, res) => {
+  const addresses = req.body?.addresses;
+  if (!Array.isArray(addresses) || addresses.length > 50) return res.status(400).json({ message: 'Addresses must be a list of at most 50 entries' });
+  const ids = new Set();
+  for (const item of addresses) {
+    if (!item || typeof item.id !== 'string' || !item.id || ids.has(item.id) || typeof item.label !== 'string' || typeof item.recipient !== 'string' || typeof item.phone !== 'string' || typeof item.address !== 'string' || typeof item.area !== 'string' || typeof item.district !== 'string' || !item.recipient.trim() || !item.phone.trim() || !item.address.trim() || !item.area.trim() || !item.district.trim()) return res.status(400).json({ message: 'Every address must include a unique ID, recipient, phone, street address, area, and district' });
+    ids.add(item.id);
+  }
+  if (addresses.length && addresses.filter((item) => item.isDefault === true).length !== 1) return res.status(400).json({ message: 'Choose exactly one default delivery address' });
+  try {
+    const data = { id: req.auth.sub, addresses, updatedAt: new Date().toISOString() };
+    await pool.query(`INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('buyerAddresses', $1, $2::jsonb, NOW(), NOW()) ON CONFLICT (resource, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`, [req.auth.sub, JSON.stringify(data)]);
+    return res.json(addresses);
+  } catch (error) { console.error('Could not save delivery addresses:', error.message); return res.status(500).json({ message: 'Could not save delivery addresses' }); }
+});
 // Return the authenticated account from the database.
 app.get('/api/me', requireAuth, async (req, res) => {
   try {
