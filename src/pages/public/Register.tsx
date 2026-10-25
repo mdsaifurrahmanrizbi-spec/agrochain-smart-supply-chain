@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
-import { LanguageSwitcher } from '../../components/common/LanguageSwitcher';
 import { agroApi } from '../../services/api';
 import { Sprout, ShoppingBag, Truck, Check, AlertCircle, ArrowRight } from 'lucide-react';
 
@@ -87,7 +86,6 @@ export const Register: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f5f7ef] px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-      <div className="fixed right-4 top-4 z-50"><LanguageSwitcher /></div>
       <style>{`
         @keyframes cropSway { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
         @keyframes farmerWork { 0%,100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(3deg) translateY(3px); } }
