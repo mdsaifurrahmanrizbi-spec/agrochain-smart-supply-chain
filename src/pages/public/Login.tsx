@@ -70,6 +70,7 @@ export const Login: React.FC = () => {
         navigate('/google-profile');
         return;
       }
+      if (!('token' in result) || !('user' in result)) throw new Error('The server returned an invalid Google authentication response');
       setAuthenticatedSession(result.token, result.user);
       const paths: Record<UserRole, string> = { admin: '/admin/dashboard', farmer: '/farmer/dashboard', buyer: '/buyer/dashboard', delivery: '/delivery/dashboard', warehouse: '/warehouse/dashboard', inspector: '/inspector/dashboard' };
       navigate(paths[result.user.role] || '/', { replace: true });
