@@ -2,7 +2,6 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
-import { LanguageSwitcher } from '../../components/common/LanguageSwitcher';
 import { UserRole } from '../../types';
 import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2, Sprout, Leaf } from 'lucide-react';
 
@@ -62,7 +61,6 @@ export const Login: React.FC = () => {
 
   return (
     <div className="relative min-h-screen bg-[#f5f7ef] px-4 py-5 sm:px-6 lg:px-10 lg:py-7">
-      <div className="fixed right-4 top-4 z-50"><LanguageSwitcher /></div>
       <style>{`
         @keyframes loginCropSway { 0%,100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-4px); } }
         @keyframes loginSunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
