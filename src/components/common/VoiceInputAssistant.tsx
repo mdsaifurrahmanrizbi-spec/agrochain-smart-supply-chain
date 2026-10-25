@@ -191,8 +191,10 @@ export const VoiceInputAssistant: React.FC = () => {
       {fields.map(({ element, rect }) => {
         const key = fieldKey(element);
         const isPanelOpen = panelField === element;
-        const right = Math.max(8, window.innerWidth - rect.right + 5);
-        const top = rect.top + Math.max(0, (rect.height - 30) / 2);
+        // Position the mic in document coordinates so it scrolls with its field
+        // instead of behaving like a viewport-fixed floating control.
+        const left = rect.right + window.scrollX - 35;
+        const top = rect.top + window.scrollY + Math.max(0, (rect.height - 30) / 2);
         return createPortal(
           <React.Fragment key={key}>
             <button
@@ -207,13 +209,13 @@ export const VoiceInputAssistant: React.FC = () => {
                 setActiveField(element);
                 activeFieldRef.current = element;
               }}
-              style={{ position: 'fixed', top, right, zIndex: 80, width: 30, height: 30 }}
+              style={{ position: 'absolute', top, left, zIndex: 80, width: 30, height: 30 }}
               className={`flex items-center justify-center rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 ${isListening && activeField === element ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
             >
               <Mic className="h-[17px] w-[17px]" />
             </button>
             {isPanelOpen && createPortal(
-              <section data-voice-assistant-ignore style={{ position: 'fixed', top: Math.max(8, rect.top - 8), right, transform: 'translateY(-100%)', zIndex: 90, width: 'min(300px, calc(100vw - 24px))' }} className="rounded-xl border border-emerald-100 bg-white p-3 shadow-xl">
+              <section data-voice-assistant-ignore style={{ position: 'absolute', top: Math.max(8, rect.top + window.scrollY - 8), left: Math.max(8, left - 265), transform: 'translateY(-100%)', zIndex: 90, width: 'min(300px, calc(100vw - 24px))' }} className="rounded-xl border border-emerald-100 bg-white p-3 shadow-xl">
                 <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
                   <Languages className="h-4 w-4 text-emerald-700" /> {appLanguage === 'bn' ? 'ভয়েস ইনপুট' : 'Voice input'}
                   <select aria-label="Voice language" value={language} disabled={isListening} onChange={(event) => setLanguage(event.target.value as VoiceLanguage)} className="ml-auto rounded-md border border-slate-200 bg-white px-2 py-1 text-xs">
