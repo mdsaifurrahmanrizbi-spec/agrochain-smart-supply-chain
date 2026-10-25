@@ -180,7 +180,7 @@ export const DashboardLayout: React.FC = () => {
             <Link to="/" className="flex items-center">
               <Logo variant="light" size="sm" />
             </Link>
-            <div className="ml-auto"><LanguageSwitcher compact /></div>
+            
           </div>
           <button
             onClick={() => setMobileSidebarOpen(false)}
@@ -340,6 +340,10 @@ export const DashboardLayout: React.FC = () => {
                     <span className="inline-block mt-1 text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
                       {role}
                     </span>
+                  </div>
+                  <div className="border-b border-slate-100 px-3 py-2">
+                    <p className="mb-2 text-[11px] font-semibold text-slate-500">ভাষা নির্বাচন করুন</p>
+                    <LanguageSwitcher />
                   </div>
                   <div className="pt-1 text-xs">
                     <button
