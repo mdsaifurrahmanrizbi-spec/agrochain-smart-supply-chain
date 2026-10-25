@@ -169,7 +169,7 @@ app.post('/api/auth/google/', async (req, res) => {
     }, googleProfileTokenSecret(), { expiresIn: '10m', issuer: 'agrochain-api', audience: 'agrochain-google-profile' });
     return res.json({ needsProfile: true, profileToken, name: verifiedName, email: verifiedEmail, avatar });
   } catch (error) {
-    if (error?.name === 'TokenExpiredError' || error?.name === 'JsonWebTokenError') {
+    if (error?.name === 'TokenExpiredError' || error?.name === 'JsonWebTokenError' || /invalid token|token used too late|invalid jwt|signature|audience/i.test(String(error?.message || ''))) {
       return res.status(401).json({ message: 'Google sign-in expired or could not be verified. Please try again.' });
     }
     console.error('Google authentication failed:', error.message);
