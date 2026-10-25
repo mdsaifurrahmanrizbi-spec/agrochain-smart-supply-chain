@@ -10,6 +10,7 @@ interface AuthContextType {
   authLoading: boolean;
   isBackendConnected: boolean;
   login: (email: string, password: string, role: UserRole) => Promise<User>;
+  setAuthenticatedSession: (token: string, user: User) => void;
   logout: () => void;
   switchDemoRole: (targetRole: UserRole) => void;
   updateProfile: (updated: Partial<User>) => Promise<void>;
@@ -73,6 +74,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return verifiedUser;
   };
 
+  const setAuthenticatedSession = (token: string, authenticatedUser: User) => {
+    localStorage.setItem('agro_auth_token', token);
+    localStorage.setItem('agro_active_user', JSON.stringify(authenticatedUser));
+    setUser(authenticatedUser);
+  };
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem('agro_active_user');
@@ -112,6 +119,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         authLoading,
         isBackendConnected,
         login,
+        setAuthenticatedSession,
         logout,
         switchDemoRole,
         updateProfile,
