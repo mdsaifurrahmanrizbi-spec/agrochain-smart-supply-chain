@@ -353,6 +353,35 @@ export const agroApi = {
     return data as { message: string };
   },
 
+  // Verify a Google ID token on the backend. Client-supplied names, emails and roles are never trusted.
+  async googleAuth(credential: string, requestedRole?: 'farmer' | 'buyer'): Promise<
+    | { token: string; user: User }
+    | { needsProfile: true; profileToken: string; name: string; email: string; avatar?: string }
+  > {
+    const res = await fetch(`${API_BASE_URL}/auth/google/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential, requestedRole }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Google sign-in failed (${res.status})`);
+    if (data.needsProfile === true && typeof data.profileToken === 'string') return data;
+    if (typeof data.token !== 'string' || !data.user) throw new Error('The server returned an invalid Google authentication response');
+    return data as { token: string; user: User };
+  },
+
+  async completeGoogleProfile(input: { profileToken: string; role: 'farmer' | 'buyer'; phone: string }): Promise<{ token: string; user: User }> {
+    const res = await fetch(`${API_BASE_URL}/auth/google/complete-profile/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Could not complete Google profile (${res.status})`);
+    if (typeof data.token !== 'string' || !data.user) throw new Error('The server returned an invalid profile completion response');
+    return data as { token: string; user: User };
+  },
+
   // Authenticate only against the backend; never silently fall back to a mock user.
   async login(email: string, password: string, role: User['role']): Promise<{ token: string; user: User }> {
     const res = await fetch(`${API_BASE_URL}/login/`, {
