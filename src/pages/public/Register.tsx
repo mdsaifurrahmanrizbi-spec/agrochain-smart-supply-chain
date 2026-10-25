@@ -64,8 +64,9 @@ export const Register: React.FC = () => {
         return;
       }
       if (!('token' in result) || !('user' in result)) throw new Error('The server returned an invalid Google authentication response');
-      setAuthenticatedSession(result.token, result.user);
-      navigate(result.user.role === 'farmer' ? '/farmer/dashboard' : '/buyer/dashboard', { replace: true });
+      const sessionResult = result as { token: string; user: import('../../types').User };
+      setAuthenticatedSession(sessionResult.token, sessionResult.user);
+      navigate(sessionResult.user.role === 'farmer' ? '/farmer/dashboard' : '/buyer/dashboard', { replace: true });
     } finally {
       setIsSubmitting(false);
     }
