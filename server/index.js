@@ -136,10 +136,10 @@ app.post('/api/register/', async (req, res) => {
     const id = 'usr_' + (await import('node:crypto')).randomUUID();
 
     const result = await pool.query(
-      `INSERT INTO auth_users (id, name, email, password_hash, role, status)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, email, role, status, created_at`,
-      [id, name, email, passwordHash, requestedRole, status]
+      `INSERT INTO auth_users (id, name, email, password_hash, role, status, phone, location)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, name, email, role, status, phone, location, created_at`,
+      [id, name, email, passwordHash, requestedRole, status, phone, location]
     );
 
     const account = result.rows[0];
@@ -183,6 +183,8 @@ app.post('/api/register/', async (req, res) => {
         email: account.email,
         role: account.role,
         status: account.status,
+        phone: account.phone || '',
+        location: account.location || '',
         createdAt: account.created_at,
       },
     });
@@ -525,7 +527,7 @@ app.post('/api/login/', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, name, email, password_hash, role, status, payout_method, payout_account_number, payout_bank_name, created_at
+      `SELECT id, name, email, password_hash, role, status, phone, location, payout_method, payout_account_number, payout_bank_name, created_at
        FROM auth_users WHERE email = $1 AND role = $2`,
       [email, requestedRole]
     );
@@ -551,6 +553,8 @@ app.post('/api/login/', async (req, res) => {
       email: account.email,
       role: account.role,
       status: account.status,
+      phone: account.phone || '',
+      location: account.location || '',
       payoutMethod: account.payout_method || undefined,
       payoutAccountNumber: account.payout_account_number || undefined,
       payoutBankName: account.payout_bank_name || undefined,
@@ -684,7 +688,7 @@ app.get('/api/farmers/payout-accounts/', requireAuth, async (req, res) => {
 // Return the authenticated account from the database.
 app.get('/api/me', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, email, role, status, payout_method, payout_account_number, payout_bank_name, created_at FROM auth_users WHERE id = $1', [req.auth.sub]);
+    const result = await pool.query('SELECT id, name, email, role, status, phone, location, payout_method, payout_account_number, payout_bank_name, created_at FROM auth_users WHERE id = $1', [req.auth.sub]);
     const account = result.rows[0];
     if (!account || account.status !== 'ACTIVE') {
       return res.status(401).json({ message: 'Account is inactive or unavailable' });
@@ -695,11 +699,56 @@ app.get('/api/me', requireAuth, async (req, res) => {
       email: account.email,
       role: account.role,
       status: account.status,
+      phone: account.phone || '',
+      location: account.location || '',
       createdAt: account.created_at,
     });
   } catch (error) {
     console.error('Current-user lookup failed:', error.message);
     return res.status(503).json({ message: 'Could not verify current account' });
+  }
+});
+
+
+// Update only the authenticated user's own basic profile.
+app.patch('/api/me/profile/', requireAuth, async (req, res) => {
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const phone = typeof req.body?.phone === 'string' ? req.body.phone.trim().slice(0, 32) : '';
+  const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 500) : '';
+
+  if (!name || name.length > 120) {
+    return res.status(400).json({ message: 'Name is required and must be at most 120 characters' });
+  }
+  if (!phone || phone.length < 5) {
+    return res.status(400).json({ message: 'Enter a valid phone number' });
+  }
+  if (!location) {
+    return res.status(400).json({ message: 'Enter your primary address or delivery area' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE auth_users
+       SET name = $1, phone = $2, location = $3
+       WHERE id = $4 AND status = 'ACTIVE'
+       RETURNING id, name, email, role, status, phone, location, created_at`,
+      [name, phone, location, req.auth.sub]
+    );
+    const account = result.rows[0];
+    if (!account) return res.status(404).json({ message: 'Active account not found' });
+    return res.json({
+      id: account.id,
+      name: account.name,
+      email: account.email,
+      role: account.role,
+      status: account.status,
+      phone: account.phone || '',
+      location: account.location || '',
+      createdAt: account.created_at,
+    });
+  } catch (error) {
+    console.error('Could not update profile:', error.message);
+    return res.status(500).json({ message: 'Could not save profile changes' });
   }
 });
 
@@ -1700,6 +1749,8 @@ async function startServer() {
 
   await pool.query(`
     ALTER TABLE auth_users
+      ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS location TEXT NOT NULL DEFAULT '',
       ADD COLUMN IF NOT EXISTS payout_method TEXT,
       ADD COLUMN IF NOT EXISTS payout_account_number TEXT,
       ADD COLUMN IF NOT EXISTS payout_bank_name TEXT

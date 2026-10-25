@@ -391,6 +391,20 @@ export const agroApi = {
     return data as User;
   },
 
+  async updateMyProfile(input: { name: string; phone: string; location: string }): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/me/profile/`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(input),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || 'Could not save profile changes');
+    if (!data || typeof data.id !== 'string' || typeof data.phone !== 'string') {
+      throw new Error('The server returned an invalid profile response');
+    }
+    return data as User;
+  },
+
   async updateFarmerPayoutAccount(input: {
     payoutMethod: 'bKash' | 'Nagad' | 'Bank Transfer';
     payoutAccountNumber: string;

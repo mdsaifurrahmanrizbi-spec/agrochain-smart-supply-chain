@@ -12,7 +12,7 @@ interface AuthContextType {
   login: (email: string, password: string, role: UserRole) => Promise<User>;
   logout: () => void;
   switchDemoRole: (targetRole: UserRole) => void;
-  updateProfile: (updated: Partial<User>) => void;
+  updateProfile: (updated: Partial<User>) => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -92,11 +92,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('agro_active_user', JSON.stringify(targetUser));
   };
 
-  const updateProfile = (updated: Partial<User>) => {
-    if (!user) return;
+  const updateProfile = async (updated: Partial<User>): Promise<User> => {
+    if (!user) throw new Error('Please sign in before updating your profile');
+
+    if (localStorage.getItem('agro_auth_token')) {
+      const savedUser = await agroApi.updateMyProfile({
+        name: String(updated.name ?? user.name).trim(),
+        phone: String(updated.phone ?? user.phone ?? '').trim(),
+        location: String(updated.location ?? user.location ?? '').trim(),
+      });
+      const newUser = { ...user, ...savedUser };
+      setUser(newUser);
+      localStorage.setItem('agro_active_user', JSON.stringify(newUser));
+      return newUser;
+    }
+
+    // Development-only demo accounts remain local and never write to production.
     const newUser = { ...user, ...updated };
     setUser(newUser);
     localStorage.setItem('agro_active_user', JSON.stringify(newUser));
+    return newUser;
   };
 
   return (
