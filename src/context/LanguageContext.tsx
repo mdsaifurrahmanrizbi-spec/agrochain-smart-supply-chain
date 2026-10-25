@@ -537,7 +537,6 @@ const translations: Record<string, string> = {
   'Transparent farm-to-market supply chain':'খামার থেকে বাজার পর্যন্ত স্বচ্ছ সরবরাহ শৃঙ্খল',
   'Quality agricultural products':'মানসম্মত কৃষিপণ্য',
   'Vegetables':'শাকসবজি',
-  'Search Chinigura rice, Bogura potatoes, Rajshahi mango...':'চিনিগুঁড়া চাল, বগুড়ার আলু, রাজশাহীর আম খুঁজুন...',
   'Product listing':'পণ্য তালিকাভুক্তি',
   'Add to cart':'কার্টে যোগ করুন',
   'Cart':'কার্ট',
