@@ -38,7 +38,13 @@ export const GoogleProfileCompletion: React.FC = () => {
       setAuthenticatedSession(result.token, result.user);
       navigate(role === 'farmer' ? '/farmer/dashboard' : '/buyer/dashboard', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : (bn ? 'প্রোফাইল সম্পন্ন করা যায়নি। আবার চেষ্টা করুন।' : 'Could not complete your profile. Please try again.'));
+      const message = err instanceof Error ? err.message : '';
+      if (!bn) setError(message || 'Could not complete your profile. Please try again.');
+      else if (/phone|mobile number/i.test(message)) setError('সঠিক বাংলাদেশি মোবাইল নম্বর দিন (+8801XXXXXXXXX)।');
+      else if (/expired|session|start again/i.test(message)) setError('Google সেশন শেষ হয়েছে। আবার Google দিয়ে সাইন ইন করুন।');
+      else if (/already exists|duplicate/i.test(message)) setError('এই ইমেইলে একটি অ্যাকাউন্ট আছে। Google দিয়ে আবার সাইন ইন করুন।');
+      else if (/role|only available/i.test(message)) setError('শুধু কৃষক/বিক্রেতা অথবা ক্রেতা হিসেবে Google অ্যাকাউন্ট তৈরি করা যাবে।');
+      else setError('প্রোফাইল সম্পন্ন করা যায়নি। আবার চেষ্টা করুন.');
     } finally {
       setLoading(false);
     }
