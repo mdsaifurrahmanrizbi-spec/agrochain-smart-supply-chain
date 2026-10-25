@@ -1,6 +1,8 @@
 
 import 'dotenv/config';
 import express from 'express';
+import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
 import { pool } from './db.js';
 import bcrypt from 'bcryptjs';
 import { createAuthToken, requireAuth } from './auth.js';
@@ -63,6 +65,174 @@ const roles = [
 app.get('/api/roles/', (req, res) => {
   res.json(roles);
 });
+
+const googleOAuthClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const googleAllowedRoles = new Set(['farmer', 'buyer']);
+const googleProfileTokenSecret = () => {
+  const secret = process.env.JWT_SECRET || '';
+  if (secret.length < 32) throw new Error('JWT_SECRET is missing or too short');
+  return secret;
+};
+function publicAuthUser(account) {
+  return {
+    id: account.id,
+    name: account.name,
+    email: account.email,
+    role: account.role,
+    phone: account.phone || '',
+    avatar: account.avatar || undefined,
+    location: '',
+    status: account.status,
+    createdAt: account.created_at,
+  };
+}
+function dashboardRoleIsAllowed(role) {
+  return googleAllowedRoles.has(String(role || '').toLowerCase());
+}
+
+// Google ID token is verified server-side; never trust profile fields supplied by the browser.
+app.post('/api/auth/google/', async (req, res) => {
+  const credential = typeof req.body?.credential === 'string' ? req.body.credential : '';
+  const requestedRole = typeof req.body?.requestedRole === 'string' ? req.body.requestedRole.trim().toLowerCase() : '';
+  if (!credential || credential.length > 10000) return res.status(400).json({ message: 'Google credential is missing or invalid' });
+  if (requestedRole && !googleAllowedRoles.has(requestedRole)) {
+    return res.status(403).json({ message: 'Google sign-in is not available for this role. Please sign in with your email and password.' });
+  }
+  if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).json({ message: 'Google sign-in is not configured on the server yet.' });
+
+  try {
+    const ticket = await googleOAuthClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const validIssuer = payload?.iss === 'accounts.google.com' || payload?.iss === 'https://accounts.google.com';
+    if (!payload || !payload.sub || !payload.email || payload.email_verified !== true ||
+        !validIssuer || payload.aud !== process.env.GOOGLE_CLIENT_ID ||
+        !payload.exp || payload.exp * 1000 <= Date.now()) {
+      return res.status(401).json({ message: 'Google account email must be verified. Please try another account.' });
+    }
+
+    const googleId = payload.sub;
+    const verifiedEmail = payload.email.trim().toLowerCase();
+    const verifiedName = String(payload.name || verifiedEmail.split('@')[0]).trim().slice(0, 120);
+    const avatar = typeof payload.picture === 'string' ? payload.picture.slice(0, 2048) : null;
+
+    const byGoogle = await pool.query(
+      'SELECT id, name, email, role, status, google_id, auth_provider, avatar, created_at FROM auth_users WHERE google_id = $1 LIMIT 1',
+      [googleId]
+    );
+    let account = byGoogle.rows[0];
+    if (account) {
+      if (!dashboardRoleIsAllowed(account.role)) {
+        return res.status(403).json({ message: 'Please sign in with your email and password.' });
+      }
+      if (account.status !== 'ACTIVE') return res.status(403).json({ message: 'This account is not active. Contact an administrator.' });
+      const user = publicAuthUser(account);
+      return res.json({ token: createAuthToken(user), user });
+    }
+
+    const byEmail = await pool.query(
+      'SELECT id, name, email, role, status, google_id, auth_provider, avatar, created_at FROM auth_users WHERE LOWER(email) = $1 LIMIT 1',
+      [verifiedEmail]
+    );
+    account = byEmail.rows[0];
+    if (account) {
+      if (!dashboardRoleIsAllowed(account.role)) {
+        return res.status(403).json({ message: 'Please sign in with your email and password.' });
+      }
+      if (account.status !== 'ACTIVE') return res.status(403).json({ message: 'This account is not active. Contact an administrator.' });
+      if (account.google_id && account.google_id !== googleId) {
+        return res.status(409).json({ message: 'A different Google account is already linked to this email.' });
+      }
+      const linked = await pool.query(
+        `UPDATE auth_users
+         SET google_id = $1,
+             auth_provider = CASE WHEN auth_provider = 'password' THEN 'password+google' ELSE auth_provider END,
+             avatar = COALESCE($2, avatar)
+         WHERE id = $3
+         RETURNING id, name, email, role, status, google_id, auth_provider, avatar, created_at`,
+        [googleId, avatar, account.id]
+      );
+      account = linked.rows[0];
+      const user = publicAuthUser(account);
+      return res.json({ token: createAuthToken(user), user });
+    }
+
+    // New users, regardless of whether they started on /login or /register, must choose an allowed role and phone.
+    const profileToken = jwt.sign({
+      purpose: 'google-profile-completion',
+      googleId,
+      email: verifiedEmail,
+      name: verifiedName,
+      avatar,
+    }, googleProfileTokenSecret(), { expiresIn: '10m', issuer: 'agrochain-api', audience: 'agrochain-google-profile' });
+    return res.json({ needsProfile: true, profileToken, name: verifiedName, email: verifiedEmail, avatar });
+  } catch (error) {
+    if (error?.name === 'TokenExpiredError' || error?.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Google sign-in expired or could not be verified. Please try again.' });
+    }
+    console.error('Google authentication failed:', error.message);
+    return res.status(503).json({ message: 'Google sign-in could not be completed. Please try again.' });
+  }
+});
+
+app.post('/api/auth/google/complete-profile/', async (req, res) => {
+  const profileToken = typeof req.body?.profileToken === 'string' ? req.body.profileToken : '';
+  const role = typeof req.body?.role === 'string' ? req.body.role.trim().toLowerCase() : '';
+  const phone = typeof req.body?.phone === 'string' ? req.body.phone.trim() : '';
+  if (!profileToken) return res.status(400).json({ message: 'Google profile session is missing. Start Google sign-in again.' });
+  if (!googleAllowedRoles.has(role)) return res.status(403).json({ message: 'Google accounts are only available for Farmer/Seller and Buyer/Customer.' });
+  if (!/^\\+8801[3-9]\\d{8}$/.test(phone)) return res.status(400).json({ message: 'Enter a valid Bangladesh mobile number (+8801XXXXXXXXX).' });
+
+  try {
+    const claims = jwt.verify(profileToken, googleProfileTokenSecret(), {
+      issuer: 'agrochain-api',
+      audience: 'agrochain-google-profile',
+      algorithms: ['HS256'],
+    });
+    if (!claims || typeof claims !== 'object' || claims.purpose !== 'google-profile-completion' ||
+        typeof claims.googleId !== 'string' || typeof claims.email !== 'string' ||
+        typeof claims.name !== 'string') {
+      return res.status(401).json({ message: 'Google profile session is invalid. Start again.' });
+    }
+
+    const existing = await pool.query(
+      'SELECT id, role FROM auth_users WHERE LOWER(email) = $1 OR google_id = $2 LIMIT 1',
+      [claims.email.toLowerCase(), claims.googleId]
+    );
+    if (existing.rowCount) {
+      return res.status(409).json({ message: 'An account already exists for this Google email. Please sign in with Google again.' });
+    }
+
+    const crypto = await import('node:crypto');
+    const id = 'usr_' + crypto.randomUUID();
+    const created = await pool.query(
+      `INSERT INTO auth_users (id, name, email, password_hash, role, status, google_id, auth_provider, avatar)
+       VALUES ($1, $2, $3, NULL, $4, 'ACTIVE', $5, 'google', $6)
+       RETURNING id, name, email, role, status, avatar, created_at`,
+      [id, claims.name.slice(0, 120), claims.email.toLowerCase(), role, claims.googleId, typeof claims.avatar === 'string' ? claims.avatar : null]
+    );
+    const account = created.rows[0];
+    const profile = { id, name: account.name, phone, location: '', avatar: account.avatar || '', authProvider: 'google', updatedAt: new Date().toISOString() };
+    await pool.query(
+      `INSERT INTO agrochain_records (resource, id, data, created_at, updated_at)
+       VALUES ('buyerProfiles', $1, $2::jsonb, NOW(), NOW())
+       ON CONFLICT (resource, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [id, JSON.stringify(profile)]
+    );
+    const user = { ...publicAuthUser(account), phone, avatar: account.avatar || undefined };
+    return res.status(201).json({ token: createAuthToken(user), user });
+  } catch (error) {
+    if (error?.name === 'TokenExpiredError' || error?.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Google profile session expired. Start Google sign-in again.' });
+    }
+    if (error.code === '23505') return res.status(409).json({ message: 'An account already exists for this email or Google ID.' });
+    console.error('Google profile completion failed:', error.message);
+    return res.status(500).json({ message: 'Could not complete Google profile. Please try again.' });
+  }
+});
+
 
 // Public registration: self-service roles only.
 app.post('/api/register/', async (req, res) => {
@@ -532,7 +702,7 @@ app.post('/api/login/', async (req, res) => {
     const account = result.rows[0];
 
     // Do not disclose whether an account exists until its password is verified.
-    if (!account || !(await bcrypt.compare(password, account.password_hash))) {
+    if (!account || !account.password_hash || !(await bcrypt.compare(password, account.password_hash))) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
     if (account.role !== requestedRole) {
