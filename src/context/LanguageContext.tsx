@@ -636,8 +636,7 @@ const translations: Record<string, string> = {
   'Search Chinigura rice':'চিনিগুঁড়া চাল খুঁজুন',
   'EN':'ইং',
   'বাং':'বাং',
-,
-// Shared navigation and workspace labels used across every role panel
+  // Shared navigation and workspace labels used across every role panel
   'Active Panel':'সক্রিয় প্যানেল',
   'User Workspace':'ব্যবহারকারী ওয়ার্কস্পেস',
   'Farmer Workspace':'কৃষক প্যানেল',
