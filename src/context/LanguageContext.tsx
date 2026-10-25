@@ -354,7 +354,7 @@ const translations: Record<string, string> = {
   'Voice to Text':'ভয়েস থেকে লেখা',
   'Start Listening':'শোনা শুরু করুন',
   'Stop Listening':'শোনা বন্ধ করুন',
-  'Listening...':'শোনা হচ্ছে...'
+  'Listening...':'শোনা হচ্ছে...',
   // Homepage and shared marketing copy
   'From soil to your door':'মাটি থেকে আপনার দোরগোড়ায়',
   "BANGLADESH'S AGRICULTURAL NETWORK":'বাংলাদেশের কৃষি নেটওয়ার্ক',
