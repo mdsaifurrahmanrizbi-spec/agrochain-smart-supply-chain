@@ -220,7 +220,7 @@ export const VoiceInputAssistant: React.FC = () => {
                 activeFieldRef.current = element;
                 startListening(element);
               }}
-              style={{ position: 'absolute', right: 12, top: element instanceof HTMLTextAreaElement ? 12 : '50%', transform: element instanceof HTMLTextAreaElement ? undefined : 'translateY(-50%)', width: 36, height: 36, zIndex: 'auto', boxShadow: isListening && activeField === element ? '0 0 0 4px rgba(244,63,94,.22)' : undefined }}
+              style={{ position: 'absolute', right: 12, top: element instanceof HTMLTextAreaElement ? 12 : '50%', transform: element instanceof HTMLTextAreaElement ? undefined : 'translateY(-50%)', width: 36, height: 36, zIndex: 30, pointerEvents: 'auto', boxShadow: isListening && activeField === element ? '0 0 0 4px rgba(244,63,94,.22)' : undefined }}
               className={`flex items-center justify-center rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 ${isListening && activeField === element ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
             >
               <Mic className="h-[17px] w-[17px]" />
