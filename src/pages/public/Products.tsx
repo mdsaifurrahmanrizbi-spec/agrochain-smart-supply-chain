@@ -226,17 +226,17 @@ export const Products: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 gap-1.5">
                       <Link
                         to={`/products/${p.id}`}
-                        className="py-1.5 px-2 text-center rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-center gap-1"
+                        className="min-w-0 whitespace-nowrap py-1.5 px-1.5 text-center rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-center gap-1"
                       >
                         <Eye className="w-3.5 h-3.5 text-slate-400" />
                         <span>Trace</span>
                       </Link>
                       <button
                         onClick={() => handleAddToCart(p)}
-                        className="py-1.5 px-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 shadow-xs"
+                        className="min-w-0 whitespace-nowrap py-1.5 px-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 shadow-xs"
                       >
                         <ShoppingCart className="w-3.5 h-3.5" />
                         <span>Add</span>
@@ -244,7 +244,7 @@ export const Products: React.FC = () => {
                       <button
                         onClick={() => handleBuyNow(p)}
                         disabled={p.availableQuantity <= 0}
-                        className="py-1.5 px-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-slate-950 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-xs"
+                        className="min-w-0 whitespace-nowrap py-1.5 px-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-slate-950 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 shadow-xs"
                       >
                         <span>Buy Now</span>
                       </button>
