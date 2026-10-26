@@ -101,3 +101,40 @@ html.auth-tab-hidden .sprout-night__scene *{animation-play-state:paused!importan
   .auth-night-page{padding:10px!important}
   .auth-glass-card{max-height:calc(100svh - 20px)!important;padding:18px 16px!important}
 }
+
+/* Strict one-viewport auth: no page or card scrolling; fit content to screen. */
+html:has(.auth-night-page),body:has(.auth-night-page),#root:has(.auth-night-page){
+  height:100%;min-height:0;overflow:hidden!important;
+}
+.auth-night-page{
+  width:100%;height:100vh!important;height:100svh!important;min-height:0!important;
+  max-height:100svh!important;overflow:hidden!important;padding:8px!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+}
+.auth-glass-card{
+  flex:0 1 auto!important;width:min(100%,440px)!important;
+  max-height:calc(100svh - 16px)!important;height:auto!important;
+  overflow:hidden!important;padding:clamp(10px,2.2vh,20px)!important;
+  margin:0!important;transform:none!important;
+}
+.auth-glass-card h1{font-size:clamp(1.15rem,3vh,1.7rem)!important;line-height:1.15!important}
+.auth-glass-card p{font-size:clamp(.68rem,1.65vh,.88rem)!important;line-height:1.25!important}
+.auth-glass-card input,.auth-glass-card select{min-height:34px!important;padding-top:7px!important;padding-bottom:7px!important;font-size:14px!important}
+.auth-glass-card button{min-height:34px!important;padding-top:7px!important;padding-bottom:7px!important;font-size:13px!important}
+.auth-glass-card .space-y-6>*+*{margin-top:.55rem!important}
+.auth-glass-card .space-y-5>*+*{margin-top:.45rem!important}
+.auth-glass-card .space-y-4>*+*{margin-top:.4rem!important}
+.auth-glass-card .space-y-3>*+*{margin-top:.3rem!important}
+.auth-glass-card .mb-6{margin-bottom:.55rem!important}
+.auth-glass-card .mb-4{margin-bottom:.4rem!important}
+.auth-glass-card .gap-4{gap:.45rem!important}
+.auth-glass-card .gap-3{gap:.35rem!important}
+@media(max-height:650px){
+  .auth-glass-card{padding:8px 14px!important}
+  .auth-glass-card h1{font-size:1.1rem!important}
+  .auth-glass-card input,.auth-glass-card select,.auth-glass-card button{min-height:29px!important;padding-top:4px!important;padding-bottom:4px!important}
+}
+@media(max-width:640px){
+  .auth-night-page{padding:6px!important}
+  .auth-glass-card{width:min(100%,420px)!important;max-height:calc(100svh - 12px)!important;padding:10px 12px!important}
+}
