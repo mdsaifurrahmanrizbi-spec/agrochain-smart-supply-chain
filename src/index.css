@@ -281,3 +281,25 @@ html:has(.auth-night-page),body:has(.auth-night-page),#root:has(.auth-night-page
   .auth-night-page.auth-night-login { padding: 12px !important; }
   .auth-night-login .auth-glass-card--login { padding: 22px 18px !important; border-radius: 20px !important; }
 }
+
+
+/* Keep the existing Google sign-in action clearly visible on the refreshed login card. */
+.auth-night-login .auth-glass-card--login .auth-google-panel {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  border-top: 1px solid #e2ebe4 !important;
+  background: transparent !important;
+}
+.auth-night-login .auth-glass-card--login .auth-google-panel > p {
+  display: block !important;
+  color: #64786b !important;
+}
+.auth-night-login .auth-glass-card--login .auth-google-panel > div,
+.auth-night-login .auth-glass-card--login .auth-google-panel [aria-label="Continue with Google"] {
+  display: block !important;
+  width: 100% !important;
+  min-height: 44px;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
