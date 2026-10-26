@@ -75,14 +75,21 @@ export const VoiceInputAssistant: React.FC = () => {
       })
       .filter(({ element, rect }) => {
         if (rect.width <= 0 || rect.height <= 0) return false;
-        // Do not leave a microphone floating over a sticky header when its
-        // input has scrolled underneath that header. Only show the control
-        // when the input itself is actually visible at its center point.
-        const x = Math.min(window.innerWidth - 1, Math.max(0, rect.left + Math.min(24, rect.width / 2)));
-        const y = Math.min(window.innerHeight - 1, Math.max(0, rect.top + rect.height / 2));
-        if (rect.bottom <= 0 || rect.top >= window.innerHeight || rect.right <= 0 || rect.left >= window.innerWidth) return false;
-        const topElement = document.elementFromPoint(x, y);
-        return topElement === element || (topElement !== null && element.contains(topElement));
+        // Hide the mic unless the whole input is in the viewport. A partly
+        // clipped input can otherwise leave its fixed-position mic floating
+        // under/above the sticky site header while the page scrolls.
+        if (rect.top < 0 || rect.left < 0 || rect.bottom > window.innerHeight || rect.right > window.innerWidth) return false;
+        // Check multiple points, not just the center: sticky headers can cover
+        // an input's upper edge while its center remains technically visible.
+        const points = [
+          [rect.left + Math.min(8, rect.width / 2), rect.top + rect.height / 2],
+          [rect.right - Math.min(8, rect.width / 2), rect.top + rect.height / 2],
+          [rect.left + rect.width / 2, rect.top + Math.min(4, rect.height / 2)],
+        ];
+        return points.every(([x, y]) => {
+          const topElement = document.elementFromPoint(x, y);
+          return topElement === element || (topElement !== null && element.contains(topElement));
+        });
       });
     setFields(next);
   }, []);
@@ -98,12 +105,12 @@ export const VoiceInputAssistant: React.FC = () => {
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'readonly', 'type', 'aria-hidden'] });
     window.addEventListener('resize', scheduleRefresh);
     window.addEventListener('scroll', scheduleRefresh, true);
-    const timer = window.setInterval(scheduleRefresh, 1200);
+    // Avoid periodic re-positioning: it made fixed mic buttons appear to
+    // jump even when the page was idle. Scroll, resize and DOM changes suffice.
     return () => {
       observer.disconnect();
       window.removeEventListener('resize', scheduleRefresh);
       window.removeEventListener('scroll', scheduleRefresh, true);
-      window.clearInterval(timer);
       if (frame) cancelAnimationFrame(frame);
       recognitionRef.current?.abort();
       document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-voice-padding-applied="true"]').forEach((element) => {
