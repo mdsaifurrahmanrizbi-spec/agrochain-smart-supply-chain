@@ -90,12 +90,6 @@ export const Login: React.FC = () => {
 
   return (
     <div className="auth-night-page auth-night-login">\n      <SproutNightBackground />
-      <style>{`
-        @keyframes loginCropSway { 0%,100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-4px); } }
-        @keyframes loginSunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
-        @keyframes loginFieldGlow { 0%,100% { opacity:.25; } 50% { opacity:.55; } }
-        @media (prefers-reduced-motion: reduce) { .login-agro-motion, .login-agro-motion * { animation: none !important; transition: none !important; } }
-      `}</style>
       <div className="auth-night-layout">
         <aside className="auth-night-old-aside hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.24),transparent_34%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
@@ -210,8 +204,7 @@ export const Login: React.FC = () => {
             <div className="mt-6 flex items-center justify-center gap-2 text-sm font-semibold text-emerald-800"><ShieldCheck className="h-4 w-4" /><span>Verifying your credentials</span><span className="flex gap-1" aria-hidden="true"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-emerald-600 [animation-delay:0ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-emerald-600 [animation-delay:150ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-emerald-600 [animation-delay:300ms]" /></span></div>
             <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-slate-400"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /><span>Your password is never shown or shared on this screen.</span></div>
           </div>
-          <style>{`@keyframes loading-bar { 0% { transform: translateX(-120%); } 100% { transform: translateX(260%); } } @media (prefers-reduced-motion: reduce) { .animate-spin, .animate-pulse, .animate-bounce { animation: none !important; } }`}</style>
-        </div>
+            </div>
       )}
     </div>
   );
