@@ -73,7 +73,17 @@ export const VoiceInputAssistant: React.FC = () => {
         }
         return { element, rect: element.getBoundingClientRect() };
       })
-      .filter(({ rect }) => rect.width > 0 && rect.height > 0);
+      .filter(({ element, rect }) => {
+        if (rect.width <= 0 || rect.height <= 0) return false;
+        // Do not leave a microphone floating over a sticky header when its
+        // input has scrolled underneath that header. Only show the control
+        // when the input itself is actually visible at its center point.
+        const x = Math.min(window.innerWidth - 1, Math.max(0, rect.left + Math.min(24, rect.width / 2)));
+        const y = Math.min(window.innerHeight - 1, Math.max(0, rect.top + rect.height / 2));
+        if (rect.bottom <= 0 || rect.top >= window.innerHeight || rect.right <= 0 || rect.left >= window.innerWidth) return false;
+        const topElement = document.elementFromPoint(x, y);
+        return topElement === element || (topElement !== null && element.contains(topElement));
+      });
     setFields(next);
   }, []);
 
