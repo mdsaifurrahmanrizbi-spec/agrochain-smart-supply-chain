@@ -225,7 +225,7 @@ export const VoiceInputAssistant: React.FC = () => {
               <Mic className="h-[17px] w-[17px]" />
             </button>
             {isPanelOpen && createPortal(
-              <section data-voice-assistant-ignore style={{ position: 'fixed', top: Math.max(8, rect.top - 8), left: Math.max(8, left - 265), transform: 'translateY(-100%)', zIndex: 90, width: 'min(300px, calc(100vw - 24px))' }} className="rounded-xl border border-emerald-100 bg-white p-3 shadow-xl">
+              <section data-voice-assistant-ignore style={{ position: 'absolute', top: 0, right: 0, transform: 'translateY(-100%)', zIndex: 'auto', width: 'min(300px, calc(100vw - 24px))' }} className="rounded-xl border border-emerald-100 bg-white p-3 shadow-xl">
                 <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
                   <Languages className="h-4 w-4 text-emerald-700" /> {appLanguage === 'bn' ? 'ভয়েস ইনপুট' : 'Voice input'}
                   <select aria-label="Voice language" value={language} disabled={isListening} onChange={(event) => setLanguage(event.target.value as VoiceLanguage)} className="ml-auto rounded-md border border-slate-200 bg-white px-2 py-1 text-xs">
