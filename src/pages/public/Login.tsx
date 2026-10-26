@@ -7,6 +7,7 @@ import { agroApi } from '../../services/api';
 import { useLanguage } from '../../context/LanguageContext';
 import { GoogleSignInButton } from '../../components/common/GoogleSignInButton';
 import './AuthTheme.css';
+import { AuthIllustration } from './AuthIllustration';
 import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2, Sprout, Leaf, Eye, EyeOff } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -92,13 +93,7 @@ export const Login: React.FC = () => {
 
   return (
     <div className="agro-auth-page relative min-h-screen px-4 py-5 sm:px-6 lg:px-10 lg:py-7" data-theme={authTheme}>
-      <button type="button" className="agro-theme-toggle" onClick={() => setAuthTheme(authTheme === "lime" ? "night" : "lime")} aria-label="Toggle color theme">{authTheme === "lime" ? "☾ Night" : "☀ Lime"}</button>
-      <style>{`
-        @keyframes loginCropSway { 0%,100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-4px); } }
-        @keyframes loginSunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
-        @keyframes loginFieldGlow { 0%,100% { opacity:.25; } 50% { opacity:.55; } }
-        @media (prefers-reduced-motion: reduce) { .login-agro-motion, .login-agro-motion * { animation: none !important; transition: none !important; } }
-      `}</style>
+      <button type="button" className="agro-theme-toggle" onClick={() => setAuthTheme(authTheme === 'lime' ? 'night' : 'lime')} aria-label={language === 'bn' ? 'রঙের থিম পরিবর্তন করুন' : 'Toggle color theme'} aria-pressed={authTheme === 'night'}><span className={authTheme === 'lime' ? 'theme-icon active' : 'theme-icon'}>☼</span><span className={authTheme === 'night' ? 'theme-icon active' : 'theme-icon'}>☾</span></button>
       <div className="mx-auto grid min-h-[calc(100vh-3.5rem)] max-w-[1040px] agro-auth-card overflow-hidden rounded-[28px] border shadow-[0_24px_80px_-28px_rgba(20,60,35,0.28)] lg:grid-cols-[1.02fr_0.98fr]">
         <aside className="agro-auth-illustration relative hidden overflow-hidden p-10 text-white lg:flex lg:min-h-[700px] lg:flex-col lg:justify-between xl:p-14">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.24),transparent_34%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
@@ -113,21 +108,7 @@ export const Login: React.FC = () => {
               <p className="mt-5 max-w-md text-sm leading-7 text-emerald-50/80">Sign in to connect farmers, buyers and delivery partners in one trusted agricultural marketplace.</p>
             </div>
           </div>
-          <div className="login-agro-motion agro-login-scene relative mx-auto my-8 h-[255px] w-full max-w-[470px] overflow-hidden rounded-[1.6rem] border border-white/15 bg-gradient-to-b from-[#8fbd8b] via-[#d7e7a2] to-[#e8d99c] shadow-2xl shadow-black/20">
-            <div className="agro-login-sun absolute right-12 top-7 h-14 w-14 rounded-full bg-[#fff2b5] shadow-[0_0_45px_15px_rgba(255,242,181,0.28)]" style={{animation:'loginSunDrift 5s ease-in-out infinite'}} />
-            <div className="absolute inset-x-0 bottom-0 h-24 rounded-[50%_50%_0_0] bg-[#69934f]" />
-            <div className="absolute -bottom-7 -left-8 h-32 w-[120%] rotate-[-5deg] rounded-[50%] bg-[#3c713d]" />
-            <div className="agro-login-road absolute -bottom-12 left-[-10%] h-28 w-[120%] rotate-[5deg] rounded-[50%] border-t-[16px] border-[#a4bd55] bg-[#245b35]" />
-            <div className="absolute bottom-7 left-4 right-4 flex items-end justify-between text-4xl sm:text-5xl" aria-hidden="true">
-              {['🌾','🌿','🌾','🌱','🌾','🌿','🌾'].map((crop, index) => <span key={index} style={{animation:'loginCropSway 2.8s ease-in-out infinite',animationDelay:`${index * 0.22}s`,transformOrigin:'bottom center'}}>{crop}</span>)}
-            </div>
-            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 text-5xl drop-shadow-lg" style={{animation:'loginCropSway 3.2s ease-in-out infinite'}}>👨‍🌾</div>
-            <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/35 via-transparent to-white/10" />
-            <div className="absolute bottom-4 left-4 rounded-xl border border-white/30 bg-emerald-950/55 px-4 py-2.5 backdrop-blur-sm">
-              <p className="text-xs font-bold text-white">Growing trust, together</p>
-              <p className="mt-0.5 text-[10px] text-emerald-50">Every harvest has a story.</p>
-            </div>
-          </div>
+          <AuthIllustration theme={authTheme} kind="login" />
           <div className="relative z-10 flex items-center gap-3 text-xs text-emerald-50/75"><ShieldCheck className="h-4 w-4 text-lime-300" /><span>One connected platform for a better food supply chain.</span></div>
         </aside>
 
