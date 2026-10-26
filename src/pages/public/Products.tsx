@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { store } from '../../services/api';
 import { useCart } from '../../context/CartContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -9,6 +9,7 @@ export const Products: React.FC = () => {
   const [searchParams] = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
   const { addToCart } = useCart();
+  const navigate = useNavigate();
 
   const [search, setSearch] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -41,6 +42,16 @@ export const Products: React.FC = () => {
     addToCart(product, 1);
     setNotification(`Added 1 ${product.unit} of ${product.name} to cart`);
     setTimeout(() => setNotification(null), 3000);
+  };
+
+  const handleBuyNow = (product: typeof store.products[0]) => {
+    if (product.availableQuantity <= 0) {
+      setNotification(`${product.name} is currently out of stock`);
+      setTimeout(() => setNotification(null), 3000);
+      return;
+    }
+    addToCart(product, 1);
+    navigate('/buyer/cart');
   };
 
   return (
@@ -215,7 +226,7 @@ export const Products: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <Link
                         to={`/products/${p.id}`}
                         className="py-1.5 px-2 text-center rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-center gap-1"
@@ -229,6 +240,13 @@ export const Products: React.FC = () => {
                       >
                         <ShoppingCart className="w-3.5 h-3.5" />
                         <span>Add</span>
+                      </button>
+                      <button
+                        onClick={() => handleBuyNow(p)}
+                        disabled={p.availableQuantity <= 0}
+                        className="py-1.5 px-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-slate-950 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-xs"
+                      >
+                        <span>Buy Now</span>
                       </button>
                     </div>
                   </div>
