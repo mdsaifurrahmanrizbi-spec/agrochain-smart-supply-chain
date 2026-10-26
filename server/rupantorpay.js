@@ -49,7 +49,7 @@ router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
       body: JSON.stringify({
         fullname: order.buyerName || account.name,
         email: account.email,
-        amount: Number(order.totalAmount).toFixed(2),
+        // Delivery charge is collected separately by the delivery partner; online checkout charges products only.\n        amount: Number(order.productSubtotal ?? (Number(order.totalAmount) - Number(order.deliveryFee || 0))).toFixed(2),
         success_url: `${FRONTEND_URL}/buyer/payment-result?orderId=${encodeURIComponent(orderId)}`,
         cancel_url: `${FRONTEND_URL}/buyer/payment-result?orderId=${encodeURIComponent(orderId)}&cancelled=1`,
         webhook_url: `${process.env.API_PUBLIC_URL || 'https://agrochain-api.onrender.com'}/api/payment/rupantorpay/webhook`,
@@ -71,14 +71,30 @@ router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
       data = {};
     }
 
-    // Only accept the documented top-level success fields and a trusted gateway
-    // URL. Diagnostics intentionally record shape only, never raw response data.
-    const checkoutSucceeded = data.status === 1 || data.status === true ||
-      String(data.status).toLowerCase() === 'true' || String(data.status) === '1';
+    // RupantorPay integrations have returned the documented fields at the root
+    // and, in some responses, inside data/result/payment objects. Search only a
+    // small, bounded set of object layers and still validate the final URL.
+    const responseObjects = [];
+    const collectObjects = (value, depth = 0) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value) || depth > 3 || responseObjects.includes(value)) return;
+      responseObjects.push(value);
+      for (const key of ['data', 'result', 'payment', 'response']) collectObjects(value[key], depth + 1);
+    };
+    collectObjects(data);
+    const field = (name) => {
+      for (const object of responseObjects) {
+        if (object[name] !== undefined && object[name] !== null) return object[name];
+      }
+      return undefined;
+    };
+    const rawStatus = field('status');
+    const checkoutSucceeded = rawStatus === 1 || rawStatus === true ||
+      String(rawStatus).toLowerCase() === 'true' || String(rawStatus) === '1';
+    const rawPaymentUrl = field('payment_url') ?? field('paymentUrl') ?? field('checkout_url') ?? field('checkoutUrl');
     let paymentUrl = '';
-    if (typeof data.payment_url === 'string') {
+    if (typeof rawPaymentUrl === 'string') {
       try {
-        const parsedUrl = new URL(data.payment_url);
+        const parsedUrl = new URL(rawPaymentUrl);
         if (parsedUrl.protocol === 'https:' && parsedUrl.hostname === 'payment.rupantorpay.com') {
           paymentUrl = parsedUrl.toString();
         }
@@ -97,7 +113,7 @@ router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
         httpStatus: response.status,
         contentType,
         parsedJson,
-        responseKeys: objectKeys(data),
+        responseKeys: objectKeys(data),\n        responseObjectLayers: responseObjects.map(objectKeys),
         nestedObjectKeys: Object.fromEntries(
           Object.entries(data).filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value))
             .slice(0, 10).map(([key, value]) => [key, objectKeys(value)])
@@ -162,9 +178,9 @@ router.post('/rupantorpay/verify', requireAuth, async (req, res) => {
     }
 
     const verifiedAmount = Number(verified.amount);
-    const expectedAmount = Number(order.totalAmount);
+    const expectedAmount = Number(order.productSubtotal ?? (Number(order.totalAmount) - Number(order.deliveryFee || 0)));
     const verifiedTransactionId = typeof verified.transaction_id === 'string' ? verified.transaction_id : '';
-    const metadataOrderId = verified.metadata?.order_id;
+    const metadataOrderId = (verified.metadata ?? verified.meta_data)?.order_id;
     if (verifiedTransactionId && verifiedTransactionId !== transactionId) {
       return res.status(409).json({ message: 'Gateway returned a different transaction ID' });
     }
@@ -283,7 +299,7 @@ router.post('/rupantorpay/webhook', async (req, res) => {
     }
 
     const verifiedAmount = Number(verified.amount);
-    const expectedAmount = Number(order.totalAmount);
+    const expectedAmount = Number(order.productSubtotal ?? (Number(order.totalAmount) - Number(order.deliveryFee || 0)));
     if (!Number.isFinite(verifiedAmount) || !Number.isFinite(expectedAmount) ||
         Math.abs(verifiedAmount - expectedAmount) > 0.01) {
       await client.query('ROLLBACK');
