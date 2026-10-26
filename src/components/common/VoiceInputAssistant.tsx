@@ -218,14 +218,15 @@ export const VoiceInputAssistant: React.FC = () => {
                 setNotice('');
                 setActiveField(element);
                 activeFieldRef.current = element;
+                startListening(element);
               }}
-              style={{ position: 'absolute', right: 12, top: element instanceof HTMLTextAreaElement ? 12 : '50%', transform: element instanceof HTMLTextAreaElement ? undefined : 'translateY(-50%)', width: 36, height: 36, zIndex: 'auto', boxShadow: isListening && activeField === element ? '0 0 0 4px rgba(244,63,94,.22)' : undefined }}
+              style={{ position: 'absolute', right: 12, top: element instanceof HTMLTextAreaElement ? 12 : '50%', transform: element instanceof HTMLTextAreaElement ? undefined : 'translateY(-50%)', width: 36, height: 36, zIndex: 30, pointerEvents: 'auto', boxShadow: isListening && activeField === element ? '0 0 0 4px rgba(244,63,94,.22)' : undefined }}
               className={`flex items-center justify-center rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 ${isListening && activeField === element ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
             >
               <Mic className="h-[17px] w-[17px]" />
             </button>
             {isPanelOpen && createPortal(
-              <section data-voice-assistant-ignore style={{ position: 'absolute', top: 0, right: 0, transform: 'translateY(-100%)', zIndex: 'auto', width: 'min(300px, calc(100vw - 24px))' }} className="rounded-xl border border-emerald-100 bg-white p-3 shadow-xl">
+              <section data-voice-assistant-ignore style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, transform: 'none', zIndex: 1000, width: 'min(300px, calc(100vw - 24px))' }} className="rounded-xl border border-emerald-100 bg-white p-3 shadow-xl">
                 <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
                   <Languages className="h-4 w-4 text-emerald-700" /> {appLanguage === 'bn' ? 'ভয়েস ইনপুট' : 'Voice input'}
                   <select aria-label="Voice language" value={language} disabled={isListening} onChange={(event) => setLanguage(event.target.value as VoiceLanguage)} className="ml-auto rounded-md border border-slate-200 bg-white px-2 py-1 text-xs">
@@ -246,7 +247,7 @@ export const VoiceInputAssistant: React.FC = () => {
                 </div>
                 <p className="mt-2 text-[10px] leading-4 text-slate-400">{appLanguage === 'bn' ? 'ব্রাউজার সমর্থন ও মাইক্রোফোনের অনুমতি প্রয়োজন।' : 'Browser support and microphone permission required.'}</p>
               </section>,
-              document.body
+              wrapper
             )}
           </React.Fragment>,
           wrapper
