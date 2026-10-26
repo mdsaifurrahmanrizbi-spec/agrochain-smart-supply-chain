@@ -85,7 +85,7 @@ export const VoiceInputAssistant: React.FC = () => {
     };
     refreshFields();
     const observer = new MutationObserver(scheduleRefresh);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'readonly', 'type', 'class', 'style', 'aria-hidden'] });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'readonly', 'type', 'aria-hidden'] });
     window.addEventListener('resize', scheduleRefresh);
     window.addEventListener('scroll', scheduleRefresh, true);
     const timer = window.setInterval(scheduleRefresh, 1200);
