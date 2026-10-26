@@ -110,7 +110,7 @@ export const Login: React.FC = () => {
             <div className="absolute -bottom-7 -left-8 h-32 w-[120%] rotate-[-5deg] rounded-[50%] bg-[#3c713d]" />
             <div className="absolute -bottom-12 left-[-10%] h-28 w-[120%] rotate-[5deg] rounded-[50%] border-t-[16px] border-[#a4bd55] bg-[#245b35]" />
             <div className="absolute bottom-7 left-4 right-4 flex items-end justify-between text-4xl sm:text-5xl" aria-hidden="true">
-              {['🌾','🌿','🌾','🌱','🌾','🌿','🌾'].map((crop, index) => <span key={index} style={{animation:'loginCropSway 2.8s ease-in-out infinite',animationDelay:`${index * 0.22}s`,transformOrigin:'bottom center'}}>{crop}</span>)}
+              {['🌾','🌿','🌾','🌱','🌾','🌿','🌾'].map((crop, index) => <span key={index} >{crop}</span>)}
             </div>
             <div className="absolute bottom-5 left-1/2 -translate-x-1/2 text-5xl drop-shadow-lg" >👨‍🌾</div>
             <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/35 via-transparent to-white/10" />
