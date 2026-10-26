@@ -138,3 +138,168 @@ html:has(.auth-night-page),body:has(.auth-night-page),#root:has(.auth-night-page
   .auth-night-page{padding:6px!important}
   .auth-glass-card{width:min(100%,420px)!important;max-height:calc(100svh - 12px)!important;padding:10px 12px!important}
 }
+
+
+/* Fresh white AgroChain login experience — scoped to the login route only. */
+.auth-night-page.auth-night-login {
+  min-height: 100svh !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  padding: 28px clamp(16px, 4vw, 64px) !important;
+  color: #18352a !important;
+  background: #f7faf7 !important;
+  font-family: 'Plus Jakarta Sans', 'Noto Sans Bengali', system-ui, sans-serif !important;
+}
+.auth-night-login .sprout-night { display: none !important; }
+.auth-night-login > .auth-night-layout {
+  width: min(1160px, 100%) !important;
+  min-height: calc(100svh - 56px) !important;
+  margin: 0 auto !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 440px) !important;
+  align-items: center !important;
+  gap: clamp(32px, 6vw, 88px) !important;
+}
+.auth-night-login .auth-night-old-aside.hidden {
+  display: flex !important;
+  position: relative !important;
+  min-width: 0 !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 22px !important;
+  padding: 0 !important;
+  color: #18352a !important;
+  background: transparent !important;
+}
+.auth-night-login .auth-night-old-aside > .absolute.inset-0 { display: none !important; }
+.auth-night-login .auth-night-old-aside .text-lime-200 { color: #527b38 !important; }
+.auth-night-login .auth-night-old-aside .text-lime-100 { color: #527b38 !important; }
+.auth-night-login .auth-night-old-aside .text-emerald-50,
+.auth-night-login .auth-night-old-aside .text-emerald-50\/80,
+.auth-night-login .auth-night-old-aside .text-emerald-50\/75 { color: #61776a !important; }
+.auth-night-login .auth-night-old-aside .border-white\/15 { border-color: #dbe8dd !important; }
+.auth-night-login .auth-night-old-aside .bg-white\/10 { background: #eaf2e8 !important; }
+.auth-night-login .auth-night-old-aside .login-agro-motion {
+  width: 100% !important;
+  max-width: 480px !important;
+  height: 220px !important;
+  margin: 8px 0 !important;
+  border: 1px solid #d7e6d5 !important;
+  border-radius: 28px !important;
+  box-shadow: 0 20px 50px rgba(35, 78, 48, .10) !important;
+}
+.auth-night-login .auth-night-main { width: 100% !important; padding: 0 !important; }
+.auth-night-login .auth-glass-card--login {
+  width: 100% !important;
+  max-width: 440px !important;
+  max-height: none !important;
+  margin: 0 auto !important;
+  padding: clamp(24px, 3vw, 38px) !important;
+  overflow: visible !important;
+  border: 1px solid #e3ebe3 !important;
+  border-radius: 24px !important;
+  color: #18352a !important;
+  background: #fff !important;
+  box-shadow: 0 22px 65px rgba(25, 58, 36, .09) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  animation: none !important;
+}
+.auth-night-login .auth-glass-card--login h1,
+.auth-night-login .auth-glass-card--login h2,
+.auth-night-login .auth-glass-card--login h3 { color: #173c2b !important; }
+.auth-night-login .auth-glass-card--login p,
+.auth-night-login .auth-glass-card--login label,
+.auth-night-login .auth-glass-card--login span { color: inherit; }
+.auth-night-login .auth-glass-card--login .text-slate-950,
+.auth-night-login .auth-glass-card--login .text-slate-900,
+.auth-night-login .auth-glass-card--login .text-slate-800,
+.auth-night-login .auth-glass-card--login .text-slate-700 { color: #263b30 !important; }
+.auth-night-login .auth-glass-card--login .text-slate-600,
+.auth-night-login .auth-glass-card--login .text-slate-500,
+.auth-night-login .auth-glass-card--login .text-slate-400 { color: #6c7d72 !important; }
+.auth-night-login .auth-glass-card--login .text-emerald-800,
+.auth-night-login .auth-glass-card--login .text-emerald-700,
+.auth-night-login .auth-glass-card--login a { color: #287447 !important; }
+.auth-night-login .auth-glass-card--login .bg-emerald-50 { background: #edf6ed !important; }
+.auth-night-login .auth-glass-card--login .auth-night-input,
+.auth-night-login .auth-glass-card--login input:not([type=checkbox]),
+.auth-night-login .auth-glass-card--login select {
+  color: #18352a !important;
+  background: #f8faf8 !important;
+  border: 1px solid #dce6dd !important;
+  border-radius: 12px !important;
+}
+.auth-night-login .auth-glass-card--login input::placeholder { color: #8b9a90 !important; }
+.auth-night-login .auth-glass-card--login input:focus,
+.auth-night-login .auth-glass-card--login select:focus {
+  border-color: #4c9866 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 4px rgba(76, 152, 102, .13) !important;
+}
+.auth-night-login .auth-glass-card--login button[type=submit],
+.auth-night-login .auth-glass-card--login .auth-night-primary {
+  min-height: 48px !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  color: #fff !important;
+  background: #216b40 !important;
+  box-shadow: none !important;
+}
+.auth-night-login .auth-glass-card--login button[type=submit] *,
+.auth-night-login .auth-glass-card--login .auth-night-primary * { color: #fff !important; }
+.auth-night-login .auth-glass-card--login .auth-google-panel {
+  border-color: #e7eee7 !important;
+  background: transparent !important;
+}
+.auth-night-login .auth-glass-card--login .auth-google-panel button {
+  color: #263b30 !important;
+  background: #fff !important;
+  border: 1px solid #dce6dd !important;
+}
+.auth-night-login .auth-glass-card--login .auth-google-panel button * { color: #263b30 !important; }
+.auth-night-login .auth-glass-card--login .auth-night-foot {
+  border-color: #e0ece0 !important;
+  background: #f3f8f2 !important;
+}
+.auth-night-login .auth-glass-card--login .auth-night-staff { color: #64786b !important; }
+.auth-night-login .auth-glass-card--login .auth-night-staff a { color: #287447 !important; }
+@media (max-width: 850px) {
+  .auth-night-page.auth-night-login { padding: 20px 14px !important; }
+  .auth-night-login > .auth-night-layout {
+    width: min(480px, 100%) !important;
+    min-height: auto !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 18px !important;
+  }
+  .auth-night-login .auth-night-old-aside.hidden { display: none !important; }
+  .auth-night-login .auth-glass-card--login { max-width: 480px !important; }
+}
+@media (max-width: 480px) {
+  .auth-night-page.auth-night-login { padding: 12px !important; }
+  .auth-night-login .auth-glass-card--login { padding: 22px 18px !important; border-radius: 20px !important; }
+}
+
+
+/* Keep the existing Google sign-in action clearly visible on the refreshed login card. */
+.auth-night-login .auth-glass-card--login .auth-google-panel {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  border-top: 1px solid #e2ebe4 !important;
+  background: transparent !important;
+}
+.auth-night-login .auth-glass-card--login .auth-google-panel > p {
+  display: block !important;
+  color: #64786b !important;
+}
+.auth-night-login .auth-glass-card--login .auth-google-panel > div,
+.auth-night-login .auth-glass-card--login .auth-google-panel [aria-label="Continue with Google"] {
+  display: block !important;
+  width: 100% !important;
+  min-height: 44px;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
