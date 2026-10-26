@@ -127,7 +127,7 @@ export const Login: React.FC = () => {
             <div className="mb-8 flex items-center justify-between gap-3 lg:mb-10">
               <Link to="/" className="inline-flex items-center gap-2 lg:hidden"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-800 text-white"><Sprout className="h-6 w-6" /></span><span className="text-lg font-black text-emerald-950">AgroChain</span></Link>
               <span className="hidden lg:block text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">Welcome back</span>
-              {location.pathname === '/login' && <Link to="/register" className="ml-auto inline-flex items-center gap-1 rounded-full border border-emerald-200 px-4 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-50">Create account <ArrowRight className="h-3.5 w-3.5" /></Link>}
+              {location.pathname === '/login' && <Link to="/register" className="ml-auto inline-flex items-center gap-1 rounded-full border border-emerald-200 px-4 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-50">Create account <ArrowRight className="h-3.5 w-3.5" /></Link>}
             </div>
             <div className="mb-7">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100"><Lock className="h-6 w-6" /></div>
@@ -141,30 +141,30 @@ export const Login: React.FC = () => {
                   <label htmlFor="agro-login-email" className="mb-2 block text-sm font-semibold text-slate-700">Email or Username</label>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input id="agro-login-email" type="text" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email or username" className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 py-3 pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10" />
+                    <input id="agro-login-email" type="text" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email or username" className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 py-3 pl-10 pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10" />
                   </div>
                 </div>
                 <div>
                   <label htmlFor="agro-login-role" className="mb-2 block text-sm font-semibold text-slate-700">Sign in as</label>
-                  <select id="agro-login-role" required value={selectedRole} onChange={(e) => setSelectedRole(e.target.value as UserRole)} className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10">
+                  <select id="agro-login-role" required value={selectedRole} onChange={(e) => setSelectedRole(e.target.value as UserRole)} className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10">
                     {availableRoles.map((role) => <option key={role} value={role}>{{ admin: 'Admin', farmer: 'Farmer / Seller', buyer: 'Customer / Buyer', delivery: 'Delivery Partner', warehouse: 'Warehouse Staff', inspector: 'Quality Inspector' }[role]}</option>)}
                   </select>
                 </div>
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <label htmlFor="agro-login-password" className="block text-sm font-semibold text-slate-700">Password</label>
-                    <Link to={location.pathname.startsWith('/admin-portal') ? '/admin-portal/reset-password' : '/password-reset'} className="text-xs font-bold text-emerald-700 transition hover:text-emerald-900 hover:underline">Forgot password?</Link>
+                    <Link to={location.pathname.startsWith('/admin-portal') ? '/admin-portal/reset-password' : '/password-reset'} className="text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:underline">Forgot password?</Link>
                   </div>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input id="agro-login-password" type={showPassword ? "text" : "password"} autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 py-3 pl-10 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10" />
-                    <button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+                    <input id="agro-login-password" type={showPassword ? "text" : "password"} autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 py-3 pl-10 pr-11 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10" />
+                    <button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
                       {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
                     </button>
                   </div>
                 </div>
                 {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-                <button type="submit" disabled={loading} className="auth-night-primary flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition-all hover:-translate-y-0.5 hover:bg-emerald-900 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60">
+                <button type="submit" disabled={loading} className="auth-night-primary flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 hover:bg-emerald-900 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60">
                   <span>{loading ? 'Authenticating...' : 'Sign In'}</span><ArrowRight className="h-4 w-4" />
                 </button>
               </form>
@@ -180,7 +180,7 @@ export const Login: React.FC = () => {
                 <div className="mt-6 border-t border-slate-100 pt-5">
                   <div className="mb-3 flex items-center justify-between"><span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">1-Click Quick Demo Sign In</span><span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">All 6 Panels</span></div>
                   <div className="grid grid-cols-2 gap-2">
-                    {demoAccounts.map((d) => <button key={d.role} type="button" onClick={() => handleQuickDemo(d.role, d.email, d.path)} className="group rounded-xl border border-slate-200 p-2.5 text-left text-xs transition hover:border-emerald-400 hover:bg-emerald-50/50"><div className="truncate font-bold text-slate-800 group-hover:text-emerald-800">{d.label}</div><div className="truncate text-[10px] text-slate-500">{d.name}</div></button>)}
+                    {demoAccounts.map((d) => <button key={d.role} type="button" onClick={() => handleQuickDemo(d.role, d.email, d.path)} className="group rounded-xl border border-slate-200 p-2.5 text-left text-xs hover:border-emerald-400 hover:bg-emerald-50/50"><div className="truncate font-bold text-slate-800 group-hover:text-emerald-800">{d.label}</div><div className="truncate text-[10px] text-slate-500">{d.name}</div></button>)}
                   </div>
                 </div>
               )}
@@ -196,12 +196,12 @@ export const Login: React.FC = () => {
       {loading && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-emerald-950/80 p-4 backdrop-blur-md" role="status" aria-live="polite" aria-label="Authenticating your AgroChain account">
           <div className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-white/15 bg-white p-8 text-center shadow-2xl">
-            <div className="absolute inset-x-0 top-0 h-1.5 overflow-hidden bg-emerald-100"><div className="h-full w-2/5 rounded-full bg-emerald-500 animate-[loading-bar_1.4s_ease-in-out_infinite]" /></div>
+            <div className="absolute inset-x-0 top-0 h-1.5 overflow-hidden bg-emerald-100"><div className="h-full w-2/5 rounded-full bg-emerald-500 " /></div>
             <div className="relative mx-auto mb-6 flex h-28 w-28 items-center justify-center">
-              <div className="absolute inset-1 rounded-full border-2 border-dashed border-emerald-200 animate-[spin_12s_linear_infinite]" /><div className="absolute inset-3 rounded-full border-4 border-emerald-100 border-t-emerald-600 animate-spin" /><div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-900/20 animate-pulse"><Sprout className="h-9 w-9" /></div><Leaf className="absolute right-0 top-3 h-6 w-6 text-lime-500 animate-bounce" /><Leaf className="absolute bottom-2 left-0 h-5 w-5 rotate-[-35deg] text-emerald-500 animate-pulse" />
+              <div className="absolute inset-1 rounded-full border-2 border-dashed border-emerald-200 " /><div className="absolute inset-3 rounded-full border-4 border-emerald-100 border-t-emerald-600 " /><div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-900/20 "><Sprout className="h-9 w-9" /></div><Leaf className="absolute right-0 top-3 h-6 w-6 text-lime-500 " /><Leaf className="absolute bottom-2 left-0 h-5 w-5 rotate-[-35deg] text-emerald-500 " />
             </div>
             <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-emerald-700">AgroChain Secure Access</p><h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Welcome to AgroChain</h2><p className="mt-2 text-sm leading-6 text-slate-500">Securely connecting you to your agricultural network.</p>
-            <div className="mt-6 flex items-center justify-center gap-2 text-sm font-semibold text-emerald-800"><ShieldCheck className="h-4 w-4" /><span>Verifying your credentials</span><span className="flex gap-1" aria-hidden="true"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-emerald-600 [animation-delay:0ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-emerald-600 [animation-delay:150ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-emerald-600 [animation-delay:300ms]" /></span></div>
+            <div className="mt-6 flex items-center justify-center gap-2 text-sm font-semibold text-emerald-800"><ShieldCheck className="h-4 w-4" /><span>Verifying your credentials</span><span className="flex gap-1" aria-hidden="true"><span className="h-1.5 w-1.5 rounded-full bg-emerald-600 [animation-delay:0ms]" /><span className="h-1.5 w-1.5 rounded-full bg-emerald-600 [animation-delay:150ms]" /><span className="h-1.5 w-1.5 rounded-full bg-emerald-600 [animation-delay:300ms]" /></span></div>
             <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-slate-400"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /><span>Your password is never shown or shared on this screen.</span></div>
           </div>
             </div>
