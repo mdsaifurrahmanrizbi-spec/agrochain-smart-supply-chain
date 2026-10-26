@@ -21,7 +21,7 @@ type SpeechRecognitionLike = {
 };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 type VoiceLanguage = 'bn-BD' | 'en-US';
-type VoiceField = { element: HTMLInputElement | HTMLTextAreaElement; rect: DOMRect };
+type VoiceField = { element: HTMLInputElement | HTMLTextAreaElement; wrapper: HTMLElement };
 
 declare global {
   interface Window {
@@ -31,12 +31,15 @@ declare global {
 }
 
 const isVoiceEditable = (element: Element): element is HTMLInputElement | HTMLTextAreaElement => {
+  if (element.closest('[data-no-voice], .no-voice, [data-voice-assistant-ignore]')) return false;
   if (element instanceof HTMLTextAreaElement) {
     return !element.disabled && !element.readOnly && element.getAttribute('aria-hidden') !== 'true';
   }
   if (!(element instanceof HTMLInputElement)) return false;
   if (element.disabled || element.readOnly || element.getAttribute('aria-hidden') === 'true') return false;
-  return ['text', 'search', 'tel', 'url', 'email'].includes(element.type);
+  const passwordLike = /password|passwd|passcode/i.test(`${element.name} ${element.id} ${element.autocomplete}`);
+  if (element.type === 'password' || passwordLike) return false;
+  return ['text', 'search', 'tel', 'url', 'email', 'number'].includes(element.type);
 };
 
 const fieldKey = (element: HTMLInputElement | HTMLTextAreaElement) => {
@@ -65,31 +68,25 @@ export const VoiceInputAssistant: React.FC = () => {
       .filter((element): element is HTMLInputElement | HTMLTextAreaElement => isVoiceEditable(element))
       .filter((element) => !element.closest('[data-voice-assistant-ignore]'))
       .map((element) => {
+        let wrapper = element.parentElement;
+        if (!wrapper?.classList.contains('voice-field')) {
+          wrapper = document.createElement('div');
+          wrapper.className = 'voice-field';
+          wrapper.dataset.voiceFieldWrapper = 'true';
+          wrapper.style.position = 'relative';
+          wrapper.style.display = 'block';
+          wrapper.style.width = '100%';
+          element.parentNode?.insertBefore(wrapper, element);
+          wrapper.appendChild(element);
+        }
+        element.classList.add('voice-input');
         if (!element.dataset.voicePaddingApplied) {
           element.dataset.voiceOriginalPaddingRight = element.style.paddingRight;
           const computedPadding = Number.parseFloat(window.getComputedStyle(element).paddingRight) || 0;
-          element.style.paddingRight = `${computedPadding + 34}px`;
+          element.style.paddingRight = `${computedPadding + 52}px`;
           element.dataset.voicePaddingApplied = 'true';
         }
-        return { element, rect: element.getBoundingClientRect() };
-      })
-      .filter(({ element, rect }) => {
-        if (rect.width <= 0 || rect.height <= 0) return false;
-        // Hide the mic unless the whole input is in the viewport. A partly
-        // clipped input can otherwise leave its fixed-position mic floating
-        // under/above the sticky site header while the page scrolls.
-        if (rect.top < 0 || rect.left < 0 || rect.bottom > window.innerHeight || rect.right > window.innerWidth) return false;
-        // Check multiple points, not just the center: sticky headers can cover
-        // an input's upper edge while its center remains technically visible.
-        const points = [
-          [rect.left + Math.min(8, rect.width / 2), rect.top + rect.height / 2],
-          [rect.right - Math.min(8, rect.width / 2), rect.top + rect.height / 2],
-          [rect.left + rect.width / 2, rect.top + Math.min(4, rect.height / 2)],
-        ];
-        return points.every(([x, y]) => {
-          const topElement = document.elementFromPoint(x, y);
-          return topElement === element || (topElement !== null && element.contains(topElement));
-        });
+        return { element, wrapper };
       });
     setFields(next);
   }, []);
@@ -103,20 +100,20 @@ export const VoiceInputAssistant: React.FC = () => {
     refreshFields();
     const observer = new MutationObserver(scheduleRefresh);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'readonly', 'type', 'aria-hidden'] });
-    window.addEventListener('resize', scheduleRefresh);
-    window.addEventListener('scroll', scheduleRefresh, true);
-    // Avoid periodic re-positioning: it made fixed mic buttons appear to
-    // jump even when the page was idle. Scroll, resize and DOM changes suffice.
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', scheduleRefresh);
-      window.removeEventListener('scroll', scheduleRefresh, true);
       if (frame) cancelAnimationFrame(frame);
       recognitionRef.current?.abort();
       document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-voice-padding-applied="true"]').forEach((element) => {
         element.style.paddingRight = element.dataset.voiceOriginalPaddingRight || '';
         delete element.dataset.voicePaddingApplied;
         delete element.dataset.voiceOriginalPaddingRight;
+        element.classList.remove('voice-input');
+      });
+      document.querySelectorAll<HTMLElement>('[data-voice-field-wrapper="true"]').forEach((wrapper) => {
+        const field = wrapper.querySelector('input, textarea');
+        if (field?.parentElement === wrapper && wrapper.parentElement) wrapper.parentElement.insertBefore(field, wrapper);
+        wrapper.remove();
       });
     };
   }, [refreshFields]);
@@ -205,13 +202,9 @@ export const VoiceInputAssistant: React.FC = () => {
 
   return (
     <>
-      {fields.map(({ element, rect }) => {
+      {fields.map(({ element, wrapper }) => {
         const key = fieldKey(element);
         const isPanelOpen = panelField === element;
-        // Track the field's current viewport position. This also keeps the mic
-        // aligned with inputs inside sticky headers while the page scrolls.
-        const left = rect.right - 35;
-        const top = rect.top + Math.max(0, (rect.height - 30) / 2);
         return createPortal(
           <React.Fragment key={key}>
             <button
@@ -226,7 +219,7 @@ export const VoiceInputAssistant: React.FC = () => {
                 setActiveField(element);
                 activeFieldRef.current = element;
               }}
-              style={{ position: 'fixed', top, left, zIndex: 80, width: 30, height: 30 }}
+              style={{ position: 'absolute', right: 12, top: element instanceof HTMLTextAreaElement ? 12 : '50%', transform: element instanceof HTMLTextAreaElement ? undefined : 'translateY(-50%)', width: 36, height: 36, zIndex: 'auto', boxShadow: isListening && activeField === element ? '0 0 0 4px rgba(244,63,94,.22)' : undefined }}
               className={`flex items-center justify-center rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 ${isListening && activeField === element ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
             >
               <Mic className="h-[17px] w-[17px]" />
@@ -256,7 +249,7 @@ export const VoiceInputAssistant: React.FC = () => {
               document.body
             )}
           </React.Fragment>,
-          document.body
+          wrapper
         );
       })}
     </>
