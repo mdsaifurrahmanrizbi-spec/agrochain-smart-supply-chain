@@ -164,7 +164,7 @@ export const Register: React.FC = () => {
           <button
             type="button"
             onClick={() => setSelectedRole('farmer')}
-            className={`py-3 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
+            className={`py-3 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2  ${
               selectedRole === 'farmer'
                 ? 'bg-emerald-800 text-white shadow-md shadow-emerald-950/10'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -177,7 +177,7 @@ export const Register: React.FC = () => {
           <button
             type="button"
             onClick={() => setSelectedRole('buyer')}
-            className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+            className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5  ${
               selectedRole === 'buyer'
                 ? 'bg-emerald-700 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -190,7 +190,7 @@ export const Register: React.FC = () => {
           <button
             type="button"
             onClick={() => setSelectedRole('delivery')}
-            className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+            className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5  ${
               selectedRole === 'delivery'
                 ? 'bg-emerald-700 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -200,7 +200,7 @@ export const Register: React.FC = () => {
             <span>Delivery Partner</span>
           </button>
 
-          <button type="button" onClick={() => setSelectedRole('warehouse')} className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${selectedRole === 'warehouse' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}><Truck className="w-4 h-4" /><span>Warehouse</span></button>
+          <button type="button" onClick={() => setSelectedRole('warehouse')} className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5  ${selectedRole === 'warehouse' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}><Truck className="w-4 h-4" /><span>Warehouse</span></button>
         </div>
         {!submittedMessage && (selectedRole === 'farmer' || selectedRole === 'buyer') && (
           <div className="auth-google-panel mb-5 rounded-2xl border border-slate-200 bg-white p-4">
@@ -248,7 +248,7 @@ export const Register: React.FC = () => {
                     placeholder="e.g. Md. Tariqul Islam"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10"
+                    className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10"
                   />
                 </div>
 
@@ -292,7 +292,7 @@ export const Register: React.FC = () => {
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       className="w-full px-3 py-2 pr-11 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
                     />
-                    <button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+                    <button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
                       {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
                     </button>
                   </div>
@@ -315,11 +315,11 @@ export const Register: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-slate-700 font-semibold mb-1">National ID (NID) Number</label>
-                        <input type="text" inputMode="numeric" pattern="([0-9]{10}|[0-9]{13}|[0-9]{17})" title="Enter a 10, 13 or 17 digit NID number" required placeholder="10, 13 or 17 digits" value={formData.nid} onChange={e => setFormData({...formData, nid:e.target.value.replace(/\\D/g, '').slice(0,17)})} className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10" />
+                        <input type="text" inputMode="numeric" pattern="([0-9]{10}|[0-9]{13}|[0-9]{17})" title="Enter a 10, 13 or 17 digit NID number" required placeholder="10, 13 or 17 digits" value={formData.nid} onChange={e => setFormData({...formData, nid:e.target.value.replace(/\\D/g, '').slice(0,17)})} className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10" />
                       </div>
                       <div>
                         <label className="block text-slate-700 font-semibold mb-1">Home District</label>
-                        <select required value={formData.district} onChange={e => setFormData({...formData, district:e.target.value})} className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10">
+                        <select required value={formData.district} onChange={e => setFormData({...formData, district:e.target.value})} className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10">
                           {['Bagerhat','Bandarban','Barguna','Barishal','Bhola','Bogura','Brahmanbaria','Chandpur','Chapainawabganj','Chattogram','Chuadanga','Cumilla',"Cox's Bazar",'Dhaka','Dinajpur','Faridpur','Feni','Gaibandha','Gazipur','Gopalganj','Habiganj','Jamalpur','Jashore','Jhalokati','Jhenaidah','Joypurhat','Khagrachhari','Khulna','Kishoreganj','Kurigram','Kushtia','Lakshmipur','Lalmonirhat','Madaripur','Magura','Manikganj','Meherpur','Moulvibazar','Munshiganj','Mymensingh','Naogaon','Narail','Narayanganj','Narsingdi','Natore','Netrokona','Nilphamari','Noakhali','Pabna','Panchagarh','Patuakhali','Pirojpur','Rajbari','Rajshahi','Rangamati','Rangpur','Satkhira','Shariatpur','Sherpur','Sirajganj','Sunamganj','Sylhet','Tangail','Thakurgaon'].map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
                       </div>
@@ -424,7 +424,7 @@ export const Register: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 py-3.5 font-bold text-white shadow-lg shadow-emerald-900/15 transition-all hover:-translate-y-0.5 hover:bg-emerald-900 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 py-3.5 font-bold text-white shadow-lg shadow-emerald-900/15 hover:bg-emerald-900 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span>{isSubmitting ? "Creating Account..." : (['delivery', 'warehouse'].includes(selectedRole) ? "Submit for Approval" : "Complete Registration")}</span>
                 <ArrowRight className="w-4 h-4" />
