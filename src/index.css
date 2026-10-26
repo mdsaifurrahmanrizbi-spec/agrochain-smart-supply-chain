@@ -64,3 +64,14 @@
 @media(max-width:640px){.auth-night-page{padding:16px}.auth-glass-card{padding:24px 20px;max-height:calc(100dvh - 32px);border-radius:24px}.sprout-plant--left{transform:translate(-70px,840px) scale(.58)!important}.sprout-plant--right{transform:translate(1320px,840px) scale(.55)!important}.auth-glass-card .grid.grid-cols-2.sm\:grid-cols-4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){.sprout-plant,.sprout-plant *,.sprout-small,.sprout-moon-halo,.sprout-star,.sprout-firefly,.auth-glass-card{animation:none!important;transition:none!important}}
 html.auth-tab-hidden .sprout-night__scene *{animation-play-state:paused!important}
+
+/* Screenshot-matched static auth garden: no motion and no inner card scrolling. */
+.auth-night-page{min-height:100vh;min-height:100svh;overflow:hidden}
+.auth-glass-card{max-height:none;overflow:visible;overscroll-behavior:auto;animation:none!important;scrollbar-width:none}
+.auth-glass-card::-webkit-scrollbar{display:none}
+.sprout-plant,.sprout-plant--right,.sprout-plant path,.sprout-small,
+.sprout-moon-halo,.sprout-star,.sprout-firefly,
+.sprout-night__scene ellipse[fill="url(#sprout-glow)"]{animation:none!important;transition:none!important}
+.auth-glass-card button:hover{transform:none;transition:none}
+@media(max-height:760px) and (min-width:641px){.auth-night-page{overflow:auto}.auth-glass-card{margin:20px 0}}
+@media(max-width:640px){.auth-night-page{overflow:auto}.auth-glass-card{max-height:none;overflow:visible}}
