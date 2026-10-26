@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useState } from 'react';
+import { SproutNightBackground } from '../../components/common/SproutNightBackground';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
@@ -88,15 +89,15 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-screen bg-[#f5f7ef] px-4 py-5 sm:px-6 lg:px-10 lg:py-7">
+    <div className="auth-night-page auth-night-login">\n      <SproutNightBackground />
       <style>{`
         @keyframes loginCropSway { 0%,100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-4px); } }
         @keyframes loginSunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
         @keyframes loginFieldGlow { 0%,100% { opacity:.25; } 50% { opacity:.55; } }
         @media (prefers-reduced-motion: reduce) { .login-agro-motion, .login-agro-motion * { animation: none !important; transition: none !important; } }
       `}</style>
-      <div className="mx-auto grid min-h-[calc(100vh-3.5rem)] max-w-7xl overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-white shadow-[0_24px_80px_-28px_rgba(20,60,35,0.28)] lg:grid-cols-[1.02fr_0.98fr]">
-        <aside className="relative hidden overflow-hidden bg-[#123d2b] p-10 text-white lg:flex lg:min-h-[700px] lg:flex-col lg:justify-between xl:p-14">
+      <div className="auth-night-layout">
+        <aside className="auth-night-old-aside hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.24),transparent_34%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
           <div className="relative z-10">
             <Link to="/" className="inline-flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-lime-300">
@@ -127,8 +128,8 @@ export const Login: React.FC = () => {
           <div className="relative z-10 flex items-center gap-3 text-xs text-emerald-50/75"><ShieldCheck className="h-4 w-4 text-lime-300" /><span>One connected platform for a better food supply chain.</span></div>
         </aside>
 
-        <main className="flex items-center justify-center px-5 py-9 sm:px-10 lg:px-12 xl:px-16">
-          <div className="w-full max-w-md">
+        <main className="auth-night-main">
+          <div className="auth-glass-card auth-glass-card--login">
             <div className="mb-8 flex items-center justify-between gap-3 lg:mb-10">
               <Link to="/" className="inline-flex items-center gap-2 lg:hidden"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-800 text-white"><Sprout className="h-6 w-6" /></span><span className="text-lg font-black text-emerald-950">AgroChain</span></Link>
               <span className="hidden lg:block text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">Welcome back</span>
@@ -136,22 +137,22 @@ export const Login: React.FC = () => {
             </div>
             <div className="mb-7">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100"><Lock className="h-6 w-6" /></div>
-              <h2 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Sign in to AgroChain</h2>
-              <p className="mt-3 text-sm leading-6 text-slate-500">Access your agricultural supply chain management portal.</p>
+              <h2 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Sign in to your portal</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-500">Choose your role, then enter your details.</p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_12px_40px_-28px_rgba(15,50,30,0.35)] sm:p-7">
+            <div className="auth-form-panel">
               <form onSubmit={handleLogin} className="space-y-5">
                 <div>
                   <label htmlFor="agro-login-email" className="mb-2 block text-sm font-semibold text-slate-700">Email or Username</label>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input id="agro-login-email" type="text" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email or username" className="w-full rounded-xl border border-slate-200 bg-slate-50/80 py-3 pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10" />
+                    <input id="agro-login-email" type="text" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email or username" className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 py-3 pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10" />
                   </div>
                 </div>
                 <div>
                   <label htmlFor="agro-login-role" className="mb-2 block text-sm font-semibold text-slate-700">Sign in as</label>
-                  <select id="agro-login-role" required value={selectedRole} onChange={(e) => setSelectedRole(e.target.value as UserRole)} className="w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10">
+                  <select id="agro-login-role" required value={selectedRole} onChange={(e) => setSelectedRole(e.target.value as UserRole)} className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10">
                     {availableRoles.map((role) => <option key={role} value={role}>{{ admin: 'Admin', farmer: 'Farmer / Seller', buyer: 'Customer / Buyer', delivery: 'Delivery Partner', warehouse: 'Warehouse Staff', inspector: 'Quality Inspector' }[role]}</option>)}
                   </select>
                 </div>
@@ -162,20 +163,20 @@ export const Login: React.FC = () => {
                   </div>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input id="agro-login-password" type={showPassword ? "text" : "password"} autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className="w-full rounded-xl border border-slate-200 bg-slate-50/80 py-3 pl-10 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10" />
+                    <input id="agro-login-password" type={showPassword ? "text" : "password"} autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 py-3 pl-10 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10" />
                     <button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
                       {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
                     </button>
                   </div>
                 </div>
                 {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-                <button type="submit" disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition-all hover:-translate-y-0.5 hover:bg-emerald-900 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60">
+                <button type="submit" disabled={loading} className="auth-night-primary flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition-all hover:-translate-y-0.5 hover:bg-emerald-900 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60">
                   <span>{loading ? 'Authenticating...' : 'Sign In'}</span><ArrowRight className="h-4 w-4" />
                 </button>
               </form>
 
               {(location.pathname === '/login' && (selectedRole === 'farmer' || selectedRole === 'buyer')) && (
-                <div className="mt-5 border-t border-slate-100 pt-5">
+                <div className="auth-google-panel mt-5 border-t border-slate-100 pt-5">
                   <p className="mb-3 text-center text-xs text-slate-500">{language === 'bn' ? 'অথবা Google দিয়ে চালিয়ে যান' : 'Or continue with Google'}</p>
                   <GoogleSignInButton mode="signin" language={language === 'bn' ? 'bn' : 'en'} disabled={loading} onCredential={handleGoogleCredential} onError={handleGoogleError} />
                 </div>
@@ -191,8 +192,8 @@ export const Login: React.FC = () => {
               )}
             </div>
 
-            {location.pathname === '/login' && <div className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 text-center text-xs text-slate-600"><p>New to AgroChain? <Link to="/register" className="font-bold text-emerald-800 hover:underline">Register here</Link></p></div>}
-            {location.pathname === '/login' && <div className="mt-4 text-center text-xs leading-6 text-slate-500"><p className="font-semibold text-slate-600">Staff access</p><p className="mt-1"><Link to="/warehouse-portal/login" className="font-bold text-emerald-700 hover:underline">Warehouse / Inspector</Link><span className="mx-2 text-slate-300">·</span><Link to="/admin-portal/login" className="font-bold text-emerald-700 hover:underline">Admin Portal</Link></p></div>}
+            {location.pathname === '/login' && <div className="auth-night-foot mt-5 rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 text-center text-xs text-slate-600"><p>New to AgroChain? <Link to="/register" className="font-bold text-emerald-800 hover:underline">Register here</Link></p></div>}
+            {location.pathname === '/login' && <div className="auth-night-staff mt-4 text-center text-xs leading-6 text-slate-500"><p className="font-semibold text-slate-600">Staff access</p><p className="mt-1"><Link to="/warehouse-portal/login" className="font-bold text-emerald-700 hover:underline">Warehouse / Inspector</Link><span className="mx-2 text-slate-300">·</span><Link to="/admin-portal/login" className="font-bold text-emerald-700 hover:underline">Admin Portal</Link></p></div>}
             <p className="mt-7 text-center text-[11px] leading-5 text-slate-400">Secure access to your AgroChain account.</p>
           </div>
         </main>

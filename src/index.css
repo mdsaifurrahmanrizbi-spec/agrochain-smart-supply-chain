@@ -8,3 +8,59 @@
     font-family: 'JetBrains Mono', monospace;
   }
 }
+
+
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap');
+
+.auth-night-page{position:relative;isolation:isolate;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px 16px;color:#f2f8f4;font-family:'Poppins','Noto Sans Bengali',system-ui,sans-serif;background:#051c14;overflow:hidden}
+.sprout-night{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
+.sprout-night__scene{width:100%;height:100%;display:block}
+.auth-night-layout{position:relative;z-index:1;width:100%;display:flex;justify-content:center;align-items:center}
+.auth-night-old-aside{display:none!important}
+.auth-night-main{width:100%;display:flex;justify-content:center;align-items:center;padding:0!important}
+.auth-glass-card{width:100%;max-height:calc(100dvh - 48px);overflow-y:auto;overscroll-behavior:contain;border:1px solid rgba(184,243,74,.32);border-radius:28px;background:rgba(6,35,26,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 28px 90px rgba(0,0,0,.38);padding:30px 40px;animation:auth-card-enter .5s ease-out both;scrollbar-color:rgba(184,243,74,.45) transparent}
+.auth-glass-card--register{max-width:520px}
+.auth-glass-card--login{max-width:480px}
+.auth-glass-card h1,.auth-glass-card h2,.auth-glass-card h3{color:#f2f8f4!important;letter-spacing:-.035em}
+.auth-glass-card p,.auth-glass-card label,.auth-glass-card span{color:inherit}
+.auth-glass-card .text-slate-950,.auth-glass-card .text-slate-900,.auth-glass-card .text-slate-800,.auth-glass-card .text-slate-700,.auth-glass-card .text-slate-600,.auth-glass-card .text-slate-500,.auth-glass-card .text-slate-400{color:#d0e0d6!important}
+.auth-glass-card .text-emerald-800,.auth-glass-card .text-emerald-700,.auth-glass-card .text-emerald-900,.auth-glass-card .text-lime-200{color:#b8f34a!important}
+.auth-glass-card .bg-emerald-50,.auth-glass-card .bg-emerald-100,.auth-glass-card .bg-slate-50,.auth-glass-card .bg-white{background:rgba(255,255,255,.06)!important}
+.auth-glass-card .border-slate-200,.auth-glass-card .border-slate-200\/80,.auth-glass-card .border-emerald-100,.auth-glass-card .border-slate-100{border-color:rgba(255,255,255,.18)!important}
+.auth-glass-card .auth-form-panel{border:0!important;background:transparent!important;padding:0!important;box-shadow:none!important}
+.auth-glass-card input:not([type=checkbox]),.auth-glass-card select,.auth-glass-card textarea,.auth-night-input{color:#f2f8f4!important;background:rgba(255,255,255,.08)!important;border:1px solid rgba(255,255,255,.2)!important;border-radius:12px!important;min-height:44px}
+.auth-glass-card input::placeholder,.auth-glass-card textarea::placeholder{color:#9eb6a9!important}
+.auth-glass-card input:focus,.auth-glass-card select:focus,.auth-glass-card textarea:focus,.auth-glass-card button:focus-visible,.auth-glass-card a:focus-visible{outline:2px solid #b8f34a!important;outline-offset:2px;box-shadow:0 0 0 3px rgba(184,243,74,.18)!important}
+.auth-glass-card button[type=submit],.auth-glass-card .auth-night-primary{background:#b8f34a!important;color:#06231a!important;border:0!important;border-radius:12px!important;min-height:50px}
+.auth-glass-card button[type=submit] *, .auth-glass-card .auth-night-primary *{color:#06231a!important}
+.auth-glass-card button:hover{transition:transform .18s ease,background-color .18s ease;transform:translateY(-2px)}
+.auth-glass-card .grid.grid-cols-2,.auth-glass-card .grid.grid-cols-2.sm\:grid-cols-4{background:transparent!important;border:0!important;padding:0!important}
+.auth-glass-card .grid.grid-cols-2 button,.auth-glass-card .grid.grid-cols-2.sm\:grid-cols-4 button{border:1px solid rgba(255,255,255,.22);border-radius:12px;background:rgba(255,255,255,.025);color:#d5e4dc!important;padding:10px 8px}
+.auth-glass-card .grid.grid-cols-2 button[class*=bg-emerald-800],.auth-glass-card .grid.grid-cols-2 button[class*=bg-emerald-700],.auth-glass-card .grid.grid-cols-2.sm\:grid-cols-4 button[class*=bg-emerald-]{background:#b8f34a!important;color:#06231a!important}
+.auth-glass-card .grid.grid-cols-2 button[class*=bg-emerald-] *, .auth-glass-card .grid.grid-cols-2.sm\:grid-cols-4 button[class*=bg-emerald-] *{color:#06231a!important}
+.auth-glass-card .auth-google-panel{background:transparent!important;border-color:rgba(255,255,255,.18)!important}
+.auth-glass-card .auth-google-panel button{background:transparent!important;color:#f2f8f4!important;border-color:rgba(255,255,255,.25)!important}
+.auth-glass-card .auth-google-panel button *{color:#f2f8f4!important}
+.auth-glass-card a{color:#b8f34a!important}
+.auth-glass-card input[type=checkbox]{accent-color:#b8f34a}
+.auth-night-foot{background:transparent!important;border-color:rgba(255,255,255,.16)!important}
+.auth-night-staff{color:#b8cfc0!important}
+.sprout-plant{transform-box:view-box;transform-origin:0 0;animation:sprout-sway 5s ease-in-out infinite}
+.sprout-plant--right{animation-delay:-2.1s}
+.sprout-plant path:nth-of-type(2),.sprout-plant path:nth-of-type(3){transform-box:fill-box;transform-origin:left center;animation:sprout-leaf 4.5s ease-in-out infinite}
+.sprout-plant--right path:nth-of-type(2){animation-delay:-1.4s}
+.sprout-night__scene ellipse[fill="url(#sprout-glow)"]{animation:sprout-glow-pulse 4.8s ease-in-out infinite}
+.sprout-moon-halo{transform-box:fill-box;transform-origin:center;animation:moon-halo 4s ease-in-out infinite}
+.sprout-star{animation:star-twinkle 3.5s ease-in-out infinite}
+.sprout-firefly{animation:firefly-float 4.5s ease-in-out infinite}
+.sprout-small{transform-box:fill-box;transform-origin:bottom center;animation:sprout-sway 5.5s ease-in-out infinite}
+@keyframes sprout-sway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+@keyframes sprout-leaf{0%,100%{opacity:1}50%{opacity:.82}}
+@keyframes sprout-glow-pulse{0%,100%{opacity:.65}50%{opacity:1}}
+@keyframes moon-halo{0%,100%{opacity:.8}50%{opacity:1}}
+@keyframes star-twinkle{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes firefly-float{0%{opacity:0;transform:translateY(20px)}25%{opacity:1}100%{opacity:0;transform:translateY(-35px)}}
+@keyframes auth-card-enter{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:640px){.auth-night-page{padding:16px}.auth-glass-card{padding:24px 20px;max-height:calc(100dvh - 32px);border-radius:24px}.sprout-plant--left{transform:translate(-70px,840px) scale(.58)!important}.sprout-plant--right{transform:translate(1320px,840px) scale(.55)!important}.auth-glass-card .grid.grid-cols-2.sm\:grid-cols-4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.sprout-plant,.sprout-plant *,.sprout-small,.sprout-moon-halo,.sprout-star,.sprout-firefly,.auth-glass-card{animation:none!important;transition:none!important}}
+html.auth-tab-hidden .sprout-night__scene *{animation-play-state:paused!important}
