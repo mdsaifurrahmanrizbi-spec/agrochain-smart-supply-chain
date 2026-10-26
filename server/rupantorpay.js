@@ -49,7 +49,8 @@ router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
       body: JSON.stringify({
         fullname: order.buyerName || account.name,
         email: account.email,
-        // Delivery charge is collected separately by the delivery partner; online checkout charges products only.\n        amount: Number(order.productSubtotal ?? (Number(order.totalAmount) - Number(order.deliveryFee || 0))).toFixed(2),
+        // Delivery charge is collected separately by the delivery partner; online checkout charges products only.
+        amount: Number(order.productSubtotal ?? (Number(order.totalAmount) - Number(order.deliveryFee || 0))).toFixed(2),
         success_url: `${FRONTEND_URL}/buyer/payment-result?orderId=${encodeURIComponent(orderId)}`,
         cancel_url: `${FRONTEND_URL}/buyer/payment-result?orderId=${encodeURIComponent(orderId)}&cancelled=1`,
         webhook_url: `${process.env.API_PUBLIC_URL || 'https://agrochain-api.onrender.com'}/api/payment/rupantorpay/webhook`,
@@ -113,7 +114,8 @@ router.post('/rupantorpay/checkout', requireAuth, async (req, res) => {
         httpStatus: response.status,
         contentType,
         parsedJson,
-        responseKeys: objectKeys(data),\n        responseObjectLayers: responseObjects.map(objectKeys),
+        responseKeys: objectKeys(data),
+        responseObjectLayers: responseObjects.map(objectKeys),
         nestedObjectKeys: Object.fromEntries(
           Object.entries(data).filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value))
             .slice(0, 10).map(([key, value]) => [key, objectKeys(value)])
