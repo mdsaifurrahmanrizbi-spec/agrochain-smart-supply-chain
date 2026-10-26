@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { SproutNightBackground } from '../../components/common/SproutNightBackground';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
@@ -113,7 +114,7 @@ export const Register: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f7ef] px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+    <div className="auth-night-page auth-night-register">\n      <SproutNightBackground />
       <style>{`
         @keyframes cropSway { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
         @keyframes farmerWork { 0%,100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(3deg) translateY(3px); } }
@@ -152,15 +153,15 @@ export const Register: React.FC = () => {
             <div><p className="text-lg font-extrabold text-lime-200">Partners</p><p className="mt-1 text-[10px] text-white/60">Move goods smarter</p></div>
           </div>
         </aside>
-        <main className="flex w-full min-w-0 flex-col justify-center px-4 py-7 sm:px-8 sm:py-10 lg:px-10 xl:px-14">
-          <div className="mx-auto w-full max-w-2xl space-y-6">
+        <main className="auth-night-main">
+          <div className="auth-glass-card auth-glass-card--register">
         <div className="text-center">
           <div className="flex justify-center mb-3">
             <Logo size="lg" />
           </div>
           <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-800"><Sprout className="h-3.5 w-3.5" /> Your journey starts here</div>
-          <h2 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Create your account<span className="text-emerald-700">.</span></h2>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Join Bangladesh’s agricultural community and bring your role in the harvest-to-home journey to life.</p>
+          <h2 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Create your account</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Join Bangladesh’s connected agricultural community.</p>
         </div>
 
         {/* Role Selector Tabs */}
@@ -207,13 +208,13 @@ export const Register: React.FC = () => {
           <button type="button" onClick={() => setSelectedRole('warehouse')} className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${selectedRole === 'warehouse' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}><Truck className="w-4 h-4" /><span>Warehouse</span></button>
         </div>
         {!submittedMessage && (selectedRole === 'farmer' || selectedRole === 'buyer') && (
-          <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="auth-google-panel mb-5 rounded-2xl border border-slate-200 bg-white p-4">
             <p className="mb-3 text-center text-xs text-slate-500">{language === 'bn' ? 'অথবা Google দিয়ে সাইন আপ করুন' : 'Or sign up with Google'}</p>
             <GoogleSignInButton mode="signup" language={language === 'bn' ? 'bn' : 'en'} disabled={isSubmitting} onCredential={handleGoogleCredential} onError={handleGoogleError} />
           </div>
         )}
         {/* Form Card */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_12px_40px_-28px_rgba(15,50,30,0.35)] sm:p-8">
+        <div className="auth-form-panel">
           {submittedMessage ? (
             <div className="space-y-4 text-center py-4">
               <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center mx-auto">
@@ -252,7 +253,7 @@ export const Register: React.FC = () => {
                     placeholder="e.g. Md. Tariqul Islam"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10"
+                    className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10"
                   />
                 </div>
 
@@ -264,7 +265,7 @@ export const Register: React.FC = () => {
                     placeholder="+880 17XX-XXXXXX"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
+                    className="auth-night-input w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
                   />
                 </div>
               </div>
@@ -278,7 +279,7 @@ export const Register: React.FC = () => {
                     placeholder="name@domain.com"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
+                    className="auth-night-input w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
                   />
                 </div>
 
