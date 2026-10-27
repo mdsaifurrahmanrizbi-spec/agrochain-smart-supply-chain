@@ -237,14 +237,14 @@ export const Login: React.FC = () => {
                 /* One document-level scrollbar for the login page; no nested scroll containers */
         html:has(.auth-night-login), body:has(.auth-night-login), #root:has(.auth-night-login) { height: auto !important; min-height: 100% !important; overflow-y: visible !important; overflow-x: hidden !important; }
         .auth-night-login { min-height: 100vh !important; height: auto !important; overflow: visible !important; }
-        .auth-night-login .auth-night-layout { box-sizing: border-box !important; min-height: calc(100vh - 80px) !important; height: auto !important; display: flex !important; align-items: flex-start !important; justify-content: center !important; padding: 40px 1rem 3rem !important; margin-top: 0 !important; overflow: visible !important; }
+        .auth-night-login .auth-night-layout { box-sizing: border-box !important; min-height: calc(100vh - 80px) !important; height: auto !important; display: flex !important; align-items: flex-start !important; justify-content: center !important; padding: 48px 1rem 3rem !important; margin-top: 0 !important; overflow: visible !important; }
         .auth-night-login .auth-night-main { width: 100% !important; max-width: 31rem !important; margin: 0 auto !important; align-self: flex-start !important; transform: none !important; position: relative !important; top: auto !important; height: auto !important; max-height: none !important; overflow: visible !important; }
         .auth-night-login .auth-glass-card, .auth-night-login .auth-glass-card form { height: auto !important; max-height: none !important; overflow: visible !important; }
         .auth-night-login .auth-glass-card { width: 100% !important; max-width: 31rem !important; margin: 0 auto !important; padding: 1.5rem !important; transform: none !important; border: 1.5px solid #D7E1EC !important; border-radius: 20px !important; background: #FFFFFF !important; box-shadow: 0 8px 24px rgba(15,23,42,.05) !important; }
         .auth-night-login .auth-glass-card > .mb-5 { margin-bottom: 1rem !important; }
         .auth-night-login .auth-glass-card > .mb-6 { margin-bottom: 1rem !important; }
         .auth-night-login .auth-glass-card h2 { font-size: 2rem !important; }
-        @media (max-width: 640px) { .auth-night-login .auth-night-layout { padding: 20px .75rem 2rem !important; } .auth-night-login .auth-glass-card { padding: 1.25rem !important; } }
+        @media (max-width: 640px) { .auth-night-login .auth-night-layout { padding: 24px .75rem 2rem !important; } .auth-night-login .auth-glass-card { padding: 1.25rem !important; } }
       `}</style>
       <div className="auth-night-layout mx-auto flex items-center justify-center bg-white px-4 py-6 sm:px-6" style={{ backgroundColor: "#F8FAF9", minHeight: "calc(100vh - 80px)" }}>
         <aside className="auth-night-old-aside hidden">
