@@ -101,8 +101,8 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-night-input { padding-left: 44px !important; }\n        .auth-night-login .auth-glass-card .relative > svg.absolute { color: #64748B !important; }
         .auth-night-login .auth-night-input:focus { border-color: #16A34A !important; box-shadow: 0 0 0 3px rgba(22,163,74,.14) !important; outline: none !important; }
         .auth-night-login .auth-night-input ~ button { color: #64748B !important; }
-        .auth-night-login .auth-night-primary { width: 100% !important; height: 50px !important; min-height: 50px !important; padding-top: 0 !important; padding-bottom: 0 !important; border-radius: 9999px !important; background: #16A34A !important; color: #fff !important; font-weight: 700 !important; opacity: 1 !important; }
-        .auth-night-login .auth-night-primary:hover { background: #15803D !important; }
+        .auth-night-login .auth-night-primary { width: 100% !important; height: 50px !important; min-height: 50px !important; padding-top: 0 !important; padding-bottom: 0 !important; border-radius: 9999px !important; background: #008F5A !important; color: #fff !important; font-weight: 700 !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-primary:hover { background: #007A4D !important; }
         .auth-night-login .auth-role-button { white-space: nowrap !important; font-size: 14px !important; padding-left: 8px !important; padding-right: 8px !important; }
         .auth-night-login .auth-google-panel > p { color: #64748B !important; font-size: 12px !important; font-weight: 600 !important; }
         .auth-night-login .auth-google-panel > div > div[aria-label] { width: 100% !important; }
@@ -110,7 +110,7 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-night-foot p { color: #64748B !important; font-size: 14px !important; font-weight: 400 !important; opacity: 1 !important; }
         .auth-night-login .auth-night-foot a { color: #16A34A !important; font-weight: 700 !important; opacity: 1 !important; }
         .auth-night-login label { color: #1E293B !important; }
-        .auth-night-login .auth-night-primary { min-height: 50px; background: #16A34A !important; color: #fff !important; border-radius: 9999px !important; box-shadow: none !important; }
+        .auth-night-login .auth-night-primary { min-height: 50px; background: #008F5A !important; color: #fff !important; border-radius: 9999px !important; box-shadow: none !important; }
         .auth-night-login .auth-night-primary:hover { background: #15803D !important; }
         .auth-night-login .auth-glass-card a { color: #16A34A; }
         .auth-night-login .auth-night-layout { position: relative; z-index: 1; }
@@ -127,7 +127,7 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-form-panel { background: #ffffff !important; border-color: #e2e8f0 !important; }
         .auth-night-login .auth-night-input { color: #1E293B !important; background: #ffffff !important; border: 1px solid #E2E8F0 !important; }
         .auth-night-login .auth-night-input::placeholder { color: #94a3b8 !important; }
-        .auth-night-login .auth-night-primary { background: #16A34A !important; color: #ffffff !important; }
+        .auth-night-login .auth-night-primary { background: #008F5A !important; color: #ffffff !important; }
         
         .auth-night-login .auth-glass-card, .auth-night-login .auth-glass-card * { opacity: 1 !important; animation: none !important; }\n        .auth-night-login .auth-brand-name { color: #1E293B !important; opacity: 1 !important; font-weight: 800 !important; }\n        .auth-night-login .auth-brand-name span { color: #16A34A !important; opacity: 1 !important; }\n        .auth-night-login .auth-glass-card h2 { color: #1E293B !important; font-size: 36px !important; font-weight: 800 !important; opacity: 1 !important; }\n        .auth-night-login .auth-subtext { color: #64748B !important; opacity: 1 !important; }\n        .auth-night-login .auth-form-panel label { color: #1E293B !important; font-weight: 700 !important; opacity: 1 !important; }\n        .auth-night-login .auth-night-input { height: 50px !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; background: #fff !important; color: #1E293B !important; opacity: 1 !important; box-shadow: none !important; }\n        .auth-night-login .auth-role-button { height: 50px !important; min-height: 50px !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; background: #fff !important; color: #64748B !important; opacity: 1 !important; }\n        .auth-night-login .auth-role-button[aria-pressed=\"true\"] { background: #DCFCE7 !important; border-color: #16A34A !important; color: #16A34A !important; }\n        .auth-night-login .auth-forgot-link { display: flex !important; justify-content: flex-end !important; margin-top: 8px !important; color: #16A34A !important; font-size: 12px !important; font-weight: 700 !important; opacity: 1 !important; }
         .auth-night-login .auth-glass-card form { overflow: visible !important; }
@@ -138,12 +138,12 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-subtext { color: #64748B !important; opacity: 1 !important; }
         .auth-night-login .auth-form-panel label { color: #1E293B !important; font-weight: 700 !important; opacity: 1 !important; }
         .auth-night-login .auth-role-button { min-height: 50px; height: 50px; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 8px; background: #fff !important; color: #64748B !important; opacity: 1 !important; }
-        .auth-night-login .auth-role-button[aria-pressed="true"] { background: #DCFCE7 !important; border-color: #16A34A !important; color: #16A34A !important; }
+        .auth-night-login .auth-role-button[aria-pressed="true"] { background: #008F5A !important; border-color: #008F5A !important; color: #FFFFFF !important; }
         .auth-night-login .auth-role-button svg { width: 18px; height: 18px; flex-shrink: 0; }
         .auth-night-login .auth-night-input { height: 50px !important; background: #fff !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; color: #1E293B !important; opacity: 1 !important; }
         .auth-night-login .auth-night-input:focus { border-color: #16A34A !important; }
         .auth-night-login .auth-forgot-link { display: flex; justify-content: flex-end; margin-top: 8px; color: #16A34A !important; font-size: 12px; font-weight: 700; }
-        .auth-night-login .auth-night-primary { background: #16A34A !important; }
+        .auth-night-login .auth-night-primary { background: #008F5A !important; }
         @media (max-width: 640px) { .auth-night-login .auth-glass-card { padding: 1rem !important; } .auth-night-login .auth-night-layout { padding: 1rem; } .auth-night-login .auth-role-button { font-size: 11px; gap: 4px; } }
         @keyframes loginCropSway { 0%,100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-4px); } }
         @keyframes loginSunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
@@ -151,7 +151,7 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-night-input { padding-left: 44px !important; }
         .auth-night-login .auth-night-input:focus { border-color: #16A34A !important; box-shadow: 0 0 0 3px rgba(22,163,74,.14) !important; outline: none !important; }
         .auth-night-login .auth-night-input ~ button { color: #64748B !important; }
-        .auth-night-login .auth-night-primary { width: 100% !important; height: 50px !important; min-height: 50px !important; padding-top: 0 !important; padding-bottom: 0 !important; border-radius: 9999px !important; background: #16A34A !important; color: #fff !important; font-weight: 700 !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-primary { width: 100% !important; height: 50px !important; min-height: 50px !important; padding-top: 0 !important; padding-bottom: 0 !important; border-radius: 9999px !important; background: #008F5A !important; color: #fff !important; font-weight: 700 !important; opacity: 1 !important; }
         .auth-night-login .auth-night-primary:hover { background: #15803D !important; }
         .auth-night-login .auth-role-button { white-space: nowrap !important; font-size: 14px !important; padding-left: 8px !important; padding-right: 8px !important; }
         .auth-night-login .auth-google-panel > p { color: #64748B !important; font-size: 12px !important; font-weight: 600 !important; }
@@ -172,9 +172,9 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-night-input { height: 50px !important; background: #FFFFFF !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; color: #1E293B !important; }
         .auth-night-login .auth-night-input::placeholder { color: #94A3B8 !important; opacity: 1 !important; }
         .auth-night-login .auth-role-button { height: 50px !important; min-height: 50px !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; background: #FFFFFF !important; color: #64748B !important; opacity: 1 !important; }
-        .auth-night-login .auth-role-button[aria-pressed="true"] { background: #DCFCE7 !important; border-color: #16A34A !important; color: #16A34A !important; }
+        .auth-night-login .auth-role-button[aria-pressed="true"] { background: #008F5A !important; border-color: #008F5A !important; color: #FFFFFF !important; }
         .auth-night-login .auth-forgot-link { display: flex !important; justify-content: flex-end !important; margin-top: 8px !important; color: #16A34A !important; font-size: 12px !important; font-weight: 700 !important; }
-        .auth-night-login .auth-night-primary { height: 50px !important; min-height: 50px !important; border-radius: 9999px !important; background: #16A34A !important; color: #FFFFFF !important; }
+        .auth-night-login .auth-night-primary { height: 50px !important; min-height: 50px !important; border-radius: 9999px !important; background: #008F5A !important; color: #FFFFFF !important; }
         .auth-night-login .auth-night-foot { background: transparent !important; border: 0 !important; padding: 0 !important; color: #64748B !important; }
         .auth-night-login .auth-night-foot a { color: #16A34A !important; }
         .auth-night-login .auth-night-staff, .auth-night-login > .auth-night-layout .auth-glass-card > p:last-child { display: none !important; }
@@ -194,10 +194,10 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-night-input { box-sizing: border-box !important; width: 100% !important; height: 50px !important; min-height: 50px !important; background: #fff !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; color: #1E293B !important; opacity: 1 !important; box-shadow: none !important; }
         .auth-night-login .auth-night-input::placeholder { color: #94A3B8 !important; opacity: 1 !important; }
         .auth-night-login .auth-role-button { display: flex !important; width: 100% !important; min-width: 0 !important; height: 50px !important; min-height: 50px !important; align-items: center !important; justify-content: center !important; gap: 8px !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; background: #fff !important; color: #64748B !important; font-weight: 600 !important; opacity: 1 !important; }
-        .auth-night-login .auth-role-button[aria-pressed="true"] { background: #DCFCE7 !important; border-color: #16A34A !important; color: #16A34A !important; }
+        .auth-night-login .auth-role-button[aria-pressed="true"] { background: #008F5A !important; border-color: #008F5A !important; color: #FFFFFF !important; }
         .auth-night-login .auth-role-button svg { width: 18px !important; height: 18px !important; flex-shrink: 0 !important; color: currentColor !important; }
         .auth-night-login .auth-forgot-link { display: flex !important; justify-content: flex-end !important; margin-top: 8px !important; color: #16A34A !important; font-size: 12px !important; font-weight: 700 !important; opacity: 1 !important; }
-        .auth-night-login .auth-night-primary { width: 100% !important; height: 50px !important; min-height: 50px !important; border-radius: 9999px !important; background: #16A34A !important; color: #fff !important; font-weight: 700 !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-primary { width: 100% !important; height: 50px !important; min-height: 50px !important; border-radius: 9999px !important; background: #008F5A !important; color: #fff !important; font-weight: 700 !important; opacity: 1 !important; }
         .auth-night-login .auth-night-primary:hover { background: #15803D !important; }
         .auth-night-login .auth-night-foot, .auth-night-login .auth-night-foot p { color: #64748B !important; opacity: 1 !important; }
         .auth-night-login .auth-night-foot a { color: #16A34A !important; font-weight: 700 !important; opacity: 1 !important; }
