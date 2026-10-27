@@ -324,7 +324,7 @@ export const Login: React.FC = () => {
                 </div>
                 {error && (!/Google sign-in is not configured|Google sign-in সেটআপ করা নেই/i.test(error) || googleAttempted) && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
                 <button type="submit" disabled={loading} className="auth-night-primary flex w-full items-center justify-center gap-2 rounded-full bg-green-600 py-3.5 text-sm font-bold text-white transition-all hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60">
-                  <span>{loading ? 'Authenticating...' : 'Sign In'}</span><ArrowRight className="h-4 w-4" />
+                  <span className="text-white">{loading ? 'Authenticating...' : 'Sign In'}</span><ArrowRight className="h-4 w-4 text-white" />
                 </button>
               </form>
 
