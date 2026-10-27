@@ -90,7 +90,11 @@ export const Login: React.FC = () => {
   return (
     <div className="auth-night-page auth-night-login min-h-screen bg-white text-slate-900">
       <style>{`
-        .auth-night-login { min-height: 100vh; background: #ffffff !important; color: #0f172a !important; }
+        .auth-night-login { min-height: 100vh; background: #ffffff !important; color: #0f172a !important; position: relative; overflow-x: hidden; }
+        .auth-night-login:before, .auth-night-login:after { content: ""; position: fixed; bottom: -28px; width: 150px; height: 170px; pointer-events: none; z-index: 0; opacity: .24; background: radial-gradient(ellipse at 30% 20%, #36a66c 0 18%, transparent 19%), radial-gradient(ellipse at 68% 43%, #36a66c 0 17%, transparent 18%), radial-gradient(ellipse at 35% 65%, #36a66c 0 17%, transparent 18%), radial-gradient(ellipse at 78% 83%, #36a66c 0 14%, transparent 15%); }
+        .auth-night-login:before { left: -18px; transform: rotate(-24deg); }
+        .auth-night-login:after { right: -18px; transform: scaleX(-1) rotate(-24deg); }
+        .auth-night-login .auth-night-layout, .auth-night-login .auth-night-main { position: relative; z-index: 1; }
         .auth-night-login .auth-night-layout { display: flex; min-height: calc(100vh - 80px); justify-content: center; align-items: center; padding: 2rem 1rem; background: #ffffff !important; }
         .auth-night-login .auth-night-main { width: 100%; max-width: 30rem; display: flex; align-items: center; justify-content: center; padding: 0 !important; background: transparent !important; }
         .auth-night-login .auth-glass-card { width: 100%; max-width: 30rem; padding: 2rem; border: 1px solid #e2e8f0 !important; border-radius: 1.5rem; background: #ffffff !important; color: #0f172a !important; box-shadow: 0 20px 50px rgba(15, 23, 42, .08) !important; backdrop-filter: none !important; }
@@ -136,7 +140,7 @@ export const Login: React.FC = () => {
           <div className="relative z-10 flex items-center gap-3 text-xs text-emerald-50/75"><ShieldCheck className="h-4 w-4 text-lime-300" /><span>One connected platform for a better food supply chain.</span></div>
         </aside>
 
-        <main className="auth-night-main w-full max-w-lg" style={{ width: "100%", maxWidth: "35rem", background: "transparent" }}>
+        <main className="auth-night-main w-full max-w-lg" style={{ width: "100%", maxWidth: "34rem", background: "transparent" }}>
           <div className="auth-glass-card auth-glass-card--login w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8" style={{ backgroundColor: "#ffffff", color: "#0f172a", border: "1px solid #e2e8f0", borderRadius: "1.5rem", boxShadow: "0 16px 40px rgba(15,23,42,0.08)", padding: "1.75rem" }}>
             <div className="mb-5 flex flex-col items-center justify-center gap-2 text-center">
               <Link to="/" className="inline-flex items-center justify-center"><span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-700 text-white shadow-sm"><Sprout className="h-7 w-7" /></span></Link>
