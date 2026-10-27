@@ -159,6 +159,19 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-night-foot p { color: #64748B !important; font-size: 14px !important; font-weight: 400 !important; opacity: 1 !important; }
         .auth-night-login .auth-night-foot a { color: #16A34A !important; font-weight: 700 !important; opacity: 1 !important; }
         @media (max-width: 640px) { .auth-night-login .auth-role-button { font-size: 14px !important; gap: 4px !important; padding-left: 8px !important; padding-right: 8px !important; } }
+        /* Sign In stays deep green in every pointer/focus state */
+        .auth-night-login button.auth-night-primary,
+        .auth-night-login button.auth-night-primary:hover,
+        .auth-night-login button.auth-night-primary:focus,
+        .auth-night-login button.auth-night-primary:focus-visible,
+        .auth-night-login button.auth-night-primary:active {
+          background-color: #008F5A !important;
+          background-image: none !important;
+          color: #FFFFFF !important;
+          box-shadow: none !important;
+          filter: none !important;
+          opacity: 1 !important;
+        }
         /* Exact screenshot match: final overrides for the public login page only */
         .auth-night-login { background: #F8FAF9 !important; color: #1E293B !important; }
         .auth-night-login .auth-night-layout { background: #F8FAF9 !important; align-items: center !important; justify-content: center !important; padding: 1.875rem 1rem 2rem !important; }
