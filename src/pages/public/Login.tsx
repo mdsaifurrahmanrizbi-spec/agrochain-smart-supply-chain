@@ -1,5 +1,4 @@
 ﻿import React, { useCallback, useState } from 'react';
-import { SproutNightBackground } from '../../components/common/SproutNightBackground';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
@@ -89,8 +88,17 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="auth-night-page auth-night-login">\n      <SproutNightBackground />
+    <div className="auth-night-page auth-night-login min-h-screen bg-slate-50 text-slate-900">
       <style>{`
+        .auth-night-login { min-height: 100vh; background: #f8fafc !important; color: #0f172a !important; }
+        .auth-night-login .auth-night-layout { display: flex; min-height: 100vh; justify-content: center; align-items: center; padding: 2rem 1rem; background: #f8fafc !important; }
+        .auth-night-login .auth-night-main { width: 100%; max-width: 30rem; display: flex; align-items: center; justify-content: center; padding: 0 !important; background: transparent !important; }
+        .auth-night-login .auth-glass-card { width: 100%; max-width: 30rem; padding: 2rem; border: 1px solid #e2e8f0 !important; border-radius: 1.5rem; background: #ffffff !important; color: #0f172a !important; box-shadow: 0 20px 50px rgba(15, 23, 42, .08) !important; backdrop-filter: none !important; }
+        .auth-night-login .auth-form-panel { background: #ffffff !important; border-color: #e2e8f0 !important; }
+        .auth-night-login .auth-night-input { color: #0f172a !important; background: #f8fafc !important; border-color: #cbd5e1 !important; }
+        .auth-night-login .auth-night-input::placeholder { color: #94a3b8 !important; }
+        .auth-night-login .auth-night-primary { background: #047857 !important; color: #ffffff !important; }
+        @media (max-width: 640px) { .auth-night-login .auth-glass-card { padding: 1.25rem; } .auth-night-login .auth-night-layout { padding: 1rem .75rem; } }
         @keyframes loginCropSway { 0%,100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-4px); } }
         @keyframes loginSunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
         @keyframes loginFieldGlow { 0%,100% { opacity:.25; } 50% { opacity:.55; } }
