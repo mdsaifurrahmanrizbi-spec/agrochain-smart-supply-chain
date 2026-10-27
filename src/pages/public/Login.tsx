@@ -159,7 +159,33 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-night-foot p { color: #64748B !important; font-size: 14px !important; font-weight: 400 !important; opacity: 1 !important; }
         .auth-night-login .auth-night-foot a { color: #16A34A !important; font-weight: 700 !important; opacity: 1 !important; }
         @media (max-width: 640px) { .auth-night-login .auth-role-button { font-size: 14px !important; gap: 4px !important; padding-left: 8px !important; padding-right: 8px !important; } }
-        @media (prefers-reduced-motion: reduce) { .login-agro-motion, .login-agro-motion * { animation: none !important; transition: none !important; } }
+        /* Final, scoped login UI fixes */
+        .auth-night-login { background: #F8FAF9 !important; color: #1E293B !important; min-height: 100vh !important; height: auto !important; overflow-x: hidden !important; overflow-y: auto !important; }
+        .auth-night-login .auth-night-layout { min-height: calc(100vh - 80px) !important; height: auto !important; overflow: visible !important; background: #F8FAF9 !important; align-items: flex-start !important; padding: 2rem 1rem 3rem !important; }
+        .auth-night-login .auth-night-main { width: 100% !important; max-width: 34.375rem !important; height: auto !important; overflow: visible !important; }
+        .auth-night-login .auth-glass-card { width: 100% !important; max-width: 34.375rem !important; height: auto !important; max-height: none !important; overflow: visible !important; padding: 2rem !important; background: #fff !important; border: 1px solid #E2E8F0 !important; border-radius: 20px !important; color: #1E293B !important; box-shadow: 0 12px 32px rgba(15,23,42,.06) !important; opacity: 1 !important; animation: none !important; }
+        .auth-night-login .auth-glass-card * { opacity: 1 !important; animation: none !important; }
+        .auth-night-login .auth-brand-name { color: #1E293B !important; opacity: 1 !important; font-weight: 800 !important; }
+        .auth-night-login .auth-brand-name span { color: #16A34A !important; opacity: 1 !important; }
+        .auth-night-login .auth-glass-card h2 { color: #1E293B !important; font-size: 36px !important; line-height: 1.2 !important; font-weight: 800 !important; opacity: 1 !important; }
+        .auth-night-login .auth-subtext, .auth-night-login .auth-google-panel > p { color: #64748B !important; opacity: 1 !important; }
+        .auth-night-login .auth-form-panel label { color: #1E293B !important; font-weight: 700 !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-input { box-sizing: border-box !important; width: 100% !important; height: 50px !important; min-height: 50px !important; background: #fff !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; color: #1E293B !important; opacity: 1 !important; box-shadow: none !important; }
+        .auth-night-login .auth-night-input::placeholder { color: #94A3B8 !important; opacity: 1 !important; }
+        .auth-night-login .auth-role-button { display: flex !important; width: 100% !important; min-width: 0 !important; height: 50px !important; min-height: 50px !important; align-items: center !important; justify-content: center !important; gap: 8px !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; background: #fff !important; color: #64748B !important; font-weight: 600 !important; opacity: 1 !important; }
+        .auth-night-login .auth-role-button[aria-pressed="true"] { background: #DCFCE7 !important; border-color: #16A34A !important; color: #16A34A !important; }
+        .auth-night-login .auth-role-button svg { width: 18px !important; height: 18px !important; flex-shrink: 0 !important; color: currentColor !important; }
+        .auth-night-login .auth-forgot-link { display: flex !important; justify-content: flex-end !important; margin-top: 8px !important; color: #16A34A !important; font-size: 12px !important; font-weight: 700 !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-primary { width: 100% !important; height: 50px !important; min-height: 50px !important; border-radius: 9999px !important; background: #16A34A !important; color: #fff !important; font-weight: 700 !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-primary:hover { background: #15803D !important; }
+        .auth-night-login .auth-night-foot, .auth-night-login .auth-night-foot p { color: #64748B !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-foot a { color: #16A34A !important; font-weight: 700 !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-layout, .auth-night-login .auth-night-main, .auth-night-login .auth-glass-card form { height: auto !important; max-height: none !important; overflow: visible !important; }
+        html:has(.auth-night-login), body:has(.auth-night-login), #root:has(.auth-night-login) { height: auto !important; min-height: 100% !important; overflow-y: auto !important; }
+        .auth-night-login:before, .auth-night-login:after { content: "" !important; position: fixed !important; bottom: -28px !important; width: 150px !important; height: 170px !important; pointer-events: none !important; z-index: 0 !important; opacity: .24 !important; background: radial-gradient(ellipse at 30% 20%, #36a66c 0 18%, transparent 19%), radial-gradient(ellipse at 68% 43%, #36a66c 0 17%, transparent 18%), radial-gradient(ellipse at 35% 65%, #36a66c 0 17%, transparent 18%), radial-gradient(ellipse at 78% 83%, #36a66c 0 14%, transparent 15%) !important; }
+        .auth-night-login:before { left: -18px !important; transform: rotate(-24deg) !important; }
+        .auth-night-login:after { right: -18px !important; transform: scaleX(-1) rotate(-24deg) !important; }
+        @media (max-width: 640px) { .auth-night-login .auth-glass-card { padding: 1rem !important; } .auth-night-login .auth-night-layout { padding: 1rem .75rem 2rem !important; } .auth-night-login .auth-role-button { gap: 4px !important; font-size: 11px !important; padding: 0 4px !important; } }
       `}</style>
       <div className="auth-night-layout mx-auto flex items-center justify-center bg-white px-4 py-6 sm:px-6" style={{ backgroundColor: "#ffffff", minHeight: "calc(100vh - 80px)" }}>
         <aside className="auth-night-old-aside hidden">
