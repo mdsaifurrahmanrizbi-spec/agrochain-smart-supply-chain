@@ -6,7 +6,7 @@ import { UserRole } from '../../types';
 import { agroApi } from '../../services/api';
 import { useLanguage } from '../../context/LanguageContext';
 import { GoogleSignInButton } from '../../components/common/GoogleSignInButton';
-import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2, Sprout, Leaf, Eye, EyeOff } from 'lucide-react';
+import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2, Sprout, Leaf, Eye, EyeOff, UserRound, Store, Truck } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const { login, switchDemoRole, setAuthenticatedSession } = useAuth();
@@ -114,7 +114,21 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-night-input { color: #0f172a !important; background: #f8fafc !important; border-color: #cbd5e1 !important; }
         .auth-night-login .auth-night-input::placeholder { color: #94a3b8 !important; }
         .auth-night-login .auth-night-primary { background: #047857 !important; color: #ffffff !important; }
-        @media (max-width: 640px) { .auth-night-login .auth-glass-card { padding: 1.25rem; } .auth-night-login .auth-night-layout { padding: 1rem .75rem; } }
+        
+        .auth-night-login .auth-glass-card, .auth-night-login .auth-glass-card * { opacity: 1 !important; animation: none !important; }
+        .auth-night-login .auth-glass-card h2 { color: #1E293B !important; font-size: 36px !important; font-weight: 800 !important; line-height: 1.2 !important; }
+        .auth-night-login .auth-brand-name { color: #1E293B !important; opacity: 1 !important; }
+        .auth-night-login .auth-brand-name span { color: #16A34A !important; opacity: 1 !important; }
+        .auth-night-login .auth-subtext { color: #64748B !important; opacity: 1 !important; }
+        .auth-night-login .auth-form-panel label { color: #1E293B !important; font-weight: 700 !important; opacity: 1 !important; }
+        .auth-night-login .auth-role-button { min-height: 50px; height: 50px; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 8px; background: #fff !important; color: #64748B !important; opacity: 1 !important; }
+        .auth-night-login .auth-role-button[aria-pressed="true"] { background: #DCFCE7 !important; border-color: #16A34A !important; color: #16A34A !important; }
+        .auth-night-login .auth-role-button svg { width: 18px; height: 18px; flex-shrink: 0; }
+        .auth-night-login .auth-night-input { height: 50px !important; background: #fff !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; color: #1E293B !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-input:focus { border-color: #16A34A !important; }
+        .auth-night-login .auth-forgot-link { display: flex; justify-content: flex-end; margin-top: 8px; color: #16A34A !important; font-size: 12px; font-weight: 700; }
+        .auth-night-login .auth-night-primary { background: #16A34A !important; }
+        @media (max-width: 640px) { .auth-night-login .auth-glass-card { padding: 1rem !important; } .auth-night-login .auth-night-layout { padding: 1rem; } .auth-night-login .auth-role-button { font-size: 11px; gap: 4px; } }
         @keyframes loginCropSway { 0%,100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-4px); } }
         @keyframes loginSunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
         @keyframes loginFieldGlow { 0%,100% { opacity:.25; } 50% { opacity:.55; } }
@@ -125,7 +139,7 @@ export const Login: React.FC = () => {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.24),transparent_34%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
           <div className="relative z-10">
             <Link to="/" className="inline-flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-lime-300">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-lime-300 text-emerald-950 shadow-lg"><Sprout className="h-7 w-7" /></span>
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-lime-300 text-emerald-950 shadow-lg"><Leaf className="h-7 w-7" /></span>
               <span><span className="block text-xl font-black tracking-tight">AgroChain</span><span className="block text-[10px] font-semibold uppercase tracking-[0.25em] text-lime-200">From soil to your door</span></span>
             </Link>
             <div className="mt-16 max-w-lg">
@@ -156,12 +170,12 @@ export const Login: React.FC = () => {
           <div className="auth-glass-card auth-glass-card--login w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8" style={{ backgroundColor: "#ffffff", color: "#0f172a", border: "1px solid #e2e8f0", borderRadius: "1.5rem", boxShadow: "0 16px 40px rgba(15,23,42,0.08)", padding: "1.75rem" }}>
             <div className="mb-5 flex flex-col items-center justify-center gap-2 text-center">
               <Link to="/" className="inline-flex items-center justify-center"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-600 text-white shadow-sm"><Sprout className="h-7 w-7" /></span></Link>
-              <Link to="/" className="text-2xl font-extrabold tracking-tight text-slate-800">Agro<span className="text-emerald-700">Chain</span></Link>
+              <Link to="/" className="auth-brand-name text-2xl font-extrabold tracking-tight">Agro<span>Chain</span></Link>
             </div>
             <div className="mb-6 text-center">
               
               <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 sm:text-4xl">Welcome Back</h2>
-              <p className="mt-3 text-sm leading-6 text-slate-500">Sign in to continue to your account.</p>
+              <p className="auth-subtext mt-3 text-sm leading-6">Sign in to continue to your account.</p>
             </div>
 
             <div className="auth-form-panel" style={{ background: "#ffffff", borderColor: "#ffffff" }}>
@@ -177,7 +191,7 @@ export const Login: React.FC = () => {
                   <label htmlFor="agro-login-role" className="mb-2 block text-sm font-semibold text-slate-900">Role</label>
                   {location.pathname === '/login' ? (
                     <div className="grid grid-cols-3 gap-2" role="group" aria-label="Choose role">
-                      {([{ role: 'buyer' as UserRole, label: 'Buyer', icon: '♙' }, { role: 'farmer' as UserRole, label: 'Seller', icon: '▤' }, { role: 'delivery' as UserRole, label: 'Delivery Partner', icon: '♧' }]).map(({ role, label, icon }) => <button key={role} type="button" onClick={() => setSelectedRole(role)} aria-pressed={selectedRole === role} className={`min-w-0 rounded-xl border px-2 py-3 text-xs font-semibold transition sm:text-sm ${selectedRole === role ? 'border-green-600 bg-green-100 text-green-700 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:border-green-300'}`}><span className="mb-1 block text-base" aria-hidden="true">{icon}</span>{label}</button>)}
+                      {([{ role: 'buyer' as UserRole, label: 'Buyer', Icon: UserRound }, { role: 'farmer' as UserRole, label: 'Seller', Icon: Store }, { role: 'delivery' as UserRole, label: 'Delivery Partner', Icon: Truck }]).map(({ role, label, Icon }) => <button key={role} type="button" onClick={() => setSelectedRole(role)} aria-pressed={selectedRole === role} className="auth-role-button min-w-0 text-xs font-semibold transition sm:text-sm"><Icon aria-hidden="true" />{label}</button>)}
                     </div>
                   ) : (
                     <select id="agro-login-role" required value={selectedRole} onChange={(e) => setSelectedRole(e.target.value as UserRole)} className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10">
@@ -186,10 +200,7 @@ export const Login: React.FC = () => {
                   )}
                 </div>
                 <div>
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <label htmlFor="agro-login-password" className="block text-sm font-semibold text-slate-700">Password</label>
-                    <Link to={location.pathname.startsWith('/admin-portal') ? '/admin-portal/reset-password' : '/password-reset'} className="text-xs font-bold text-emerald-700 transition hover:text-emerald-900 hover:underline">Forgot password?</Link>
-                  </div>
+                  <div className="mb-2"><label htmlFor="agro-login-password" className="block text-sm font-semibold">Password</label></div>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input id="agro-login-password" type={showPassword ? "text" : "password"} autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 py-3 pl-10 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10" />
@@ -197,6 +208,7 @@ export const Login: React.FC = () => {
                       {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
                     </button>
                   </div>
+                  <Link to={location.pathname.startsWith('/admin-portal') ? '/admin-portal/reset-password' : '/password-reset'} className="auth-forgot-link hover:underline">Forgot password?</Link>
                 </div>
                 {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
                 <button type="submit" disabled={loading} className="auth-night-primary flex w-full items-center justify-center gap-2 rounded-full bg-green-600 py-3.5 text-sm font-bold text-white transition-all hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60">
