@@ -125,6 +125,12 @@ export const Login: React.FC = () => {
         .auth-night-login label { color: #1E293B !important; }
         .auth-night-login .auth-night-primary { min-height: 50px; background: #008F5A !important; color: #fff !important; border-radius: 9999px !important; box-shadow: none !important; }
         .auth-night-login .auth-night-primary:hover { background: #15803D !important; }
+        .auth-night-login form button.auth-night-primary,
+        .auth-night-login form button.auth-night-primary span,
+        .auth-night-login form button.auth-night-primary svg {
+          color: #FFFFFF !important;
+          -webkit-text-fill-color: #FFFFFF !important;
+        }
         .auth-night-login .auth-glass-card a { color: #16A34A; }
         .auth-night-login .auth-night-layout { position: relative; z-index: 1; }
         .auth-night-login .auth-night-main, .auth-night-login .auth-glass-card form { min-height: 0 !important; height: auto !important; max-height: none !important; overflow: visible !important; }
