@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
@@ -117,7 +117,7 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-night-input::placeholder { color: #94a3b8 !important; }
         .auth-night-login .auth-night-primary { background: #16A34A !important; color: #ffffff !important; }
         
-        .auth-night-login .auth-glass-card, .auth-night-login .auth-glass-card * { opacity: 1 !important; animation: none !important; }
+        .auth-night-login .auth-glass-card, .auth-night-login .auth-glass-card * { opacity: 1 !important; animation: none !important; }\n        .auth-night-login .auth-brand-name { color: #1E293B !important; opacity: 1 !important; font-weight: 800 !important; }\n        .auth-night-login .auth-brand-name span { color: #16A34A !important; opacity: 1 !important; }\n        .auth-night-login .auth-glass-card h2 { color: #1E293B !important; font-size: 36px !important; font-weight: 800 !important; opacity: 1 !important; }\n        .auth-night-login .auth-subtext { color: #64748B !important; opacity: 1 !important; }\n        .auth-night-login .auth-form-panel label { color: #1E293B !important; font-weight: 700 !important; opacity: 1 !important; }\n        .auth-night-login .auth-night-input { height: 50px !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; background: #fff !important; color: #1E293B !important; opacity: 1 !important; box-shadow: none !important; }\n        .auth-night-login .auth-role-button { height: 50px !important; min-height: 50px !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; background: #fff !important; color: #64748B !important; opacity: 1 !important; }\n        .auth-night-login .auth-role-button[aria-pressed=\"true\"] { background: #DCFCE7 !important; border-color: #16A34A !important; color: #16A34A !important; }\n        .auth-night-login .auth-forgot-link { display: flex !important; justify-content: flex-end !important; margin-top: 8px !important; color: #16A34A !important; font-size: 12px !important; font-weight: 700 !important; opacity: 1 !important; }
         .auth-night-login .auth-glass-card form { overflow: visible !important; }
         html:has(.auth-night-login), body:has(.auth-night-login), #root:has(.auth-night-login) { height: auto !important; min-height: 100% !important; overflow-y: auto !important; }
         .auth-night-login .auth-glass-card h2 { color: #1E293B !important; font-size: 36px !important; font-weight: 800 !important; line-height: 1.2 !important; }
@@ -173,7 +173,7 @@ export const Login: React.FC = () => {
         <main className="auth-night-main w-full max-w-lg" style={{ width: "100%", maxWidth: "34rem", background: "transparent" }}>
           <div className="auth-glass-card auth-glass-card--login w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8" style={{ backgroundColor: "#ffffff", color: "#0f172a", border: "1px solid #e2e8f0", borderRadius: "1.5rem", boxShadow: "0 16px 40px rgba(15,23,42,0.08)", padding: "1.75rem" }}>
             <div className="mb-5 flex flex-col items-center justify-center gap-2 text-center">
-              <Link to="/" className="inline-flex items-center justify-center"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-600 text-white shadow-sm"><Sprout className="h-7 w-7" /></span></Link>
+              <Link to="/" className="inline-flex items-center justify-center"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-600 text-white shadow-sm"><Leaf className="h-7 w-7" /></span></Link>
               <Link to="/" className="auth-brand-name text-2xl font-extrabold tracking-tight">Agro<span>Chain</span></Link>
             </div>
             <div className="mb-6 text-center">
