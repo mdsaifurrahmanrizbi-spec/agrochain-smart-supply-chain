@@ -104,7 +104,7 @@ export const Login: React.FC = () => {
         @keyframes loginFieldGlow { 0%,100% { opacity:.25; } 50% { opacity:.55; } }
         @media (prefers-reduced-motion: reduce) { .login-agro-motion, .login-agro-motion * { animation: none !important; transition: none !important; } }
       `}</style>
-      <div className="auth-night-layout mx-auto flex min-h-screen items-center justify-center bg-white px-4 py-8">
+      <div className="mx-auto flex min-h-screen items-center justify-center bg-white px-4 py-8" style={{ backgroundColor: "#ffffff", minHeight: "100vh" }}>
         <aside className="auth-night-old-aside hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.24),transparent_34%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
           <div className="relative z-10">
@@ -136,8 +136,8 @@ export const Login: React.FC = () => {
           <div className="relative z-10 flex items-center gap-3 text-xs text-emerald-50/75"><ShieldCheck className="h-4 w-4 text-lime-300" /><span>One connected platform for a better food supply chain.</span></div>
         </aside>
 
-        <main className="auth-night-main w-full max-w-lg">
-          <div className="auth-glass-card auth-glass-card--login w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8">
+        <main className="w-full max-w-lg" style={{ width: "100%", maxWidth: "34rem", background: "transparent" }}>
+          <div className="w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8" style={{ backgroundColor: "#ffffff", color: "#0f172a", border: "1px solid #e2e8f0", borderRadius: "1.5rem", boxShadow: "0 16px 40px rgba(15,23,42,0.08)" }}>
             <div className="mb-6 flex items-center justify-center gap-3">
               <Link to="/" className="inline-flex items-center gap-2 lg:hidden"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-800 text-white"><Sprout className="h-6 w-6" /></span><span className="text-lg font-black text-emerald-950">AgroChain</span></Link>
               <span className="hidden lg:block text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">Welcome back</span>
