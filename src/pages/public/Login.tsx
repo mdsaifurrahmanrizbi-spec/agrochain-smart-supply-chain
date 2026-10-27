@@ -221,9 +221,9 @@ export const Login: React.FC = () => {
         .auth-night-login:after { right: -18px !important; transform: scaleX(-1) rotate(-24deg) !important; }
         @media (max-width: 640px) { .auth-night-login .auth-glass-card { padding: 1rem !important; } .auth-night-login .auth-night-layout { padding: 1rem .75rem 2rem !important; } .auth-night-login .auth-role-button { gap: 4px !important; font-size: 11px !important; padding: 0 4px !important; } }
 
-        /* Match the reference spacing: a generous gap below the header */
-        .auth-night-login .auth-night-layout { box-sizing: border-box !important; min-height: calc(100vh - 80px) !important; height: auto !important; align-items: flex-start !important; justify-content: center !important; padding: 2.5rem 1rem 3rem !important; overflow: visible !important; }
-        .auth-night-login .auth-night-main { width: 100% !important; max-width: 31rem !important; margin: 0 auto !important; align-self: flex-start !important; transform: none !important; }
+        /* Explicit top offset below the shared site header */
+        .auth-night-login .auth-night-layout { box-sizing: border-box !important; min-height: calc(100vh - 80px) !important; height: auto !important; display: flex !important; align-items: flex-start !important; justify-content: center !important; padding: 5rem 1rem 3rem !important; margin-top: 0 !important; overflow: visible !important; }
+        .auth-night-login .auth-night-main { width: 100% !important; max-width: 31rem !important; margin: 0 auto !important; align-self: flex-start !important; transform: none !important; position: relative !important; top: 0 !important; }
         .auth-night-login .auth-glass-card { width: 100% !important; max-width: 31rem !important; margin: 0 auto !important; padding: 1.5rem !important; transform: none !important; overflow: visible !important; }
         .auth-night-login .auth-glass-card > .mb-5 { margin-bottom: 1rem !important; }
         .auth-night-login .auth-glass-card > .mb-6 { margin-bottom: 1rem !important; }
