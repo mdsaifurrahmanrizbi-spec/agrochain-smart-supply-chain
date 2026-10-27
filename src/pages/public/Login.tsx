@@ -159,6 +159,27 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-night-foot p { color: #64748B !important; font-size: 14px !important; font-weight: 400 !important; opacity: 1 !important; }
         .auth-night-login .auth-night-foot a { color: #16A34A !important; font-weight: 700 !important; opacity: 1 !important; }
         @media (max-width: 640px) { .auth-night-login .auth-role-button { font-size: 14px !important; gap: 4px !important; padding-left: 8px !important; padding-right: 8px !important; } }
+        /* Exact screenshot match: final overrides for the public login page only */
+        .auth-night-login { background: #F8FAF9 !important; color: #1E293B !important; }
+        .auth-night-login .auth-night-layout { background: #F8FAF9 !important; align-items: center !important; justify-content: center !important; padding: 1.875rem 1rem 2rem !important; }
+        .auth-night-login .auth-night-main { max-width: 34.375rem !important; width: 100% !important; align-items: center !important; }
+        .auth-night-login .auth-glass-card { max-width: 34.375rem !important; width: 100% !important; padding: 2rem !important; background: #FFFFFF !important; border: 1px solid #E2E8F0 !important; border-radius: 20px !important; box-shadow: 0 12px 32px rgba(15,23,42,.06) !important; color: #1E293B !important; }
+        .auth-night-login .auth-brand-name { color: #1E293B !important; }
+        .auth-night-login .auth-brand-name span { color: #16A34A !important; }
+        .auth-night-login .auth-glass-card h2 { color: #1E293B !important; font-size: 36px !important; font-weight: 800 !important; line-height: 1.2 !important; }
+        .auth-night-login .auth-subtext { color: #64748B !important; }
+        .auth-night-login .auth-form-panel label { color: #1E293B !important; font-weight: 700 !important; }
+        .auth-night-login .auth-night-input { height: 50px !important; background: #FFFFFF !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; color: #1E293B !important; }
+        .auth-night-login .auth-night-input::placeholder { color: #94A3B8 !important; opacity: 1 !important; }
+        .auth-night-login .auth-role-button { height: 50px !important; min-height: 50px !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; background: #FFFFFF !important; color: #64748B !important; opacity: 1 !important; }
+        .auth-night-login .auth-role-button[aria-pressed="true"] { background: #DCFCE7 !important; border-color: #16A34A !important; color: #16A34A !important; }
+        .auth-night-login .auth-forgot-link { display: flex !important; justify-content: flex-end !important; margin-top: 8px !important; color: #16A34A !important; font-size: 12px !important; font-weight: 700 !important; }
+        .auth-night-login .auth-night-primary { height: 50px !important; min-height: 50px !important; border-radius: 9999px !important; background: #16A34A !important; color: #FFFFFF !important; }
+        .auth-night-login .auth-night-foot { background: transparent !important; border: 0 !important; padding: 0 !important; color: #64748B !important; }
+        .auth-night-login .auth-night-foot a { color: #16A34A !important; }
+        .auth-night-login .auth-night-staff, .auth-night-login > .auth-night-layout .auth-glass-card > p:last-child { display: none !important; }
+        .auth-night-login:before, .auth-night-login:after { opacity: .24 !important; }
+        @media (max-width: 640px) { .auth-night-login .auth-glass-card { padding: 1rem !important; } .auth-night-login .auth-night-layout { padding: 1rem .75rem 2rem !important; } .auth-night-login .auth-role-button { font-size: 11px !important; gap: 4px !important; padding-left: 4px !important; padding-right: 4px !important; } }
         /* Final, scoped login UI fixes */
         .auth-night-login { background: #F8FAF9 !important; color: #1E293B !important; min-height: 100vh !important; height: auto !important; overflow-x: hidden !important; overflow-y: auto !important; }
         .auth-night-login .auth-night-layout { min-height: calc(100vh - 80px) !important; height: auto !important; overflow: visible !important; background: #F8FAF9 !important; align-items: flex-start !important; padding: 2rem 1rem 3rem !important; }
