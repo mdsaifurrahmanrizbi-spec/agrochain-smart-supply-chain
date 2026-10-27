@@ -72,6 +72,7 @@ export const GoogleSignInButton: React.FC<Props> = ({ mode, buttonText, language
           });
         },
       });
+      const buttonWidth = Math.min(320, Math.floor(target.getBoundingClientRect().width || 320));
       window.google.accounts.id.renderButton(target, {
         type: 'standard',
         theme: 'outline',
@@ -79,7 +80,7 @@ export const GoogleSignInButton: React.FC<Props> = ({ mode, buttonText, language
         text: mode === 'signup' ? 'signup_with' : (buttonText || 'continue_with'),
         shape: 'rect',
         logo_alignment: 'left',
-        width: Math.max(240, Math.floor(target.getBoundingClientRect().width || 320)),
+        width: buttonWidth,
         locale: language === 'bn' ? 'bn' : 'en',
       });
       setLoading(false);
@@ -109,9 +110,9 @@ export const GoogleSignInButton: React.FC<Props> = ({ mode, buttonText, language
   }, [clientId, language, mode]);
 
   return (
-    <div className="w-full">
+    <div className="flex w-full justify-center">
       {loading && <div className="mb-2 text-center text-xs text-slate-500" role="status">{messages[language].loading}</div>}
-      <div ref={containerRef} className={disabled ? 'pointer-events-none w-full opacity-60' : 'w-full'} aria-label={mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'} />
+      <div ref={containerRef} className={disabled ? 'pointer-events-none w-full max-w-[320px] opacity-60' : 'w-full max-w-[320px]'} aria-label={mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'} />
     </div>
   );
 };
