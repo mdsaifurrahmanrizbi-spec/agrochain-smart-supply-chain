@@ -18,7 +18,7 @@ export const Login: React.FC = () => {
     : location.pathname.startsWith('/warehouse-portal')
       ? ['warehouse', 'inspector']
       : ['farmer', 'buyer', 'delivery'];
-  const [selectedRole, setSelectedRole] = useState<UserRole>(availableRoles[0]);
+  const [selectedRole, setSelectedRole] = useState<UserRole>(location.pathname === '/login' ? 'buyer' : availableRoles[0]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -104,7 +104,7 @@ export const Login: React.FC = () => {
         @keyframes loginFieldGlow { 0%,100% { opacity:.25; } 50% { opacity:.55; } }
         @media (prefers-reduced-motion: reduce) { .login-agro-motion, .login-agro-motion * { animation: none !important; transition: none !important; } }
       `}</style>
-      <div className="auth-night-layout mx-auto flex min-h-screen items-center justify-center bg-white px-4 py-8" style={{ backgroundColor: "#ffffff", minHeight: "calc(100vh - 80px)" }}>
+      <div className="auth-night-layout mx-auto flex items-center justify-center bg-white px-4 py-6 sm:px-6" style={{ backgroundColor: "#ffffff", minHeight: "calc(100vh - 80px)" }}>
         <aside className="auth-night-old-aside hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.24),transparent_34%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
           <div className="relative z-10">
@@ -136,21 +136,20 @@ export const Login: React.FC = () => {
           <div className="relative z-10 flex items-center gap-3 text-xs text-emerald-50/75"><ShieldCheck className="h-4 w-4 text-lime-300" /><span>One connected platform for a better food supply chain.</span></div>
         </aside>
 
-        <main className="auth-night-main w-full max-w-lg" style={{ width: "100%", maxWidth: "34rem", background: "transparent" }}>
-          <div className="auth-glass-card auth-glass-card--login w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8" style={{ backgroundColor: "#ffffff", color: "#0f172a", border: "1px solid #e2e8f0", borderRadius: "1.5rem", boxShadow: "0 16px 40px rgba(15,23,42,0.08)" }}>
-            <div className="mb-6 flex items-center justify-center gap-3">
-              <Link to="/" className="inline-flex items-center gap-2 lg:hidden"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-800 text-white"><Sprout className="h-6 w-6" /></span><span className="text-lg font-black text-emerald-950">AgroChain</span></Link>
-              <span className="hidden lg:block text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">Welcome back</span>
-              
+        <main className="auth-night-main w-full max-w-lg" style={{ width: "100%", maxWidth: "35rem", background: "transparent" }}>
+          <div className="auth-glass-card auth-glass-card--login w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8" style={{ backgroundColor: "#ffffff", color: "#0f172a", border: "1px solid #e2e8f0", borderRadius: "1.5rem", boxShadow: "0 16px 40px rgba(15,23,42,0.08)", padding: "1.75rem" }}>
+            <div className="mb-5 flex flex-col items-center justify-center gap-2 text-center">
+              <Link to="/" className="inline-flex items-center justify-center"><span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-700 text-white shadow-sm"><Sprout className="h-7 w-7" /></span></Link>
+              <Link to="/" className="text-2xl font-extrabold tracking-tight text-slate-900">Agro<span className="text-emerald-700">Chain</span></Link>
             </div>
-            <div className="mb-7 text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-md"><Sprout className="h-7 w-7" /></div>
+            <div className="mb-6 text-center">
+              
               <h2 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Welcome Back</h2>
               <p className="mt-3 text-sm leading-6 text-slate-500">Sign in to continue to your account.</p>
             </div>
 
-            <div className="auth-form-panel">
-              <form onSubmit={handleLogin} className="space-y-5">
+            <div className="auth-form-panel" style={{ background: "#ffffff", borderColor: "#ffffff" }}>
+              <form onSubmit={handleLogin} className="space-y-4">
                 <div>
                   <label htmlFor="agro-login-email" className="mb-2 block text-sm font-semibold text-slate-700">Email or Username</label>
                   <div className="relative">
@@ -159,10 +158,10 @@ export const Login: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <label htmlFor="agro-login-role" className="mb-2 block text-sm font-semibold text-slate-700">Sign in as</label>
-                  {location.pathname === '/login' && availableRoles.includes('farmer') && availableRoles.includes('buyer') ? (
-                    <div className="grid grid-cols-2 gap-2" role="group" aria-label="Choose role">
-                      {(['farmer', 'buyer'] as UserRole[]).map((role) => <button key={role} type="button" onClick={() => setSelectedRole(role)} aria-pressed={selectedRole === role} className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${selectedRole === role ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'}`}>{role === 'farmer' ? '♧  Farmer' : '♙  Buyer'}</button>)}
+                  <label htmlFor="agro-login-role" className="mb-2 block text-sm font-semibold text-slate-900">Role</label>
+                  {location.pathname === '/login' ? (
+                    <div className="grid grid-cols-3 gap-2" role="group" aria-label="Choose role">
+                      {([{ role: 'buyer' as UserRole, label: 'Buyer', icon: '♙' }, { role: 'farmer' as UserRole, label: 'Seller', icon: '▤' }, { role: 'delivery' as UserRole, label: 'Delivery Partner', icon: '♧' }]).map(({ role, label, icon }) => <button key={role} type="button" onClick={() => setSelectedRole(role)} aria-pressed={selectedRole === role} className={`min-w-0 rounded-xl border px-2 py-3 text-xs font-semibold transition sm:text-sm ${selectedRole === role ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'}`}><span className="mb-1 block text-base" aria-hidden="true">{icon}</span>{label}</button>)}
                     </div>
                   ) : (
                     <select id="agro-login-role" required value={selectedRole} onChange={(e) => setSelectedRole(e.target.value as UserRole)} className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10">
