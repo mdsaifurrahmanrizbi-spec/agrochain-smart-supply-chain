@@ -187,7 +187,7 @@ export const Login: React.FC = () => {
         .auth-night-login:after { right: -18px !important; transform: scaleX(-1) rotate(-24deg) !important; }
         @media (max-width: 640px) { .auth-night-login .auth-glass-card { padding: 1rem !important; } .auth-night-login .auth-night-layout { padding: 1rem .75rem 2rem !important; } .auth-night-login .auth-role-button { gap: 4px !important; font-size: 11px !important; padding: 0 4px !important; } }
       `}</style>
-      <div className="auth-night-layout mx-auto flex items-center justify-center bg-white px-4 py-6 sm:px-6" style={{ backgroundColor: "#ffffff", minHeight: "calc(100vh - 80px)" }}>
+      <div className="auth-night-layout mx-auto flex items-center justify-center bg-white px-4 py-6 sm:px-6" style={{ backgroundColor: "#F8FAF9", minHeight: "calc(100vh - 80px)" }}>
         <aside className="auth-night-old-aside hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.24),transparent_34%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
           <div className="relative z-10">
@@ -220,7 +220,7 @@ export const Login: React.FC = () => {
         </aside>
 
         <main className="auth-night-main w-full max-w-lg" style={{ width: "100%", maxWidth: "34rem", background: "transparent" }}>
-          <div className="auth-glass-card auth-glass-card--login w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8" style={{ backgroundColor: "#ffffff", color: "#0f172a", border: "1px solid #e2e8f0", borderRadius: "1.5rem", boxShadow: "0 16px 40px rgba(15,23,42,0.08)", padding: "1.75rem" }}>
+          <div className="auth-glass-card auth-glass-card--login w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8" style={{ backgroundColor: "#FFFFFF", color: "#1E293B", border: "1px solid #E2E8F0", borderRadius: "20px", boxShadow: "0 12px 32px rgba(15,23,42,0.06)", padding: "32px" }}>
             <div className="mb-5 flex flex-col items-center justify-center gap-2 text-center">
               <Link to="/" className="inline-flex items-center justify-center"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-600 text-white shadow-sm"><Leaf className="h-7 w-7" /></span></Link>
               <Link to="/" className="auth-brand-name text-2xl font-extrabold tracking-tight">Agro<span>Chain</span></Link>
