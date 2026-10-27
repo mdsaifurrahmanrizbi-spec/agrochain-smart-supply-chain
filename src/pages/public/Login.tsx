@@ -221,8 +221,8 @@ export const Login: React.FC = () => {
         .auth-night-login:after { right: -18px !important; transform: scaleX(-1) rotate(-24deg) !important; }
         @media (max-width: 640px) { .auth-night-login .auth-glass-card { padding: 1rem !important; } .auth-night-login .auth-night-layout { padding: 1rem .75rem 2rem !important; } .auth-night-login .auth-role-button { gap: 4px !important; font-size: 11px !important; padding: 0 4px !important; } }
 
-        /* Compact login card and place it comfortably below the navigation */
-        .auth-night-login .auth-night-layout { box-sizing: border-box !important; min-height: calc(100vh - 80px) !important; height: auto !important; align-items: flex-start !important; justify-content: center !important; padding: 6rem 1rem 3rem !important; overflow: visible !important; }
+        /* Keep a clear gap between the site header and the login card */
+        .auth-night-login .auth-night-layout { box-sizing: border-box !important; min-height: calc(100vh - 80px) !important; height: auto !important; align-items: flex-start !important; justify-content: center !important; padding: 3rem 1rem 3rem !important; overflow: visible !important; }
         .auth-night-login .auth-night-main { width: 100% !important; max-width: 31rem !important; margin: 0 auto !important; align-self: flex-start !important; transform: none !important; }
         .auth-night-login .auth-glass-card { width: 100% !important; max-width: 31rem !important; margin: 0 auto !important; padding: 1.5rem !important; transform: none !important; overflow: visible !important; }
         .auth-night-login .auth-glass-card > .mb-5 { margin-bottom: 1rem !important; }
