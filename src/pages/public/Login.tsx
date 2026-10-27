@@ -91,9 +91,9 @@ export const Login: React.FC = () => {
     <div className="auth-night-page auth-night-login min-h-screen bg-white text-slate-900">
       <style>{`
         .auth-night-login { min-height: 100vh; height: auto !important; background: #F8FAF9 !important; color: #1E293B !important; position: relative; overflow-x: hidden; overflow-y: visible !important; }
-        .auth-night-login .auth-night-layout { min-height: calc(100vh - 80px); padding: 2rem 1rem; background: #F8FAF9 !important; }
+        .auth-night-login .auth-night-layout { min-height: calc(100vh - 80px); height: auto !important; align-items: flex-start !important; padding: 2rem 1rem 3rem; background: #F8FAF9 !important; overflow: visible !important; }
         .auth-night-login .auth-night-main { width: 100%; max-width: 34.375rem !important; }
-        .auth-night-login .auth-glass-card { width: 100%; max-width: 34.375rem !important; padding: 2rem !important; border: 1px solid #E2E8F0 !important; border-radius: 20px !important; background: #fff !important; color: #1E293B !important; box-shadow: 0 12px 32px rgba(15,23,42,.06) !important; backdrop-filter: none !important; }
+        .auth-night-login .auth-glass-card { width: 100%; height: auto !important; max-height: none !important; overflow: visible !important; flex: 0 0 auto !important; max-width: 34.375rem !important; padding: 2rem !important; border: 1px solid #E2E8F0 !important; border-radius: 20px !important; background: #fff !important; color: #1E293B !important; box-shadow: 0 12px 32px rgba(15,23,42,.06) !important; backdrop-filter: none !important; }
         .auth-night-login .auth-form-panel { background: #fff !important; border-color: #fff !important; }
         .auth-night-login .auth-night-input { height: 50px; color: #1E293B !important; background: #fff !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; box-shadow: 0 1px 3px rgba(15,23,42,.06); }
         .auth-night-login .auth-night-input::placeholder { color: #94A3B8 !important; }
@@ -102,6 +102,8 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-night-primary:hover { background: #15803D !important; }
         .auth-night-login .auth-glass-card a { color: #16A34A; }
         .auth-night-login .auth-night-layout { position: relative; z-index: 1; }
+        .auth-night-login .auth-night-main, .auth-night-login .auth-glass-card form { min-height: 0 !important; height: auto !important; max-height: none !important; overflow: visible !important; }
+        html:has(.auth-night-login), body:has(.auth-night-login), #root:has(.auth-night-login) { height: auto !important; min-height: 100% !important; overflow-y: auto !important; }
         .auth-night-login .auth-glass-card { position: relative; z-index: 1; }
         .auth-night-login:before, .auth-night-login:after { content: ""; position: fixed; bottom: -28px; width: 150px; height: 170px; pointer-events: none; z-index: 0; opacity: .24; background: radial-gradient(ellipse at 30% 20%, #36a66c 0 18%, transparent 19%), radial-gradient(ellipse at 68% 43%, #36a66c 0 17%, transparent 18%), radial-gradient(ellipse at 35% 65%, #36a66c 0 17%, transparent 18%), radial-gradient(ellipse at 78% 83%, #36a66c 0 14%, transparent 15%); }
         .auth-night-login:before { left: -18px; transform: rotate(-24deg); }
