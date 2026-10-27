@@ -88,10 +88,10 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="auth-night-page auth-night-login min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-white text-slate-900">
       <style>{`
-        .auth-night-login { min-height: 100vh; background: #f8fafc !important; color: #0f172a !important; }
-        .auth-night-login .auth-night-layout { display: flex; min-height: 100vh; justify-content: center; align-items: center; padding: 2rem 1rem; background: #f8fafc !important; }
+        .auth-night-login { min-height: 100vh; background: #ffffff !important; color: #0f172a !important; }
+        .auth-night-login .auth-night-layout { display: flex; min-height: calc(100vh - 80px); justify-content: center; align-items: center; padding: 2rem 1rem; background: #ffffff !important; }
         .auth-night-login .auth-night-main { width: 100%; max-width: 30rem; display: flex; align-items: center; justify-content: center; padding: 0 !important; background: transparent !important; }
         .auth-night-login .auth-glass-card { width: 100%; max-width: 30rem; padding: 2rem; border: 1px solid #e2e8f0 !important; border-radius: 1.5rem; background: #ffffff !important; color: #0f172a !important; box-shadow: 0 20px 50px rgba(15, 23, 42, .08) !important; backdrop-filter: none !important; }
         .auth-night-login .auth-form-panel { background: #ffffff !important; border-color: #e2e8f0 !important; }
@@ -104,7 +104,7 @@ export const Login: React.FC = () => {
         @keyframes loginFieldGlow { 0%,100% { opacity:.25; } 50% { opacity:.55; } }
         @media (prefers-reduced-motion: reduce) { .login-agro-motion, .login-agro-motion * { animation: none !important; transition: none !important; } }
       `}</style>
-      <div className="auth-night-layout">
+      <div className="auth-night-layout mx-auto flex min-h-screen items-center justify-center bg-white px-4 py-8">
         <aside className="auth-night-old-aside hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.24),transparent_34%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
           <div className="relative z-10">
@@ -136,17 +136,17 @@ export const Login: React.FC = () => {
           <div className="relative z-10 flex items-center gap-3 text-xs text-emerald-50/75"><ShieldCheck className="h-4 w-4 text-lime-300" /><span>One connected platform for a better food supply chain.</span></div>
         </aside>
 
-        <main className="auth-night-main">
-          <div className="auth-glass-card auth-glass-card--login">
-            <div className="mb-8 flex items-center justify-between gap-3 lg:mb-10">
+        <main className="auth-night-main w-full max-w-lg">
+          <div className="auth-glass-card auth-glass-card--login w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8">
+            <div className="mb-6 flex items-center justify-center gap-3">
               <Link to="/" className="inline-flex items-center gap-2 lg:hidden"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-800 text-white"><Sprout className="h-6 w-6" /></span><span className="text-lg font-black text-emerald-950">AgroChain</span></Link>
               <span className="hidden lg:block text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">Welcome back</span>
               {location.pathname === '/login' && <Link to="/register" className="ml-auto inline-flex items-center gap-1 rounded-full border border-emerald-200 px-4 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-50">Create account <ArrowRight className="h-3.5 w-3.5" /></Link>}
             </div>
-            <div className="mb-7">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100"><Lock className="h-6 w-6" /></div>
-              <h2 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Sign in to your portal</h2>
-              <p className="mt-3 text-sm leading-6 text-slate-500">Choose your role, then enter your details.</p>
+            <div className="mb-7 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-md"><Sprout className="h-7 w-7" /></div>
+              <h2 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Welcome Back</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-500">Sign in to continue to your account.</p>
             </div>
 
             <div className="auth-form-panel">
@@ -178,7 +178,7 @@ export const Login: React.FC = () => {
                   </div>
                 </div>
                 {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-                <button type="submit" disabled={loading} className="auth-night-primary flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition-all hover:-translate-y-0.5 hover:bg-emerald-900 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60">
+                <button type="submit" disabled={loading} className="auth-night-primary flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 py-3.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60">
                   <span>{loading ? 'Authenticating...' : 'Sign In'}</span><ArrowRight className="h-4 w-4" />
                 </button>
               </form>
