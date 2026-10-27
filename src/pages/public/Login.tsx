@@ -234,17 +234,13 @@ export const Login: React.FC = () => {
         .auth-night-login:after { right: -18px !important; transform: scaleX(-1) rotate(-24deg) !important; }
         @media (max-width: 640px) { .auth-night-login .auth-glass-card { padding: 1rem !important; } .auth-night-login .auth-night-layout { padding: 1rem .75rem 2rem !important; } .auth-night-login .auth-role-button { gap: 4px !important; font-size: 11px !important; padding: 0 4px !important; } }
 
-                /* Match Register page's responsive outer spacing: 40px desktop, 20px mobile */
+                /* One document-level scrollbar for the login page; no nested scroll containers */
+        html:has(.auth-night-login), body:has(.auth-night-login), #root:has(.auth-night-login) { height: auto !important; min-height: 100% !important; overflow-y: visible !important; overflow-x: hidden !important; }
+        .auth-night-login { min-height: 100vh !important; height: auto !important; overflow: visible !important; }
         .auth-night-login .auth-night-layout { box-sizing: border-box !important; min-height: calc(100vh - 80px) !important; height: auto !important; display: flex !important; align-items: flex-start !important; justify-content: center !important; padding: 40px 1rem 3rem !important; margin-top: 0 !important; overflow: visible !important; }
-        .auth-night-login .auth-night-main { width: 100% !important; max-width: 31rem !important; margin: 0 auto !important; align-self: flex-start !important; transform: none !important; position: relative !important; top: auto !important; }
-        .auth-night-login .auth-glass-card { width: 100% !important; max-width: 31rem !important; margin: 0 auto !important; padding: 1.5rem !important; transform: none !important; overflow: visible !important; }
-        /* Ensure the login card border is always visible */
-        .auth-night-login .auth-glass-card {
-          border: 1.5px solid #D7E1EC !important;
-          border-radius: 20px !important;
-          background: #FFFFFF !important;
-          box-shadow: 0 8px 24px rgba(15,23,42,.05) !important;
-        }
+        .auth-night-login .auth-night-main { width: 100% !important; max-width: 31rem !important; margin: 0 auto !important; align-self: flex-start !important; transform: none !important; position: relative !important; top: auto !important; height: auto !important; max-height: none !important; overflow: visible !important; }
+        .auth-night-login .auth-glass-card, .auth-night-login .auth-glass-card form { height: auto !important; max-height: none !important; overflow: visible !important; }
+        .auth-night-login .auth-glass-card { width: 100% !important; max-width: 31rem !important; margin: 0 auto !important; padding: 1.5rem !important; transform: none !important; border: 1.5px solid #D7E1EC !important; border-radius: 20px !important; background: #FFFFFF !important; box-shadow: 0 8px 24px rgba(15,23,42,.05) !important; }
         .auth-night-login .auth-glass-card > .mb-5 { margin-bottom: 1rem !important; }
         .auth-night-login .auth-glass-card > .mb-6 { margin-bottom: 1rem !important; }
         .auth-night-login .auth-glass-card h2 { font-size: 2rem !important; }
