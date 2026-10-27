@@ -98,7 +98,20 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-form-panel { background: #fff !important; border-color: #fff !important; }
         .auth-night-login .auth-night-input { height: 50px; color: #1E293B !important; background: #fff !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; box-shadow: 0 1px 3px rgba(15,23,42,.06); }
         .auth-night-login .auth-night-input::placeholder { color: #94A3B8 !important; }
-        .auth-night-login .auth-night-input { padding-left: 44px !important; }\n        .auth-night-login .auth-glass-card .relative > svg.absolute { color: #64748B !important; }
+        .auth-night-login .auth-night-input { padding-left: 44px !important; }
+        /* Keep input borders clearly visible even before focus */
+        .auth-night-login input.auth-night-input,
+        .auth-night-login input.auth-night-input:not(:focus) {
+          border: 1.5px solid #CBD5E1 !important;
+          background: #FFFFFF !important;
+          box-shadow: 0 0 0 1px rgba(203,213,225,.18) !important;
+        }
+        .auth-night-login input.auth-night-input:focus {
+          border: 1.5px solid #16A34A !important;
+          background: #FFFFFF !important;
+          box-shadow: 0 0 0 3px rgba(22,163,74,.14) !important;
+          outline: none !important;
+        }\n        .auth-night-login .auth-glass-card .relative > svg.absolute { color: #64748B !important; }
         .auth-night-login .auth-night-input:focus { border-color: #16A34A !important; box-shadow: 0 0 0 3px rgba(22,163,74,.14) !important; outline: none !important; }
         .auth-night-login .auth-night-input ~ button { color: #64748B !important; }
         .auth-night-login .auth-night-primary { width: 100% !important; height: 50px !important; min-height: 50px !important; padding-top: 0 !important; padding-bottom: 0 !important; border-radius: 9999px !important; background: #008F5A !important; color: #fff !important; font-weight: 700 !important; opacity: 1 !important; }
