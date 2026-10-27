@@ -1,5 +1,4 @@
 import React, { useCallback, useState } from 'react';
-import { SproutNightBackground } from '../../components/common/SproutNightBackground';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../../components/common/Logo';
@@ -114,15 +113,15 @@ export const Register: React.FC = () => {
   };
 
   return (
-    <div className="auth-night-page auth-night-register">\n      <SproutNightBackground />
+    <div className="min-h-screen bg-slate-50 px-3 py-5 sm:px-6 lg:px-8 lg:py-10">
       <style>{`
         @keyframes cropSway { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
         @keyframes farmerWork { 0%,100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(3deg) translateY(3px); } }
         @keyframes sunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
         @media (prefers-reduced-motion: reduce) { .agro-motion, .agro-motion * { animation: none !important; transition: none !important; } }
       `}</style>
-      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl items-stretch overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-white shadow-[0_24px_80px_-28px_rgba(20,60,35,0.25)] lg:grid-cols-[0.92fr_1.08fr]">
-        <aside className="relative hidden min-h-[760px] overflow-hidden bg-[#123d2b] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
+      <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-4xl grid-cols-1 items-start overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
+        <aside className="hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.22),transparent_35%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
           <div className="relative z-10">
             <div className="flex items-center gap-3">
@@ -153,19 +152,19 @@ export const Register: React.FC = () => {
             <div><p className="text-lg font-extrabold text-lime-200">Partners</p><p className="mt-1 text-[10px] text-white/60">Move goods smarter</p></div>
           </div>
         </aside>
-        <main className="auth-night-main">
-          <div className="auth-glass-card auth-glass-card--register">
+        <main className="flex w-full min-w-0 flex-col justify-center px-4 py-7 sm:px-8 sm:py-10 lg:px-12 xl:px-16">
+          <div className="mx-auto w-full max-w-2xl space-y-6">
         <div className="text-center">
           <div className="flex justify-center mb-3">
             <Logo size="lg" />
           </div>
           <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-800"><Sprout className="h-3.5 w-3.5" /> Your journey starts here</div>
-          <h2 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Create your account</h2>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Join Bangladesh’s connected agricultural community.</p>
+          <h2 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Create your account<span className="text-emerald-700">.</span></h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Join Bangladesh’s agricultural community and bring your role in the harvest-to-home journey to life.</p>
         </div>
 
         {/* Role Selector Tabs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-2xl border border-slate-200/80 bg-slate-50 p-2">
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 sm:grid-cols-4">
           <button
             type="button"
             onClick={() => setSelectedRole('farmer')}
@@ -207,14 +206,8 @@ export const Register: React.FC = () => {
 
           <button type="button" onClick={() => setSelectedRole('warehouse')} className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${selectedRole === 'warehouse' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}><Truck className="w-4 h-4" /><span>Warehouse</span></button>
         </div>
-        {!submittedMessage && (selectedRole === 'farmer' || selectedRole === 'buyer') && (
-          <div className="auth-google-panel mb-5 rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="mb-3 text-center text-xs text-slate-500">{language === 'bn' ? 'অথবা Google দিয়ে সাইন আপ করুন' : 'Or sign up with Google'}</p>
-            <GoogleSignInButton mode="signup" language={language === 'bn' ? 'bn' : 'en'} disabled={isSubmitting} onCredential={handleGoogleCredential} onError={handleGoogleError} />
-          </div>
-        )}
         {/* Form Card */}
-        <div className="auth-form-panel">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-7">
           {submittedMessage ? (
             <div className="space-y-4 text-center py-4">
               <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center mx-auto">
@@ -253,7 +246,7 @@ export const Register: React.FC = () => {
                     placeholder="e.g. Md. Tariqul Islam"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10"
                   />
                 </div>
 
@@ -265,7 +258,7 @@ export const Register: React.FC = () => {
                     placeholder="+880 17XX-XXXXXX"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="auth-night-input w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
                   />
                 </div>
               </div>
@@ -279,7 +272,7 @@ export const Register: React.FC = () => {
                     placeholder="name@domain.com"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="auth-night-input w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
                   />
                 </div>
 
@@ -438,6 +431,18 @@ export const Register: React.FC = () => {
           )}
         </div>
 
+        {!submittedMessage && (selectedRole === 'farmer' || selectedRole === 'buyer') && (
+          <div className="mx-auto mt-5 w-full max-w-2xl rounded-2xl border border-slate-200 bg-white px-5 py-5 sm:px-7">
+            <div className="mx-auto mb-4 flex w-full max-w-md items-center gap-3">
+              <span className="h-px flex-1 bg-slate-200" />
+              <p className="shrink-0 text-center text-xs text-slate-500">{language === 'bn' ? 'অথবা Google দিয়ে সাইন আপ করুন' : 'Or sign up with Google'}</p>
+              <span className="h-px flex-1 bg-slate-200" />
+            </div>
+            <div className="mx-auto w-full max-w-md">
+              <GoogleSignInButton mode="signup" language={language === 'bn' ? 'bn' : 'en'} disabled={isSubmitting} onCredential={handleGoogleCredential} onError={handleGoogleError} />
+            </div>
+          </div>
+        )}
         <div className="text-center text-xs text-slate-500">
           Already registered?{' '}
           <Link to="/login" className="text-emerald-700 font-bold hover:underline">
