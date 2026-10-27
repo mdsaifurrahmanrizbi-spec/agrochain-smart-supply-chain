@@ -16,6 +16,7 @@ declare global {
 
 type Props = {
   mode: 'signin' | 'signup';
+  buttonText?: 'signin_with' | 'continue_with';
   language: 'en' | 'bn';
   disabled?: boolean;
   onCredential: (credential: string) => Promise<void>;
@@ -27,7 +28,7 @@ const messages = {
   bn: { loading: 'Google চালু হচ্ছে…', unavailable: 'Google sign-in সেটআপ করা নেই। ইমেইল ও পাসওয়ার্ড ব্যবহার করুন।', network: 'Google sign-in সংযোগ করা যায়নি। ইন্টারনেট পরীক্ষা করে আবার চেষ্টা করুন।', cancelled: 'Google sign-in বাতিল হয়েছে। আবার চেষ্টা করুন।' },
 };
 
-export const GoogleSignInButton: React.FC<Props> = ({ mode, language, disabled = false, onCredential, onError }) => {
+export const GoogleSignInButton: React.FC<Props> = ({ mode, buttonText, language, disabled = false, onCredential, onError }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const credentialHandlerRef = useRef(onCredential);
   const errorHandlerRef = useRef(onError);
@@ -75,7 +76,7 @@ export const GoogleSignInButton: React.FC<Props> = ({ mode, language, disabled =
         type: 'standard',
         theme: 'outline',
         size: 'large',
-        text: mode === 'signup' ? 'signup_with' : 'continue_with',
+        text: mode === 'signup' ? 'signup_with' : (buttonText || 'continue_with'),
         shape: 'rect',
         logo_alignment: 'left',
         width: Math.max(240, Math.floor(target.getBoundingClientRect().width || 320)),
