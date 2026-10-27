@@ -107,13 +107,13 @@ export const Login: React.FC = () => {
         .auth-night-login:before { left: -18px; transform: rotate(-24deg); }
         .auth-night-login:after { right: -18px; transform: scaleX(-1) rotate(-24deg); }
         .auth-night-login .auth-night-layout, .auth-night-login .auth-night-main { position: relative; z-index: 1; }
-        .auth-night-login .auth-night-layout { display: flex; min-height: calc(100vh - 80px); height: auto !important; justify-content: center; align-items: flex-start !important; padding: 2rem 1rem 3rem; background: #F8FAF9 !important; overflow: visible !important; }
-        .auth-night-login .auth-night-main { width: 100%; max-width: 34.375rem !important; display: flex; align-items: flex-start !important; justify-content: center; padding: 0 !important; background: transparent !important; min-height: 0 !important; overflow: visible !important; }
-        .auth-night-login .auth-glass-card { width: 100%; max-width: 34.375rem !important; height: auto !important; max-height: none !important; overflow: visible !important; flex: 0 0 auto !important; padding: 2rem; border: 1px solid #e2e8f0 !important; border-radius: 1.25rem; background: #ffffff !important; color: #1E293B !important; box-shadow: 0 12px 32px rgba(15, 23, 42, .06) !important; backdrop-filter: none !important; }
+        .auth-night-login .auth-night-layout { display: flex; min-height: calc(100vh - 80px); height: auto !important; justify-content: center; align-items: flex-start !important; padding: 2rem 1rem 3rem; background: #ffffff !important; overflow: visible !important; }
+        .auth-night-login .auth-night-main { width: 100%; max-width: 30rem; display: flex; align-items: flex-start !important; justify-content: center; padding: 0 !important; background: transparent !important; min-height: 0 !important; overflow: visible !important; }
+        .auth-night-login .auth-glass-card { width: 100%; max-width: 30rem; height: auto !important; max-height: none !important; overflow: visible !important; flex: 0 0 auto !important; padding: 2rem; border: 1px solid #e2e8f0 !important; border-radius: 1.5rem; background: #ffffff !important; color: #0f172a !important; box-shadow: 0 20px 50px rgba(15, 23, 42, .08) !important; backdrop-filter: none !important; }
         .auth-night-login .auth-form-panel { background: #ffffff !important; border-color: #e2e8f0 !important; }
-        .auth-night-login .auth-night-input { color: #0f172a !important; background: #f8fafc !important; border-color: #cbd5e1 !important; }
+        .auth-night-login .auth-night-input { color: #1E293B !important; background: #ffffff !important; border: 1px solid #E2E8F0 !important; }
         .auth-night-login .auth-night-input::placeholder { color: #94a3b8 !important; }
-        .auth-night-login .auth-night-primary { background: #047857 !important; color: #ffffff !important; }
+        .auth-night-login .auth-night-primary { background: #16A34A !important; color: #ffffff !important; }
         
         .auth-night-login .auth-glass-card, .auth-night-login .auth-glass-card * { opacity: 1 !important; animation: none !important; }
         .auth-night-login .auth-glass-card form { overflow: visible !important; }
