@@ -88,7 +88,7 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white text-slate-900">
+    <div className="auth-night-page auth-night-login min-h-screen bg-white text-slate-900">
       <style>{`
         .auth-night-login { min-height: 100vh; background: #ffffff !important; color: #0f172a !important; }
         .auth-night-login .auth-night-layout { display: flex; min-height: calc(100vh - 80px); justify-content: center; align-items: center; padding: 2rem 1rem; background: #ffffff !important; }
@@ -104,7 +104,7 @@ export const Login: React.FC = () => {
         @keyframes loginFieldGlow { 0%,100% { opacity:.25; } 50% { opacity:.55; } }
         @media (prefers-reduced-motion: reduce) { .login-agro-motion, .login-agro-motion * { animation: none !important; transition: none !important; } }
       `}</style>
-      <div className="mx-auto flex min-h-screen items-center justify-center bg-white px-4 py-8" style={{ backgroundColor: "#ffffff", minHeight: "100vh" }}>
+      <div className="auth-night-layout mx-auto flex min-h-screen items-center justify-center bg-white px-4 py-8" style={{ backgroundColor: "#ffffff", minHeight: "calc(100vh - 80px)" }}>
         <aside className="auth-night-old-aside hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.24),transparent_34%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
           <div className="relative z-10">
@@ -136,12 +136,12 @@ export const Login: React.FC = () => {
           <div className="relative z-10 flex items-center gap-3 text-xs text-emerald-50/75"><ShieldCheck className="h-4 w-4 text-lime-300" /><span>One connected platform for a better food supply chain.</span></div>
         </aside>
 
-        <main className="w-full max-w-lg" style={{ width: "100%", maxWidth: "34rem", background: "transparent" }}>
-          <div className="w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8" style={{ backgroundColor: "#ffffff", color: "#0f172a", border: "1px solid #e2e8f0", borderRadius: "1.5rem", boxShadow: "0 16px 40px rgba(15,23,42,0.08)" }}>
+        <main className="auth-night-main w-full max-w-lg" style={{ width: "100%", maxWidth: "34rem", background: "transparent" }}>
+          <div className="auth-glass-card auth-glass-card--login w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8" style={{ backgroundColor: "#ffffff", color: "#0f172a", border: "1px solid #e2e8f0", borderRadius: "1.5rem", boxShadow: "0 16px 40px rgba(15,23,42,0.08)" }}>
             <div className="mb-6 flex items-center justify-center gap-3">
               <Link to="/" className="inline-flex items-center gap-2 lg:hidden"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-800 text-white"><Sprout className="h-6 w-6" /></span><span className="text-lg font-black text-emerald-950">AgroChain</span></Link>
               <span className="hidden lg:block text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">Welcome back</span>
-              {location.pathname === '/login' && <Link to="/register" className="ml-auto inline-flex items-center gap-1 rounded-full border border-emerald-200 px-4 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-50">Create account <ArrowRight className="h-3.5 w-3.5" /></Link>}
+              
             </div>
             <div className="mb-7 text-center">
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-md"><Sprout className="h-7 w-7" /></div>
@@ -160,9 +160,15 @@ export const Login: React.FC = () => {
                 </div>
                 <div>
                   <label htmlFor="agro-login-role" className="mb-2 block text-sm font-semibold text-slate-700">Sign in as</label>
-                  <select id="agro-login-role" required value={selectedRole} onChange={(e) => setSelectedRole(e.target.value as UserRole)} className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10">
-                    {availableRoles.map((role) => <option key={role} value={role}>{{ admin: 'Admin', farmer: 'Farmer / Seller', buyer: 'Customer / Buyer', delivery: 'Delivery Partner', warehouse: 'Warehouse Staff', inspector: 'Quality Inspector' }[role]}</option>)}
-                  </select>
+                  {location.pathname === '/login' && availableRoles.includes('farmer') && availableRoles.includes('buyer') ? (
+                    <div className="grid grid-cols-2 gap-2" role="group" aria-label="Choose role">
+                      {(['farmer', 'buyer'] as UserRole[]).map((role) => <button key={role} type="button" onClick={() => setSelectedRole(role)} aria-pressed={selectedRole === role} className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${selectedRole === role ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'}`}>{role === 'farmer' ? '♧  Farmer' : '♙  Buyer'}</button>)}
+                    </div>
+                  ) : (
+                    <select id="agro-login-role" required value={selectedRole} onChange={(e) => setSelectedRole(e.target.value as UserRole)} className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10">
+                      {availableRoles.map((role) => <option key={role} value={role}>{{ admin: 'Admin', farmer: 'Farmer / Seller', buyer: 'Customer / Buyer', delivery: 'Delivery Partner', warehouse: 'Warehouse Staff', inspector: 'Quality Inspector' }[role]}</option>)}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-2">
