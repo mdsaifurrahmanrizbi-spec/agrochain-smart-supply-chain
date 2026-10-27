@@ -6,27 +6,27 @@ import { MapPin, Phone, Mail, ShieldCheck, ExternalLink } from 'lucide-react';
 export const Footer: React.FC = () => {
   return (
     <footer className="bg-slate-900 text-slate-400 border-t border-slate-800 text-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-10">
+      <div className="mx-auto w-full max-w-7xl box-border px-4 sm:px-6 lg:px-8 py-12">
+        <div className="grid grid-cols-1 gap-8 mb-10 md:grid-cols-2 xl:grid-cols-4">
           {/* Col 1 */}
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4 break-words">
             <Logo variant="light" size="md" />
-            <p className="text-xs text-slate-400 leading-relaxed">
+            <p className="text-xs text-slate-400 leading-relaxed break-words">
               Smart Agricultural Supply Chain & Traceability Platform empowering Bangladeshi farmers,
               ensuring food safety, transparent pricing, and managed cold-chain logistics from field to consumer.
             </p>
-            <div className="flex items-center gap-2 text-xs text-emerald-400">
+            <div className="flex min-w-0 items-start gap-2 text-xs text-emerald-400">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Independent Pickup & Delivery Network</span>
+              <span className="min-w-0 break-words">Independent Pickup & Delivery Network</span>
             </div>
           </div>
 
           {/* Col 2 */}
           <div>
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-3">Supply Chain</h4>
-            <ul className="space-y-2 text-xs">
+            <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-white">Supply Chain</h4>
+            <ul className="min-w-0 space-y-2 text-xs break-words">
               <li>
-                <Link to="/products" className="hover:text-white transition-colors">
+                <Link to="/products" className="break-words [overflow-wrap:anywhere] hover:text-white transition-colors">
                   Agricultural Marketplace
                 </Link>
               </li>
@@ -83,28 +83,28 @@ export const Footer: React.FC = () => {
           {/* Col 4 */}
           <div>
             <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-3">Headquarters</h4>
-            <div className="space-y-2.5 text-xs">
-              <div className="flex items-start gap-2">
+            <div className="min-w-0 space-y-2.5 text-xs break-words">
+              <div className="flex min-w-0 items-start gap-2">
                 <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <span>Khamarbari, Farmgate, Tejgaon, Dhaka-1215, Bangladesh</span>
+                <span className="min-w-0 break-words [overflow-wrap:anywhere]">Khamarbari, Farmgate, Tejgaon, Dhaka-1215, Bangladesh</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 items-start gap-2">
                 <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span className="font-mono">+880 2-9112345 / +880 1700-000000</span>
+                <span className="min-w-0 break-words [overflow-wrap:anywhere] font-mono">+880 2-9112345 / +880 1700-000000</span>
               </div>
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>support@agrochain.gov.bd</span>
+                <span className="min-w-0 break-words [overflow-wrap:anywhere]">support@agrochain.gov.bd</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="pt-8 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+        <div className="flex flex-col items-start justify-between gap-4 border-t border-slate-800 pt-8 text-xs text-slate-500 sm:flex-row sm:items-start">
           <div>
-            © 2026 AgroChain. University Final-Year Capstone Project · Ready for Django & PostgreSQL backend.
+            <span className="min-w-0 break-words [overflow-wrap:anywhere]">© 2026 AgroChain. University Final-Year Capstone Project · Ready for Django & PostgreSQL backend.</span>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex min-w-0 flex-col items-start gap-2 sm:gap-3">
             <span>Prices displayed in Bangladeshi Taka (৳)</span>
             <span>All 6 user panels operational</span>
           </div>
