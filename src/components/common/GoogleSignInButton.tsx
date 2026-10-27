@@ -112,7 +112,19 @@ export const GoogleSignInButton: React.FC<Props> = ({ mode, buttonText, language
   return (
     <div className="flex w-full justify-center">
       {loading && <div className="mb-2 text-center text-xs text-slate-500" role="status">{messages[language].loading}</div>}
-      <div ref={containerRef} className={disabled ? 'pointer-events-none w-full max-w-[320px] opacity-60' : 'w-full max-w-[320px]'} aria-label={mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'} />
+      <div className={disabled ? 'pointer-events-none relative w-full max-w-[320px] opacity-60' : 'relative w-full max-w-[320px]'}>
+        <div ref={containerRef} className="w-full" aria-label={mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'} />
+        {!loading && (
+          <span className="pointer-events-none absolute left-0 top-0 z-10 flex h-10 w-[38px] items-center justify-center rounded-l-[4px] border border-[#1a73e8] bg-white" aria-hidden="true">
+            <svg viewBox="0 0 48 48" className="h-5 w-5" xmlns="http://www.w3.org/2000/svg">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 3.56 13.22l7.98 6.19C13.43 13.72 18.27 9.5 24 9.5z" transform="translate(0 4) scale(.92)"/>
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.76 7.18l7.73 6C44.42 37.95 46.98 31.8 46.98 24.55z"/>
+              <path fill="#FBBC05" d="M10.53 28.59a14.4 14.4 0 0 1 0-9.18l-7.98-6.19a23.9 23.9 0 0 0 0 21.56l7.98-6.19z" transform="translate(0 4) scale(.92)"/>
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.8l-7.73-6c-2.15 1.45-4.9 2.3-8.18 2.3-5.73 0-10.57-4.22-12.46-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" transform="translate(0 -2) scale(.92)"/>
+            </svg>
+          </span>
+        )}
+      </div>
     </div>
   );
 };
