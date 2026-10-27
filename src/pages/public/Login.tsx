@@ -246,7 +246,7 @@ export const Login: React.FC = () => {
               {(location.pathname === '/login' && (selectedRole === 'farmer' || selectedRole === 'buyer')) && (
                 <div className="auth-google-panel mt-5 border-t border-slate-100 pt-5" onPointerDown={() => setGoogleAttempted(true)}>
                   <p className="mb-3 text-center text-xs text-slate-500">{language === 'bn' ? 'অথবা Google দিয়ে চালিয়ে যান' : 'Or continue with Google'}</p>
-                  <GoogleSignInButton mode="signin" language={language === 'bn' ? 'bn' : 'en'} disabled={loading} onCredential={handleGoogleCredential} onError={handleGoogleError} />
+                  <GoogleSignInButton mode="signin" buttonText="signin_with" language={language === 'bn' ? 'bn' : 'en'} disabled={loading} onCredential={handleGoogleCredential} onError={handleGoogleError} />
                 </div>
               )}
 
