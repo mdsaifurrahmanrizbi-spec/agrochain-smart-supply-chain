@@ -148,19 +148,30 @@ export const Login: React.FC = () => {
         @keyframes loginCropSway { 0%,100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-4px); } }
         @keyframes loginSunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
         @keyframes loginFieldGlow { 0%,100% { opacity:.25; } 50% { opacity:.55; } }
+        .auth-night-login .auth-night-input { padding-left: 44px !important; }
+        .auth-night-login .auth-night-input:focus { border-color: #16A34A !important; box-shadow: 0 0 0 3px rgba(22,163,74,.14) !important; outline: none !important; }
+        .auth-night-login .auth-night-input ~ button { color: #64748B !important; }
+        .auth-night-login .auth-night-primary { width: 100% !important; height: 50px !important; min-height: 50px !important; padding-top: 0 !important; padding-bottom: 0 !important; border-radius: 9999px !important; background: #16A34A !important; color: #fff !important; font-weight: 700 !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-primary:hover { background: #15803D !important; }
+        .auth-night-login .auth-role-button { white-space: nowrap !important; font-size: 14px !important; padding-left: 8px !important; padding-right: 8px !important; }
+        .auth-night-login .auth-google-panel > p { color: #64748B !important; font-size: 12px !important; font-weight: 600 !important; }
+        .auth-night-login .auth-night-foot { background: transparent !important; border: 0 !important; padding: 0 !important; font-size: 14px !important; color: #64748B !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-foot p { color: #64748B !important; font-size: 14px !important; font-weight: 400 !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-foot a { color: #16A34A !important; font-weight: 700 !important; opacity: 1 !important; }
+        @media (max-width: 640px) { .auth-night-login .auth-role-button { font-size: 14px !important; gap: 4px !important; padding-left: 8px !important; padding-right: 8px !important; } }
         @media (prefers-reduced-motion: reduce) { .login-agro-motion, .login-agro-motion * { animation: none !important; transition: none !important; } }
       `}</style>
       <div className="auth-night-layout mx-auto flex items-center justify-center bg-white px-4 py-6 sm:px-6" style={{ backgroundColor: "#ffffff", minHeight: "calc(100vh - 80px)" }}>
         <aside className="auth-night-old-aside hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.24),transparent_34%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
           <div className="relative z-10">
-            <Link to="/" className="inline-flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-lime-300">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-lime-300 text-emerald-950 shadow-lg"><Leaf className="h-7 w-7" /></span>
-              <span><span className="block text-xl font-black tracking-tight">AgroChain</span><span className="block text-[10px] font-semibold uppercase tracking-[0.25em] text-lime-200">From soil to your door</span></span>
+            <Link to="/" className="inline-flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-300">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-300 text-emerald-950 shadow-lg"><Leaf className="h-7 w-7" /></span>
+              <span><span className="block text-xl font-black tracking-tight">AgroChain</span><span className="block text-[10px] font-semibold uppercase tracking-[0.25em] text-green-200">From soil to your door</span></span>
             </Link>
             <div className="mt-16 max-w-lg">
-              <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-semibold tracking-wide text-lime-100"><span className="h-2 w-2 rounded-full bg-lime-300" /> BANGLADESH'S AGRICULTURAL NETWORK</p>
-              <h1 className="text-4xl font-black leading-[1.12] tracking-tight xl:text-5xl">Fresh harvests. <span className="text-lime-300">Stronger connections.</span></h1>
+              <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-semibold tracking-wide text-green-100"><span className="h-2 w-2 rounded-full bg-green-300" /> BANGLADESH'S AGRICULTURAL NETWORK</p>
+              <h1 className="text-4xl font-black leading-[1.12] tracking-tight xl:text-5xl">Fresh harvests. <span className="text-green-300">Stronger connections.</span></h1>
               <p className="mt-5 max-w-md text-sm leading-7 text-emerald-50/80">Sign in to connect farmers, buyers and delivery partners in one trusted agricultural marketplace.</p>
             </div>
           </div>
@@ -179,7 +190,7 @@ export const Login: React.FC = () => {
               <p className="mt-0.5 text-[10px] text-emerald-50">Every harvest has a story.</p>
             </div>
           </div>
-          <div className="relative z-10 flex items-center gap-3 text-xs text-emerald-50/75"><ShieldCheck className="h-4 w-4 text-lime-300" /><span>One connected platform for a better food supply chain.</span></div>
+          <div className="relative z-10 flex items-center gap-3 text-xs text-emerald-50/75"><ShieldCheck className="h-4 w-4 text-green-300" /><span>One connected platform for a better food supply chain.</span></div>
         </aside>
 
         <main className="auth-night-main w-full max-w-lg" style={{ width: "100%", maxWidth: "34rem", background: "transparent" }}>
@@ -261,7 +272,7 @@ export const Login: React.FC = () => {
           <div className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-white/15 bg-white p-8 text-center shadow-2xl">
             <div className="absolute inset-x-0 top-0 h-1.5 overflow-hidden bg-emerald-100"><div className="h-full w-2/5 rounded-full bg-emerald-500 animate-[loading-bar_1.4s_ease-in-out_infinite]" /></div>
             <div className="relative mx-auto mb-6 flex h-28 w-28 items-center justify-center">
-              <div className="absolute inset-1 rounded-full border-2 border-dashed border-emerald-200 animate-[spin_12s_linear_infinite]" /><div className="absolute inset-3 rounded-full border-4 border-emerald-100 border-t-emerald-600 animate-spin" /><div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-900/20 animate-pulse"><Sprout className="h-9 w-9" /></div><Leaf className="absolute right-0 top-3 h-6 w-6 text-lime-500 animate-bounce" /><Leaf className="absolute bottom-2 left-0 h-5 w-5 rotate-[-35deg] text-emerald-500 animate-pulse" />
+              <div className="absolute inset-1 rounded-full border-2 border-dashed border-emerald-200 animate-[spin_12s_linear_infinite]" /><div className="absolute inset-3 rounded-full border-4 border-emerald-100 border-t-emerald-600 animate-spin" /><div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-900/20 animate-pulse"><Sprout className="h-9 w-9" /></div><Leaf className="absolute right-0 top-3 h-6 w-6 text-green-500 animate-bounce" /><Leaf className="absolute bottom-2 left-0 h-5 w-5 rotate-[-35deg] text-emerald-500 animate-pulse" />
             </div>
             <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-emerald-700">AgroChain Secure Access</p><h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Welcome to AgroChain</h2><p className="mt-2 text-sm leading-6 text-slate-500">Securely connecting you to your agricultural network.</p>
             <div className="mt-6 flex items-center justify-center gap-2 text-sm font-semibold text-emerald-800"><ShieldCheck className="h-4 w-4" /><span>Verifying your credentials</span><span className="flex gap-1" aria-hidden="true"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-emerald-600 [animation-delay:0ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-emerald-600 [animation-delay:150ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-emerald-600 [animation-delay:300ms]" /></span></div>
