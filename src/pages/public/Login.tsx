@@ -24,6 +24,7 @@ export const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [googleAttempted, setGoogleAttempted] = useState(false);
 
   const demoAccounts: { role: UserRole; name: string; email: string; label: string; path: string }[] = [
     { role: 'admin', name: 'Dr. Harun-ur-Rashid', email: 'admin@agrochain.gov.bd', label: 'Admin (System)', path: '/admin/dashboard' },
@@ -97,6 +98,17 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-form-panel { background: #fff !important; border-color: #fff !important; }
         .auth-night-login .auth-night-input { height: 50px; color: #1E293B !important; background: #fff !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; box-shadow: 0 1px 3px rgba(15,23,42,.06); }
         .auth-night-login .auth-night-input::placeholder { color: #94A3B8 !important; }
+        .auth-night-login .auth-night-input { padding-left: 44px !important; }
+        .auth-night-login .auth-night-input:focus { border-color: #16A34A !important; box-shadow: 0 0 0 3px rgba(22,163,74,.14) !important; outline: none !important; }
+        .auth-night-login .auth-night-input ~ button { color: #64748B !important; }
+        .auth-night-login .auth-night-primary { width: 100% !important; height: 50px !important; min-height: 50px !important; padding-top: 0 !important; padding-bottom: 0 !important; border-radius: 9999px !important; background: #16A34A !important; color: #fff !important; font-weight: 700 !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-primary:hover { background: #15803D !important; }
+        .auth-night-login .auth-role-button { white-space: nowrap !important; font-size: 14px !important; padding-left: 8px !important; padding-right: 8px !important; }
+        .auth-night-login .auth-google-panel > p { color: #64748B !important; font-size: 12px !important; font-weight: 600 !important; }
+        .auth-night-login .auth-google-panel > div > div[aria-label] { width: 100% !important; }
+        .auth-night-login .auth-night-foot { background: transparent !important; border: 0 !important; padding: 0 !important; font-size: 14px !important; color: #64748B !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-foot p { color: #64748B !important; font-size: 14px !important; font-weight: 400 !important; opacity: 1 !important; }
+        .auth-night-login .auth-night-foot a { color: #16A34A !important; font-weight: 700 !important; opacity: 1 !important; }
         .auth-night-login label { color: #1E293B !important; }
         .auth-night-login .auth-night-primary { min-height: 50px; background: #16A34A !important; color: #fff !important; border-radius: 9999px !important; box-shadow: none !important; }
         .auth-night-login .auth-night-primary:hover { background: #15803D !important; }
@@ -214,14 +226,14 @@ export const Login: React.FC = () => {
                   </div>
                   <Link to={location.pathname.startsWith('/admin-portal') ? '/admin-portal/reset-password' : '/password-reset'} className="auth-forgot-link hover:underline">Forgot password?</Link>
                 </div>
-                {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+                {error && (!/Google sign-in is not configured|Google sign-in সেটআপ করা নেই/i.test(error) || googleAttempted) && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
                 <button type="submit" disabled={loading} className="auth-night-primary flex w-full items-center justify-center gap-2 rounded-full bg-green-600 py-3.5 text-sm font-bold text-white transition-all hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60">
                   <span>{loading ? 'Authenticating...' : 'Sign In'}</span><ArrowRight className="h-4 w-4" />
                 </button>
               </form>
 
               {(location.pathname === '/login' && (selectedRole === 'farmer' || selectedRole === 'buyer')) && (
-                <div className="auth-google-panel mt-5 border-t border-slate-100 pt-5">
+                <div className="auth-google-panel mt-5 border-t border-slate-100 pt-5" onPointerDown={() => setGoogleAttempted(true)}>
                   <p className="mb-3 text-center text-xs text-slate-500">{language === 'bn' ? 'অথবা Google দিয়ে চালিয়ে যান' : 'Or continue with Google'}</p>
                   <GoogleSignInButton mode="signin" language={language === 'bn' ? 'bn' : 'en'} disabled={loading} onCredential={handleGoogleCredential} onError={handleGoogleError} />
                 </div>
@@ -237,7 +249,7 @@ export const Login: React.FC = () => {
               )}
             </div>
 
-            {location.pathname === '/login' && <div className="auth-night-foot mt-5 rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 text-center text-xs text-slate-600"><p>New to AgroChain? <Link to="/register" className="font-bold text-emerald-800 hover:underline">Register here</Link></p></div>}
+            {location.pathname === '/login' && <div className="auth-night-foot mt-5 rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 text-center text-xs text-slate-600"><p>Don't have an account? <Link to="/register" className="font-bold text-emerald-800 hover:underline">Register</Link></p></div>}
             {location.pathname === '/login' && <div className="auth-night-staff mt-4 text-center text-xs leading-6 text-slate-500"><p className="font-semibold text-slate-600">Staff access</p><p className="mt-1"><Link to="/warehouse-portal/login" className="font-bold text-emerald-700 hover:underline">Warehouse / Inspector</Link><span className="mx-2 text-slate-300">·</span><Link to="/admin-portal/login" className="font-bold text-emerald-700 hover:underline">Admin Portal</Link></p></div>}
             <p className="mt-7 text-center text-[11px] leading-5 text-slate-400">Secure access to your AgroChain account.</p>
           </div>
