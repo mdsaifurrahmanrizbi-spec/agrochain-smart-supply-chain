@@ -432,13 +432,15 @@ export const Register: React.FC = () => {
         </div>
 
         {!submittedMessage && (selectedRole === 'farmer' || selectedRole === 'buyer') && (
-          <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="mb-4 flex items-center gap-3">
+          <div className="mx-auto mt-5 w-full max-w-2xl rounded-2xl border border-slate-200 bg-white px-5 py-5 sm:px-7">
+            <div className="mx-auto mb-4 flex w-full max-w-md items-center gap-3">
               <span className="h-px flex-1 bg-slate-200" />
-              <p className="text-center text-xs text-slate-500">{language === 'bn' ? 'অথবা Google দিয়ে সাইন আপ করুন' : 'Or sign up with Google'}</p>
+              <p className="shrink-0 text-center text-xs text-slate-500">{language === 'bn' ? 'অথবা Google দিয়ে সাইন আপ করুন' : 'Or sign up with Google'}</p>
               <span className="h-px flex-1 bg-slate-200" />
             </div>
-            <GoogleSignInButton mode="signup" language={language === 'bn' ? 'bn' : 'en'} disabled={isSubmitting} onCredential={handleGoogleCredential} onError={handleGoogleError} />
+            <div className="mx-auto w-full max-w-md">
+              <GoogleSignInButton mode="signup" language={language === 'bn' ? 'bn' : 'en'} disabled={isSubmitting} onCredential={handleGoogleCredential} onError={handleGoogleError} />
+            </div>
           </div>
         )}
         <div className="text-center text-xs text-slate-500">
