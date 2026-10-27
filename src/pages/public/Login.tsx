@@ -90,7 +90,19 @@ export const Login: React.FC = () => {
   return (
     <div className="auth-night-page auth-night-login min-h-screen bg-white text-slate-900">
       <style>{`
-        .auth-night-login { min-height: 100vh; background: #ffffff !important; color: #0f172a !important; position: relative; overflow-x: hidden; }
+        .auth-night-login { min-height: 100vh; background: #F8FAF9 !important; color: #1E293B !important; position: relative; overflow-x: hidden; }
+        .auth-night-login .auth-night-layout { min-height: calc(100vh - 80px); padding: 2rem 1rem; background: #F8FAF9 !important; }
+        .auth-night-login .auth-night-main { width: 100%; max-width: 34.375rem !important; }
+        .auth-night-login .auth-glass-card { width: 100%; max-width: 34.375rem !important; padding: 2rem !important; border: 1px solid #E2E8F0 !important; border-radius: 20px !important; background: #fff !important; color: #1E293B !important; box-shadow: 0 12px 32px rgba(15,23,42,.06) !important; backdrop-filter: none !important; }
+        .auth-night-login .auth-form-panel { background: #fff !important; border-color: #fff !important; }
+        .auth-night-login .auth-night-input { height: 50px; color: #1E293B !important; background: #fff !important; border: 1px solid #E2E8F0 !important; border-radius: 10px !important; box-shadow: 0 1px 3px rgba(15,23,42,.06); }
+        .auth-night-login .auth-night-input::placeholder { color: #94A3B8 !important; }
+        .auth-night-login label { color: #1E293B !important; }
+        .auth-night-login .auth-night-primary { min-height: 50px; background: #16A34A !important; color: #fff !important; border-radius: 9999px !important; box-shadow: none !important; }
+        .auth-night-login .auth-night-primary:hover { background: #15803D !important; }
+        .auth-night-login .auth-glass-card a { color: #16A34A; }
+        .auth-night-login .auth-night-layout { position: relative; z-index: 1; }
+        .auth-night-login .auth-glass-card { position: relative; z-index: 1; }
         .auth-night-login:before, .auth-night-login:after { content: ""; position: fixed; bottom: -28px; width: 150px; height: 170px; pointer-events: none; z-index: 0; opacity: .24; background: radial-gradient(ellipse at 30% 20%, #36a66c 0 18%, transparent 19%), radial-gradient(ellipse at 68% 43%, #36a66c 0 17%, transparent 18%), radial-gradient(ellipse at 35% 65%, #36a66c 0 17%, transparent 18%), radial-gradient(ellipse at 78% 83%, #36a66c 0 14%, transparent 15%); }
         .auth-night-login:before { left: -18px; transform: rotate(-24deg); }
         .auth-night-login:after { right: -18px; transform: scaleX(-1) rotate(-24deg); }
@@ -143,12 +155,12 @@ export const Login: React.FC = () => {
         <main className="auth-night-main w-full max-w-lg" style={{ width: "100%", maxWidth: "34rem", background: "transparent" }}>
           <div className="auth-glass-card auth-glass-card--login w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 sm:p-8" style={{ backgroundColor: "#ffffff", color: "#0f172a", border: "1px solid #e2e8f0", borderRadius: "1.5rem", boxShadow: "0 16px 40px rgba(15,23,42,0.08)", padding: "1.75rem" }}>
             <div className="mb-5 flex flex-col items-center justify-center gap-2 text-center">
-              <Link to="/" className="inline-flex items-center justify-center"><span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-700 text-white shadow-sm"><Sprout className="h-7 w-7" /></span></Link>
-              <Link to="/" className="text-2xl font-extrabold tracking-tight text-slate-900">Agro<span className="text-emerald-700">Chain</span></Link>
+              <Link to="/" className="inline-flex items-center justify-center"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-600 text-white shadow-sm"><Sprout className="h-7 w-7" /></span></Link>
+              <Link to="/" className="text-2xl font-extrabold tracking-tight text-slate-800">Agro<span className="text-emerald-700">Chain</span></Link>
             </div>
             <div className="mb-6 text-center">
               
-              <h2 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Welcome Back</h2>
+              <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 sm:text-4xl">Welcome Back</h2>
               <p className="mt-3 text-sm leading-6 text-slate-500">Sign in to continue to your account.</p>
             </div>
 
@@ -165,7 +177,7 @@ export const Login: React.FC = () => {
                   <label htmlFor="agro-login-role" className="mb-2 block text-sm font-semibold text-slate-900">Role</label>
                   {location.pathname === '/login' ? (
                     <div className="grid grid-cols-3 gap-2" role="group" aria-label="Choose role">
-                      {([{ role: 'buyer' as UserRole, label: 'Buyer', icon: '♙' }, { role: 'farmer' as UserRole, label: 'Seller', icon: '▤' }, { role: 'delivery' as UserRole, label: 'Delivery Partner', icon: '♧' }]).map(({ role, label, icon }) => <button key={role} type="button" onClick={() => setSelectedRole(role)} aria-pressed={selectedRole === role} className={`min-w-0 rounded-xl border px-2 py-3 text-xs font-semibold transition sm:text-sm ${selectedRole === role ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'}`}><span className="mb-1 block text-base" aria-hidden="true">{icon}</span>{label}</button>)}
+                      {([{ role: 'buyer' as UserRole, label: 'Buyer', icon: '♙' }, { role: 'farmer' as UserRole, label: 'Seller', icon: '▤' }, { role: 'delivery' as UserRole, label: 'Delivery Partner', icon: '♧' }]).map(({ role, label, icon }) => <button key={role} type="button" onClick={() => setSelectedRole(role)} aria-pressed={selectedRole === role} className={`min-w-0 rounded-xl border px-2 py-3 text-xs font-semibold transition sm:text-sm ${selectedRole === role ? 'border-green-600 bg-green-100 text-green-700 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:border-green-300'}`}><span className="mb-1 block text-base" aria-hidden="true">{icon}</span>{label}</button>)}
                     </div>
                   ) : (
                     <select id="agro-login-role" required value={selectedRole} onChange={(e) => setSelectedRole(e.target.value as UserRole)} className="auth-night-input w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10">
@@ -187,7 +199,7 @@ export const Login: React.FC = () => {
                   </div>
                 </div>
                 {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-                <button type="submit" disabled={loading} className="auth-night-primary flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 py-3.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60">
+                <button type="submit" disabled={loading} className="auth-night-primary flex w-full items-center justify-center gap-2 rounded-full bg-green-600 py-3.5 text-sm font-bold text-white transition-all hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60">
                   <span>{loading ? 'Authenticating...' : 'Sign In'}</span><ArrowRight className="h-4 w-4" />
                 </button>
               </form>
