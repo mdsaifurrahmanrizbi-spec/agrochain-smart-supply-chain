@@ -206,12 +206,6 @@ export const Register: React.FC = () => {
 
           <button type="button" onClick={() => setSelectedRole('warehouse')} className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${selectedRole === 'warehouse' ? 'bg-emerald-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}><Truck className="w-4 h-4" /><span>Warehouse</span></button>
         </div>
-        {!submittedMessage && (selectedRole === 'farmer' || selectedRole === 'buyer') && (
-          <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="mb-3 text-center text-xs text-slate-500">{language === 'bn' ? 'অথবা Google দিয়ে সাইন আপ করুন' : 'Or sign up with Google'}</p>
-            <GoogleSignInButton mode="signup" language={language === 'bn' ? 'bn' : 'en'} disabled={isSubmitting} onCredential={handleGoogleCredential} onError={handleGoogleError} />
-          </div>
-        )}
         {/* Form Card */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-7">
           {submittedMessage ? (
@@ -437,6 +431,16 @@ export const Register: React.FC = () => {
           )}
         </div>
 
+        {!submittedMessage && (selectedRole === 'farmer' || selectedRole === 'buyer') && (
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="mb-4 flex items-center gap-3">
+              <span className="h-px flex-1 bg-slate-200" />
+              <p className="text-center text-xs text-slate-500">{language === 'bn' ? 'অথবা Google দিয়ে সাইন আপ করুন' : 'Or sign up with Google'}</p>
+              <span className="h-px flex-1 bg-slate-200" />
+            </div>
+            <GoogleSignInButton mode="signup" language={language === 'bn' ? 'bn' : 'en'} disabled={isSubmitting} onCredential={handleGoogleCredential} onError={handleGoogleError} />
+          </div>
+        )}
         <div className="text-center text-xs text-slate-500">
           Already registered?{' '}
           <Link to="/login" className="text-emerald-700 font-bold hover:underline">
