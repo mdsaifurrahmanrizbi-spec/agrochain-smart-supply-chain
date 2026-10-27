@@ -220,6 +220,30 @@ export const Login: React.FC = () => {
         .auth-night-login:before { left: -18px !important; transform: rotate(-24deg) !important; }
         .auth-night-login:after { right: -18px !important; transform: scaleX(-1) rotate(-24deg) !important; }
         @media (max-width: 640px) { .auth-night-login .auth-glass-card { padding: 1rem !important; } .auth-night-login .auth-night-layout { padding: 1rem .75rem 2rem !important; } .auth-night-login .auth-role-button { gap: 4px !important; font-size: 11px !important; padding: 0 4px !important; } }
+
+        /* Keep the entire login card below the fixed site navigation and in the scroll flow */
+        .auth-night-login .auth-night-layout {
+          box-sizing: border-box !important;
+          min-height: calc(100vh - 80px) !important;
+          height: auto !important;
+          align-items: flex-start !important;
+          justify-content: center !important;
+          padding: 5rem 1rem 3rem !important;
+          overflow: visible !important;
+        }
+        .auth-night-login .auth-night-main {
+          margin: 0 auto !important;
+          align-self: flex-start !important;
+          transform: none !important;
+        }
+        .auth-night-login .auth-glass-card {
+          margin: 0 auto !important;
+          transform: none !important;
+          overflow: visible !important;
+        }
+        @media (max-width: 640px) {
+          .auth-night-login .auth-night-layout { padding: 2rem .75rem 2rem !important; }
+        }
       `}</style>
       <div className="auth-night-layout mx-auto flex items-center justify-center bg-white px-4 py-6 sm:px-6" style={{ backgroundColor: "#F8FAF9", minHeight: "calc(100vh - 80px)" }}>
         <aside className="auth-night-old-aside hidden">
