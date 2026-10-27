@@ -75,7 +75,7 @@ export const GoogleSignInButton: React.FC<Props> = ({ mode, buttonText, language
       const buttonWidth = Math.min(320, Math.floor(target.getBoundingClientRect().width || 320));
       window.google.accounts.id.renderButton(target, {
         type: 'standard',
-        theme: 'outline',
+        theme: 'filled_blue',
         size: 'large',
         text: mode === 'signup' ? 'signup_with' : (buttonText || 'continue_with'),
         shape: 'rect',
