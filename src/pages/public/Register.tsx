@@ -113,15 +113,15 @@ export const Register: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f7ef] px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+    <div className="min-h-screen bg-slate-50 px-3 py-5 sm:px-6 lg:px-8 lg:py-10">
       <style>{`
         @keyframes cropSway { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
         @keyframes farmerWork { 0%,100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(3deg) translateY(3px); } }
         @keyframes sunDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
         @media (prefers-reduced-motion: reduce) { .agro-motion, .agro-motion * { animation: none !important; transition: none !important; } }
       `}</style>
-      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl items-stretch overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-white shadow-[0_24px_80px_-28px_rgba(20,60,35,0.25)] lg:grid-cols-[0.92fr_1.08fr]">
-        <aside className="relative hidden min-h-[760px] overflow-hidden bg-[#123d2b] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
+      <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-4xl grid-cols-1 items-start overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
+        <aside className="hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.22),transparent_35%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
           <div className="relative z-10">
             <div className="flex items-center gap-3">
@@ -152,7 +152,7 @@ export const Register: React.FC = () => {
             <div><p className="text-lg font-extrabold text-lime-200">Partners</p><p className="mt-1 text-[10px] text-white/60">Move goods smarter</p></div>
           </div>
         </aside>
-        <main className="flex w-full min-w-0 flex-col justify-center px-4 py-7 sm:px-8 sm:py-10 lg:px-10 xl:px-14">
+        <main className="flex w-full min-w-0 flex-col justify-center px-4 py-7 sm:px-8 sm:py-10 lg:px-12 xl:px-16">
           <div className="mx-auto w-full max-w-2xl space-y-6">
         <div className="text-center">
           <div className="flex justify-center mb-3">
@@ -164,7 +164,7 @@ export const Register: React.FC = () => {
         </div>
 
         {/* Role Selector Tabs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-2xl border border-slate-200/80 bg-slate-50 p-2">
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 sm:grid-cols-4">
           <button
             type="button"
             onClick={() => setSelectedRole('farmer')}
@@ -213,7 +213,7 @@ export const Register: React.FC = () => {
           </div>
         )}
         {/* Form Card */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_12px_40px_-28px_rgba(15,50,30,0.35)] sm:p-8">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-7">
           {submittedMessage ? (
             <div className="space-y-4 text-center py-4">
               <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center mx-auto">
