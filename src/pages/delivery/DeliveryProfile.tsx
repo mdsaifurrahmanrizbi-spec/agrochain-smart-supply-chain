@@ -1,75 +1,40 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { store } from '../../services/api';
-import { Truck, ShieldCheck, MapPin, Phone, Mail } from 'lucide-react';
+import { agroApi } from '../../services/api';
+import type { DeliveryPartner } from '../../types';
+import { ShieldCheck, AlertTriangle } from 'lucide-react';
 
 export const DeliveryProfile: React.FC = () => {
   const { user } = useAuth();
-  const partner = store.deliveryPartners[0];
+  const [partner, setPartner] = useState<DeliveryPartner | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  return (
-    <div className="max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">Delivery Partner Fleet Profile</h1>
-        <p className="text-xs text-slate-500 mt-1">
-          Authorized fleet credentials, service area allocations, and vehicle registration.
-        </p>
+  useEffect(() => {
+    let active = true;
+    agroApi.getDeliveryPartners().then((partners) => {
+      const own = partners.find((item) =>
+        item.id === user?.id || (item as DeliveryPartner & { userId?: string }).userId === user?.id ||
+        item.email?.toLowerCase() === user?.email?.toLowerCase()
+      );
+      if (active) setPartner(own || null);
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [user?.id, user?.email]);
+
+  if (loading) return <div className="p-6 text-sm text-slate-500">Loading your partner profile…</div>;
+  if (!partner) return <div className="max-w-2xl rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900"><AlertTriangle className="mb-2 h-5 w-5" />No delivery-partner profile is linked to this signed-in account. Please contact support; another partner's profile will not be shown.</div>;
+
+  return <div className="max-w-2xl space-y-6">
+    <div><h1 className="text-xl font-bold text-slate-900">Delivery Partner Fleet Profile</h1><p className="mt-1 text-xs text-slate-500">Your own registered service and vehicle details.</p></div>
+    <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 text-xs shadow-2xs">
+      <div className="flex items-center gap-4 border-b border-slate-100 pb-6">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-700 text-xl font-bold text-white">{partner.name.charAt(0)}</div>
+        <div><div className="flex items-center gap-2"><h2 className="text-base font-bold text-slate-900">{partner.name}</h2><span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold">{partner.approvalStatus}</span></div><p className="mt-0.5 text-xs text-slate-500">{partner.email}</p></div>
       </div>
-
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-6 text-xs">
-        <div className="flex items-center gap-4 pb-6 border-b border-slate-100">
-          <div className="w-14 h-14 rounded-full bg-emerald-700 text-white font-bold text-xl flex items-center justify-center">
-            {partner.name.charAt(0)}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-slate-900">{partner.name}</h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                {partner.approvalStatus}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">Approved Logistics Partner · Dhaka Fleet</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <span className="text-slate-500 block mb-0.5">Phone Number</span>
-            <span className="font-mono font-bold text-slate-900">{partner.phone}</span>
-          </div>
-          <div>
-            <span className="text-slate-500 block mb-0.5">Email</span>
-            <span className="font-mono text-slate-900">{partner.email}</span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <span className="text-slate-500 block mb-0.5">National ID (NID)</span>
-            <span className="font-mono text-slate-900">{partner.nid}</span>
-          </div>
-          <div>
-            <span className="text-slate-500 block mb-0.5">Vehicle Type & Reg</span>
-            <span className="font-bold text-slate-900">{partner.vehicleType} · {partner.vehicleRegNumber}</span>
-          </div>
-        </div>
-
-        <div className="pt-3 border-t border-slate-100 space-y-2">
-          <span className="font-bold text-slate-900 block">Assigned Operational Service Areas</span>
-          <div className="flex flex-wrap gap-2">
-            {partner.assignedAreas.map((area) => (
-              <span key={area} className="px-2.5 py-1 rounded bg-slate-100 text-slate-800 font-semibold text-xs border border-slate-200">
-                {area}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="pt-3 border-t border-slate-100 flex items-center gap-4 text-emerald-800 font-semibold bg-emerald-50/60 p-3 rounded-lg border border-emerald-200">
-          <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0" />
-          <span>Authorized for both Farm Product Pickup and Customer Doorstep Delivery.</span>
-        </div>
-      </div>
+      <div className="grid grid-cols-2 gap-4"><div><span className="mb-0.5 block text-slate-500">Phone Number</span><span className="font-mono font-bold text-slate-900">{partner.phone}</span></div><div><span className="mb-0.5 block text-slate-500">Service District</span><span className="font-bold text-slate-900">{(partner as DeliveryPartner & { district?: string }).district || '—'}</span></div></div>
+      <div className="grid grid-cols-2 gap-4"><div><span className="mb-0.5 block text-slate-500">NID</span><span className="font-mono text-slate-900">{partner.nid}</span></div><div><span className="mb-0.5 block text-slate-500">Vehicle</span><span className="font-bold text-slate-900">{partner.vehicleType} · {partner.vehicleRegNumber}</span></div></div>
+      <div className="border-t border-slate-100 pt-3"><span className="mb-2 block font-bold text-slate-900">Operational Service Areas</span><div className="flex flex-wrap gap-2">{(partner.assignedAreas || []).map((area) => <span key={area} className="rounded border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800">{area}</span>)}</div></div>
+      <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 font-semibold text-emerald-800"><ShieldCheck className="h-5 w-5 shrink-0" /><span>{partner.canPickup ? 'Farm Product Pickup enabled' : 'Farm Product Pickup disabled'} · {partner.canDeliver ? 'Customer Doorstep Delivery enabled' : 'Customer Doorstep Delivery disabled'}</span></div>
     </div>
-  );
+  </div>;
 };
