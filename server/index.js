@@ -1440,6 +1440,32 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       }
     }
 
+    // Delivery partners may only update jobs assigned to their own persisted
+    // partner profile. Enforce this for DELIVERY as well as PICKUP jobs.
+    if (resource === 'jobs' && role === 'delivery' && existing) {
+      const accountResult = await client.query(
+        'SELECT email FROM auth_users WHERE id = $1 LIMIT 1',
+        [req.auth.sub]
+      );
+      const accountEmail = accountResult.rows[0]?.email || req.auth.email || '';
+      const partnerResult = await client.query(
+        "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (data->>'userId' = $1 OR lower(data->>'email') = lower($2)) LIMIT 1",
+        [req.auth.sub, accountEmail]
+      );
+      const partner = partnerResult.rows[0]?.data;
+      const partnerId = partnerResult.rows[0]?.id;
+      const allowedStatuses = data.type === 'DELIVERY'
+        ? ['ASSIGNED', 'ACCEPTED', 'DECLINED', 'REJECTED', 'EN_ROUTE', 'ARRIVED_AT_GODOWN', 'COLLECTED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED']
+        : ['ASSIGNED', 'ACCEPTED', 'DECLINED', 'REJECTED', 'QC_PENDING', 'EN_ROUTE', 'PICKED_UP', 'WAREHOUSE_HANDOVER', 'ARRIVED_AT_GODOWN', 'FAILED'];
+      if (!partnerId || partner?.approvalStatus !== 'APPROVED' ||
+          existing.partnerId !== partnerId || data.partnerId !== partnerId ||
+          data.type !== existing.type ||
+          !allowedStatuses.includes(String(data.status || '').toUpperCase())) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'You may only update your own approved partner job' });
+      }
+    }
+
     // Pickup jobs can be created as an assignment before QC, but only the
     // assigned pickup partner may accept/advance that job. Physical collection
     // remains server-blocked until the linked QC and order are both approved.
