@@ -1138,16 +1138,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     const partner = store.deliveryPartners.find((p) => p.id === partnerId);
     if (!partner) throw new Error('Partner not found');
 
-    // New registrations persist the exact auth_users.id as userId on the
-    // deliveryPartners record. Never guess that a profile ID is an account ID.
-    const linkedUserId = (partner as DeliveryPartner & { userId?: string }).userId?.trim();
-    if (approverRole === 'ADMIN' && !linkedUserId) {
-      throw new Error(
-        'This delivery-partner profile is not linked to a login account. Approval was not changed. Link it to the correct account first.'
-      );
-    }
-
-    const now = new Date().toISOString().substring(0, 10);
+    const now = new Date().toISOString().slice(0, 10);
     const updatedPartner: DeliveryPartner & { status?: string } = {
       ...partner,
       approvalStatus: status,
@@ -1158,35 +1149,28 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       ...(notes ? { approvalNotes: notes } : {}),
     };
 
-    // Update the real login account first. The backend accepts only ACTIVE,
-    // PENDING, or SUSPENDED; PENDING_APPROVAL is a profile status, not an
-    // auth_users status.
-    if (approverRole === 'ADMIN' && linkedUserId) {
-      const accountStatus =
-        status === 'APPROVED' ? 'ACTIVE' :
-        status === 'PENDING_APPROVAL' ? 'PENDING' : 'SUSPENDED';
-      const accountResponse = await fetch(
-        `${API_BASE_URL}/admin/users/${encodeURIComponent(linkedUserId)}/status/`,
+    if (approverRole === 'ADMIN') {
+      const response = await fetch(
+        `${API_BASE_URL}/admin/delivery-partners/${encodeURIComponent(partnerId)}/approval/`,
         {
           method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            ...authHeaders(),
-          },
-          body: JSON.stringify({ status: accountStatus }),
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ status, approverName, notes }),
         }
       );
-      const payload = await accountResponse.json().catch(() => ({}));
-      if (!accountResponse.ok) {
-        throw new Error(
-          payload.message || 'Could not update the linked login account. Partner approval was not changed.'
-        );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.message || 'Could not update delivery partner approval.');
       }
+      const savedData = payload.partner?.data;
+      if (savedData && typeof savedData === 'object') Object.assign(partner, savedData);
+      else Object.assign(partner, updatedPartner);
+    } else {
+      // Warehouse-manager profile-only workflow; it must not change login status.
+      await saveBackendRecord('deliveryPartners', updatedPartner);
+      Object.assign(partner, updatedPartner);
     }
 
-    // Persist the profile only after the linked account update succeeds.
-    await saveBackendRecord('deliveryPartners', updatedPartner);
-    Object.assign(partner, updatedPartner);
     localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
     return partner;
   },
