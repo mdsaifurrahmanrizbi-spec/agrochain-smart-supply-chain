@@ -1138,6 +1138,15 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     const partner = store.deliveryPartners.find((p) => p.id === partnerId);
     if (!partner) throw new Error('Partner not found');
 
+    // New registrations persist the exact auth_users.id as userId on the
+    // deliveryPartners record. Never guess that a profile ID is an account ID.
+    const linkedUserId = (partner as DeliveryPartner & { userId?: string }).userId?.trim();
+    if (approverRole === 'ADMIN' && !linkedUserId) {
+      throw new Error(
+        'This delivery-partner profile is not linked to a login account. Approval was not changed. Link it to the correct account first.'
+      );
+    }
+
     const now = new Date().toISOString().substring(0, 10);
     const updatedPartner: DeliveryPartner & { status?: string } = {
       ...partner,
@@ -1149,12 +1158,9 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       ...(notes ? { approvalNotes: notes } : {}),
     };
 
-    // Persist the partner decision in the shared backend record.
-    await saveBackendRecord('deliveryPartners', updatedPartner);
-
-    // Admin approval must also activate the linked login account.
-    // Otherwise the profile appears approved in the fleet but login remains blocked.
-    const linkedUserId = (partner as DeliveryPartner & { userId?: string }).userId || partner.id;
+    // Update the real login account first. The backend accepts only ACTIVE,
+    // PENDING, or SUSPENDED; PENDING_APPROVAL is a profile status, not an
+    // auth_users status.
     if (approverRole === 'ADMIN' && linkedUserId) {
       const accountStatus =
         status === 'APPROVED' ? 'ACTIVE' :
@@ -1170,12 +1176,16 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
           body: JSON.stringify({ status: accountStatus }),
         }
       );
+      const payload = await accountResponse.json().catch(() => ({}));
       if (!accountResponse.ok) {
-        const payload = await accountResponse.json().catch(() => ({}));
-        throw new Error(payload.message || 'Partner approval saved, but linked login account status could not be updated.');
+        throw new Error(
+          payload.message || 'Could not update the linked login account. Partner approval was not changed.'
+        );
       }
     }
 
+    // Persist the profile only after the linked account update succeeds.
+    await saveBackendRecord('deliveryPartners', updatedPartner);
     Object.assign(partner, updatedPartner);
     localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
     return partner;
