@@ -47,10 +47,7 @@ export const DeliveryPickups: React.FC = () => {
     remarks: '',
   });
 
-  // Delivery partner approval verification
-  const currentPartner = store.deliveryPartners.find(
-    (p) => p.email === user?.email || p.id === 'dp-1'
-  );
+  // The authenticated user's linked partner profile is loaded above; never fall back to a seeded partner.
   const isApprovedPartner = currentPartner?.approvalStatus === 'APPROVED';
 
   const handleAction = async (jobId: string, status: any) => {
