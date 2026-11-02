@@ -1099,7 +1099,33 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
 
   // UPDATE 2: Delivery Partner Approvals (Admin & Warehouse Manager)
   async getDeliveryPartners(): Promise<DeliveryPartner[]> {
-    return store.deliveryPartners;
+    try {
+      const backendPartners = await getBackendRecords<DeliveryPartner & { status?: string; serviceDistricts?: string[] }>('deliveryPartners');
+      const normalized = backendPartners.map((partner) => ({
+        ...partner,
+        approvalStatus: partner.approvalStatus || (
+          partner.status === 'APPROVED' ? 'APPROVED' :
+          partner.status === 'REJECTED' ? 'REJECTED' :
+          partner.status === 'SUSPENDED' ? 'SUSPENDED' : 'PENDING_APPROVAL'
+        ),
+        assignedAreas: partner.assignedAreas || [],
+        canPickup: Boolean(partner.canPickup),
+        canDeliver: Boolean(partner.canDeliver),
+        rating: Number(partner.rating || 5),
+        activeJobsCount: Number(partner.activeJobsCount || 0),
+        completedJobsTotal: Number(partner.completedJobsTotal || 0),
+        codCollectedToday: Number(partner.codCollectedToday || 0),
+        codPendingDeposit: Number(partner.codPendingDeposit || 0),
+      })) as DeliveryPartner[];
+      const byId = new Map(store.deliveryPartners.map((p) => [p.id, p]));
+      normalized.forEach((p) => byId.set(p.id, p));
+      store.deliveryPartners = [...byId.values()];
+      localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
+      return store.deliveryPartners;
+    } catch (error) {
+      console.warn('Could not load persisted delivery partner profiles:', error);
+      return store.deliveryPartners;
+    }
   },
 
   async updatePartnerApproval(
