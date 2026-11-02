@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { DeliveryPartner } from '../../types';
@@ -8,6 +8,13 @@ import { ShieldCheck, Truck, MapPin, Check, X, AlertTriangle, HelpCircle, PauseC
 export const AdminPartnerApprovals: React.FC = () => {
   const { user } = useAuth();
   const [partners, setPartners] = useState(store.deliveryPartners);
+
+  useEffect(() => {
+    let active = true;
+    agroApi.getDeliveryPartners().then((items) => { if (active) setPartners([...items]); })
+      .catch((error) => console.error('Could not load delivery partner approvals:', error));
+    return () => { active = false; };
+  }, []);
   const [notice, setNotice] = useState<string | null>(null);
 
   const [infoModalPartner, setInfoModalPartner] = useState<DeliveryPartner | null>(null);
