@@ -21,17 +21,24 @@ import {
 
 export const DeliveryDeliveries: React.FC = () => {
   const { user } = useAuth();
-  const [jobs, setJobs] = useState(store.jobs.filter((j) => j.type === 'DELIVERY'));
+  const [jobs, setJobs] = useState<typeof store.jobs>([]);
+  const [currentPartner, setCurrentPartner] = useState<(typeof store.deliveryPartners)[number] | null>(null);
 
   useEffect(() => {
     let active = true;
-    Promise.all([agroApi.getLogisticsJobs(), agroApi.getOrders()])
-      .then(([freshJobs]) => {
-        if (active) setJobs(freshJobs.filter((job) => job.type === 'DELIVERY'));
-      })
-      .catch((error) => console.error('Could not refresh assigned deliveries:', error));
+    (async () => {
+      try {
+        const [partners] = await Promise.all([agroApi.getDeliveryPartners(), agroApi.getOrders()]);
+        const partner = partners.find((p) => p.userId === user?.id || p.id === user?.id || (!!user?.email && p.email?.toLowerCase() === user.email.toLowerCase())) || null;
+        if (!active) return;
+        setCurrentPartner(partner);
+        if (!partner) { setJobs([]); return; }
+        const freshJobs = await agroApi.getLogisticsJobs(partner.id);
+        if (active) setJobs(freshJobs.filter((job) => job.type === 'DELIVERY' && job.partnerId === partner.id));
+      } catch (error) { console.error('Could not refresh assigned deliveries:', error); }
+    })();
     return () => { active = false; };
-  }, []);
+  }, [user?.id, user?.email]);
   const [selectedJob, setSelectedJob] = useState<LogisticsJob | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
@@ -48,10 +55,10 @@ export const DeliveryDeliveries: React.FC = () => {
     (p) => p.email === user?.email || p.id === 'dp-1'
   );
   const isApproved = currentPartner?.approvalStatus === 'APPROVED';
-  const partnerId = currentPartner?.id || 'dp-1';
+  const partnerId = currentPartner?.id || '';
 
   const refreshJobs = () => {
-    setJobs([...store.jobs.filter((j) => j.type === 'DELIVERY')]);
+    setJobs(store.jobs.filter((j) => j.type === 'DELIVERY' && j.partnerId === currentPartner?.id));
   };
 
   // Step 2: Accept Delivery Job
