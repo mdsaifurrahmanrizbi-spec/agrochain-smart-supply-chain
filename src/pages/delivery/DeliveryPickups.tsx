@@ -17,18 +17,24 @@ import {
 
 export const DeliveryPickups: React.FC = () => {
   const { user } = useAuth();
-  const [jobs, setJobs] = useState(store.jobs.filter((j) => j.type === 'PICKUP'));
+  const [jobs, setJobs] = useState<typeof store.jobs>([]);
+  const [currentPartner, setCurrentPartner] = useState<(typeof store.deliveryPartners)[number] | null>(null);
 
   useEffect(() => {
     let active = true;
-    Promise.all([agroApi.getLogisticsJobs(), agroApi.getOrders()])
-      .then(([freshJobs]) => {
-        const partner = store.deliveryPartners.find((p) => p.email === user?.email || p.id === 'dp-1');
-        if (active) setJobs(freshJobs.filter((job) => job.type === 'PICKUP' && (!partner || job.partnerId === partner.id)));
-      })
-      .catch((error) => console.error('Could not refresh assigned pickups:', error));
+    (async () => {
+      try {
+        const [partners] = await Promise.all([agroApi.getDeliveryPartners(), agroApi.getOrders()]);
+        const partner = partners.find((p) => p.userId === user?.id || p.id === user?.id || (!!user?.email && p.email?.toLowerCase() === user.email.toLowerCase())) || null;
+        if (!active) return;
+        setCurrentPartner(partner);
+        if (!partner) { setJobs([]); return; }
+        const freshJobs = await agroApi.getLogisticsJobs(partner.id);
+        if (active) setJobs(freshJobs.filter((job) => job.type === 'PICKUP' && job.partnerId === partner.id));
+      } catch (error) { console.error('Could not refresh assigned pickups:', error); }
+    })();
     return () => { active = false; };
-  }, []);
+  }, [user?.id, user?.email]);
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [selectedQcJob, setSelectedQcJob] = useState<string | null>(null);
@@ -51,7 +57,7 @@ export const DeliveryPickups: React.FC = () => {
     setErrorMsg(null);
     try {
       await agroApi.updateJobStatus(jobId, status);
-      setJobs([...store.jobs.filter((j) => j.type === 'PICKUP')]);
+      setJobs(store.jobs.filter((j) => j.type === 'PICKUP' && j.partnerId === currentPartner?.id));
       setNotice(`Pickup stage updated successfully to: ${status}`);
       setTimeout(() => setNotice(null), 3000);
     } catch (err: any) {
@@ -86,7 +92,7 @@ export const DeliveryPickups: React.FC = () => {
         status: qcForm.decision,
         remarks: qcForm.remarks.trim(),
       });
-      setJobs([...store.jobs.filter((item) => item.type === 'PICKUP' && item.partnerId === currentPartner.id)]);
+      setJobs(store.jobs.filter((item) => item.type === 'PICKUP' && item.partnerId === currentPartner.id));
       setSelectedQcJob(null);
       setNotice(result.status === 'APPROVED' ? 'QC passed. Farm pickup is now unlocked.' : result.status === 'REJECTED' ? 'QC failed. Pickup remains blocked.' : 'QC requires recheck. Pickup remains on hold.');
       setTimeout(() => setNotice(null), 4500);
