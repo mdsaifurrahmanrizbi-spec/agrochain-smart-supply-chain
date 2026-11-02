@@ -1442,6 +1442,10 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     // Delivery partners may only update jobs assigned to their own persisted
     // partner profile. Enforce this for DELIVERY as well as PICKUP jobs.
+    if (resource === 'jobs' && role === 'delivery' && !existing) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'Delivery partners cannot create or self-assign jobs' });
+    }
     if (resource === 'jobs' && role === 'delivery' && existing) {
       const accountResult = await client.query(
         'SELECT email FROM auth_users WHERE id = $1 LIMIT 1',
