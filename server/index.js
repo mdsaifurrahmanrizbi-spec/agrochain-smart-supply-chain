@@ -828,8 +828,8 @@ app.patch('/api/admin/delivery-partners/:id/approval/', requireAuth, async (req,
       ...(notes ? { approvalNotes: notes } : {}),
     };
     const saved = await client.query(
-      "UPDATE agrochain_records SET data = $3::jsonb, updated_at = NOW() WHERE resource = 'deliveryPartners' AND id = $1 RETURNING id, data, created_at, updated_at",
-      [partnerId, linkedUserId, JSON.stringify(updatedProfile)]
+      "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'deliveryPartners' AND id = $1 RETURNING id, data, created_at, updated_at",
+      [partnerId, JSON.stringify(updatedProfile)]
     );
     await client.query('COMMIT');
     return res.json({ partner: saved.rows[0], account: accountResult.rows[0] });
