@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { store, agroApi } from '../../services/api';
@@ -150,18 +150,18 @@ export const DeliveryDashboard: React.FC = () => {
                   : 'bg-amber-50 text-amber-800 border-amber-200'
               }`}
             >
-              {partner.approvalStatus}
+              {partner?.approvalStatus || 'PENDING_APPROVAL'}
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
-            {partner.name} · Fleet Logistics Dashboard
+            {partner?.name || 'Delivery Partner'} · Fleet Logistics Dashboard
           </h1>
           <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5 text-slate-400" />
-              Assigned Operational Areas: <strong>{partner.assignedAreas.join(', ')}</strong>
+              Assigned Operational Areas: <strong>{partner?.assignedAreas?.join(', ') || 'Not assigned'}</strong>
             </span>
-            <span>· Vehicle: <strong>{partner.vehicleType} ({partner.vehicleRegNumber})</strong></span>
+            <span>· Vehicle: <strong>{partner?.vehicleType || 'Not set'} ({partner?.vehicleRegNumber || 'Not set'})</strong></span>
           </p>
         </div>
 
@@ -200,7 +200,7 @@ export const DeliveryDashboard: React.FC = () => {
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
           <div>
-            <span className="font-bold">Partner Account Status: {partner.approvalStatus}</span>
+            <span className="font-bold">Partner Account Status: {partner?.approvalStatus || 'PENDING_APPROVAL'}</span>
             <p className="mt-0.5 text-amber-800">
               Only approved delivery partners can accept and fulfill assignments. An Administrator or Warehouse Manager must approve your registration.
             </p>
@@ -226,7 +226,7 @@ export const DeliveryDashboard: React.FC = () => {
         />
         <MetricCard
           title="Completed This Month"
-          value={partner.completedJobsTotal || completedJobs.length}
+          value={partner?.completedJobsTotal || completedJobs.length}
           subtitle="99.2% on-time SLA"
           icon={CheckCircle}
           trend={{ value: 'Top 5% Partner', isPositive: true }}
