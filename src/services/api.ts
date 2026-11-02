@@ -1149,8 +1149,32 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       ...(notes ? { approvalNotes: notes } : {}),
     };
 
-    // Persist approval in the shared backend record before updating local state.
+    // Persist the partner decision in the shared backend record.
     await saveBackendRecord('deliveryPartners', updatedPartner);
+
+    // Admin approval must also activate the linked login account.
+    // Otherwise the profile appears approved in the fleet but login remains blocked.
+    if (approverRole === 'ADMIN' && partner.userId) {
+      const accountStatus =
+        status === 'APPROVED' ? 'ACTIVE' :
+        status === 'PENDING_APPROVAL' ? 'PENDING' : 'SUSPENDED';
+      const accountResponse = await fetch(
+        `${API_BASE_URL}/admin/users/${encodeURIComponent(partner.userId)}/status/`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders(),
+          },
+          body: JSON.stringify({ status: accountStatus }),
+        }
+      );
+      if (!accountResponse.ok) {
+        const payload = await accountResponse.json().catch(() => ({}));
+        throw new Error(payload.message || 'Partner approval saved, but linked login account status could not be updated.');
+      }
+    }
+
     Object.assign(partner, updatedPartner);
     localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
     return partner;
