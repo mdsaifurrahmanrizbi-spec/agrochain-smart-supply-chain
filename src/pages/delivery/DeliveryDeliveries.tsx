@@ -50,15 +50,11 @@ export const DeliveryDeliveries: React.FC = () => {
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Find partner record
-  const currentPartner = store.deliveryPartners.find(
-    (p) => p.email === user?.email || p.id === 'dp-1'
-  );
   const isApproved = currentPartner?.approvalStatus === 'APPROVED';
   const partnerId = currentPartner?.id || '';
 
   const refreshJobs = () => {
-    setJobs(store.jobs.filter((j) => j.type === 'DELIVERY' && j.partnerId === currentPartner?.id));
+    setJobs(store.jobs.filter((j) => j.type === 'DELIVERY' && !!partnerId && j.partnerId === partnerId));
   };
 
   // Step 2: Accept Delivery Job
