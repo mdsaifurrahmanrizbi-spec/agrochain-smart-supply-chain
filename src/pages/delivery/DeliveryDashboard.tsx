@@ -27,9 +27,9 @@ import {
 export const DeliveryDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const partnerId = user?.id === 'u-delivery-1' ? 'dp-1' : 'dp-1';
+  const partnerId = user?.id || '';
 
-  const [jobs, setJobs] = useState(store.jobs.filter((j) => j.partnerId === partnerId));
+  const [jobs, setJobs] = useState(store.jobs.filter((j) => !!partnerId && j.partnerId === partnerId));
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -42,8 +42,18 @@ export const DeliveryDashboard: React.FC = () => {
   const [otpError, setOtpError] = useState<string | null>(null);
   const [otpSuccess, setOtpSuccess] = useState<string | null>(null);
 
-  const partner = store.deliveryPartners.find((p) => p.id === partnerId) || store.deliveryPartners[0];
-  const isApproved = partner.approvalStatus === 'APPROVED';
+  const [partner, setPartner] = useState<import('../../types').DeliveryPartner | null>(null);
+  useEffect(() => {
+    let active = true;
+    agroApi.getDeliveryPartners().then((partners) => {
+      const own = partners.find((p) => p.id === user?.id ||
+        (p as import('../../types').DeliveryPartner & { userId?: string }).userId === user?.id ||
+        p.email?.toLowerCase() === user?.email?.toLowerCase());
+      if (active) setPartner(own || null);
+    });
+    return () => { active = false; };
+  }, [user?.id, user?.email]);
+  const isApproved = partner?.approvalStatus === 'APPROVED';
 
   const todayPickups = jobs.filter((j) => j.type === 'PICKUP');
   const todayDeliveries = jobs.filter((j) => j.type === 'DELIVERY');
@@ -61,7 +71,7 @@ export const DeliveryDashboard: React.FC = () => {
     setErrorMsg(null);
     try {
       await agroApi.updateJobStatus(jobId, status);
-      setJobs([...store.jobs.filter((j) => j.partnerId === partnerId)]);
+      setJobs([...store.jobs.filter((j) => !!partnerId && j.partnerId === partnerId)]);
       setNotice(`Job status updated to ${status}.`);
       setTimeout(() => setNotice(null), 3500);
     } catch (err: any) {
