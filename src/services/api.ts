@@ -1154,12 +1154,13 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
 
     // Admin approval must also activate the linked login account.
     // Otherwise the profile appears approved in the fleet but login remains blocked.
-    if (approverRole === 'ADMIN' && partner.userId) {
+    const linkedUserId = (partner as DeliveryPartner & { userId?: string }).userId || partner.id;
+    if (approverRole === 'ADMIN' && linkedUserId) {
       const accountStatus =
         status === 'APPROVED' ? 'ACTIVE' :
         status === 'PENDING_APPROVAL' ? 'PENDING' : 'SUSPENDED';
       const accountResponse = await fetch(
-        `${API_BASE_URL}/admin/users/${encodeURIComponent(partner.userId)}/status/`,
+        `${API_BASE_URL}/admin/users/${encodeURIComponent(linkedUserId)}/status/`,
         {
           method: 'PATCH',
           headers: {
