@@ -1099,7 +1099,33 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
 
   // UPDATE 2: Delivery Partner Approvals (Admin & Warehouse Manager)
   async getDeliveryPartners(): Promise<DeliveryPartner[]> {
-    return store.deliveryPartners;
+    try {
+      const backendPartners = await getBackendRecords<DeliveryPartner & { status?: string; serviceDistricts?: string[] }>('deliveryPartners');
+      const normalized = backendPartners.map((partner) => ({
+        ...partner,
+        approvalStatus: partner.approvalStatus || (
+          partner.status === 'APPROVED' ? 'APPROVED' :
+          partner.status === 'REJECTED' ? 'REJECTED' :
+          partner.status === 'SUSPENDED' ? 'SUSPENDED' : 'PENDING_APPROVAL'
+        ),
+        assignedAreas: partner.assignedAreas || [],
+        canPickup: Boolean(partner.canPickup),
+        canDeliver: Boolean(partner.canDeliver),
+        rating: Number(partner.rating || 5),
+        activeJobsCount: Number(partner.activeJobsCount || 0),
+        completedJobsTotal: Number(partner.completedJobsTotal || 0),
+        codCollectedToday: Number(partner.codCollectedToday || 0),
+        codPendingDeposit: Number(partner.codPendingDeposit || 0),
+      })) as DeliveryPartner[];
+      // A successful backend response is authoritative, including an empty list.
+      // Never merge seeded/local demo partners into persisted account data.
+      store.deliveryPartners = normalized;
+      localStorage.setItem('agro_delivery_partners', JSON.stringify(normalized));
+      return normalized;
+    } catch (error) {
+      console.warn('Could not load persisted delivery partner profiles:', error);
+      return store.deliveryPartners;
+    }
   },
 
   async updatePartnerApproval(
@@ -1112,13 +1138,37 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     const partner = store.deliveryPartners.find((p) => p.id === partnerId);
     if (!partner) throw new Error('Partner not found');
 
-    const now = new Date().toISOString().substring(0, 10);
-    partner.approvalStatus = status;
-    partner.approvedBy = `${approverName} (${approverRole === 'ADMIN' ? 'Admin' : 'Warehouse Manager'})`;
-    partner.approvalDate = now;
-    partner.approverRole = approverRole;
-    if (notes) {
-      partner.approvalNotes = notes;
+    const now = new Date().toISOString().slice(0, 10);
+    const updatedPartner: DeliveryPartner & { status?: string } = {
+      ...partner,
+      approvalStatus: status,
+      status,
+      approvedBy: `${approverName} (${approverRole === 'ADMIN' ? 'Admin' : 'Warehouse Manager'})`,
+      approvalDate: now,
+      approverRole,
+      ...(notes ? { approvalNotes: notes } : {}),
+    };
+
+    if (approverRole === 'ADMIN') {
+      const response = await fetch(
+        `${API_BASE_URL}/admin/delivery-partners/${encodeURIComponent(partnerId)}/approval/`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ status, approverName, notes }),
+        }
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.message || 'Could not update delivery partner approval.');
+      }
+      const savedData = payload.partner?.data;
+      if (savedData && typeof savedData === 'object') Object.assign(partner, savedData);
+      else Object.assign(partner, updatedPartner);
+    } else {
+      // Warehouse-manager profile-only workflow; it must not change login status.
+      await saveBackendRecord('deliveryPartners', updatedPartner);
+      Object.assign(partner, updatedPartner);
     }
 
     localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
@@ -1354,16 +1404,32 @@ if (order && update.status) {
   if (update.status === 'APPROVED') {
     const existingPickup = store.jobs.find((job) => job.orderId === order.id && job.type === 'PICKUP');
     if (!existingPickup) {
-      const originArea = (qc.farmLocation || '').trim().toLowerCase();
-      const partner = store.deliveryPartners.find((candidate) => {
-        if (candidate.approvalStatus !== 'APPROVED' || !candidate.canPickup) return false;
-        // Do not assign a pickup to a partner explicitly restricted to other areas.
-        const areas = [...(candidate.assignedAreas || []), candidate.preferredArea || '']
-          .map((area) => area.trim().toLowerCase())
-          .filter(Boolean);
-        if (!areas.length || !originArea || originArea.includes('pending verification')) return false;
-        return areas.some((area) => originArea.includes(area) || area.includes(originArea));
-      });
+      // Refresh the shared partner records before assigning a farm pickup.
+      // This avoids selecting a stale/demo partner from the browser's local cache.
+      const latestPartners = await this.getDeliveryPartners();
+      const originArea = (qc.farmLocation || '').trim();
+      const normalizeArea = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
+      const origin = normalizeArea(originArea);
+      const partner = latestPartners
+        .filter((candidate) => {
+          if (candidate.approvalStatus !== 'APPROVED' || !candidate.canPickup) return false;
+          const activeJobs = Number(candidate.activeJobsCount || 0);
+          if (!Number.isFinite(activeJobs) || activeJobs >= 8) return false;
+          if (!origin || origin.includes('pending verification')) return false;
+          const serviceDistricts = Array.isArray((candidate as DeliveryPartner & { serviceDistricts?: string[] }).serviceDistricts)
+            ? (candidate as DeliveryPartner & { serviceDistricts?: string[] }).serviceDistricts || []
+            : [];
+          const areas = [
+            ...serviceDistricts,
+            ...(candidate.assignedAreas || []),
+            candidate.preferredArea || '',
+            (candidate as DeliveryPartner & { district?: string }).district || '',
+            (candidate as DeliveryPartner & { upazila?: string }).upazila || '',
+          ].map((area) => normalizeArea(area)).filter(Boolean);
+          // Match complete area tokens to avoid accidental substring matches.
+          return areas.some((area) => ` ${origin} `.includes(` ${area} `));
+        })
+        .sort((a, b) => Number(a.activeJobsCount || 0) - Number(b.activeJobsCount || 0) || Number(b.rating || 0) - Number(a.rating || 0))[0];
       if (partner) {
         const pickupJob: LogisticsJob = {
           id: `job-${Date.now()}`,

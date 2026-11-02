@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { DeliveryPartner } from '../../types';
@@ -8,7 +8,15 @@ import { ShieldCheck, Truck, MapPin, Check, X, AlertTriangle, HelpCircle, PauseC
 export const AdminPartnerApprovals: React.FC = () => {
   const { user } = useAuth();
   const [partners, setPartners] = useState(store.deliveryPartners);
+
+  useEffect(() => {
+    let active = true;
+    agroApi.getDeliveryPartners().then((items) => { if (active) setPartners([...items]); })
+      .catch((error) => console.error('Could not load delivery partner approvals:', error));
+    return () => { active = false; };
+  }, []);
   const [notice, setNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [infoModalPartner, setInfoModalPartner] = useState<DeliveryPartner | null>(null);
   const [infoText, setInfoText] = useState('');
@@ -22,16 +30,21 @@ export const AdminPartnerApprovals: React.FC = () => {
     status: DeliveryPartner['approvalStatus'],
     notes?: string
   ) => {
-    await agroApi.updatePartnerApproval(
-      partnerId,
-      status,
-      adminName,
-      'ADMIN',
-      notes || `Administrative status update to: ${status}`
-    );
-    setPartners([...store.deliveryPartners]);
-    setNotice(`Partner status updated to: ${status}`);
-    setTimeout(() => setNotice(null), 3000);
+    setActionError(null);
+    try {
+      await agroApi.updatePartnerApproval(
+        partnerId,
+        status,
+        adminName,
+        'ADMIN',
+        notes || `Administrative status update to: ${status}`
+      );
+      setPartners([...store.deliveryPartners]);
+      setNotice(`Partner status updated to: ${status}`);
+      setTimeout(() => setNotice(null), 3000);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not update partner status.');
+    }
   };
 
   const handleSubmitRequestInfo = async (e: React.FormEvent) => {
@@ -70,6 +83,12 @@ export const AdminPartnerApprovals: React.FC = () => {
           Review delivery partner registrations, national ID credentials, and monitor approvals performed by both Administrators and Warehouse Managers.
         </p>
       </div>
+
+      {actionError && (
+        <div role="alert" className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-semibold">
+          {actionError}
+        </div>
+      )}
 
       {notice && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-2">

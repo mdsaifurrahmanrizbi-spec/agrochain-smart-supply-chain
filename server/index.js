@@ -776,6 +776,72 @@ app.post('/api/admin/users/', requireAuth, async (req, res) => {
   }
 });
 
+app.patch('/api/admin/delivery-partners/:id/approval/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  const partnerId = String(req.params.id || '').trim();
+  const status = String(req.body?.status || '').trim().toUpperCase();
+  const approverName = String(req.body?.approverName || 'Authorized Officer').trim().slice(0, 120);
+  const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim().slice(0, 2000) : '';
+  if (!partnerId) return res.status(400).json({ message: 'Partner ID is required' });
+  if (!['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING_APPROVAL'].includes(status)) {
+    return res.status(400).json({ message: 'Invalid partner approval status' });
+  }
+  const accountStatus = status === 'APPROVED' ? 'ACTIVE' : status === 'PENDING_APPROVAL' ? 'PENDING' : 'SUSPENDED';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const profileResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND id = $1 FOR UPDATE",
+      [partnerId]
+    );
+    const profileRow = profileResult.rows[0];
+    if (!profileRow) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Delivery partner profile not found' });
+    }
+    const profile = profileRow.data || {};
+    const linkedUserId = typeof profile.userId === 'string' ? profile.userId.trim() : '';
+    if (!linkedUserId) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'This profile is not linked to a login account. Approval was not changed.' });
+    }
+    if (linkedUserId === req.auth.sub) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'You cannot change your own account status' });
+    }
+    const accountResult = await client.query(
+      "UPDATE auth_users SET status = $1 WHERE id = $2 AND role = 'delivery' RETURNING id, name, email, role, status",
+      [accountStatus, linkedUserId]
+    );
+    if (!accountResult.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Linked delivery login account was not found. Approval was not changed.' });
+    }
+    const now = new Date().toISOString().slice(0, 10);
+    const updatedProfile = {
+      ...profile,
+      approvalStatus: status,
+      status,
+      approvedBy: `${approverName} (Admin)`,
+      approvalDate: now,
+      approverRole: 'ADMIN',
+      ...(notes ? { approvalNotes: notes } : {}),
+    };
+    const saved = await client.query(
+      "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'deliveryPartners' AND id = $1 RETURNING id, data, created_at, updated_at",
+      [partnerId, JSON.stringify(updatedProfile)]
+    );
+    await client.query('COMMIT');
+    return res.json({ partner: saved.rows[0], account: accountResult.rows[0] });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Atomic delivery partner approval failed:', error.message);
+    return res.status(500).json({ message: 'Delivery partner approval could not be completed' });
+  } finally {
+    client.release();
+  }
+});
+
 app.patch('/api/admin/users/:id/status/', requireAuth, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
   const status = typeof req.body?.status === 'string' ? req.body.status.trim().toUpperCase() : '';
@@ -1165,6 +1231,19 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       }
     }
 
+    if (req.auth.role === 'delivery' && resource === 'deliveryPartners') {
+      rows = rows.filter((row) => row.data?.userId === req.auth.sub);
+    }
+    if (req.auth.role === 'delivery' && resource === 'jobs') {
+      const ownPartnerIds = new Set(
+        (await pool.query(
+          "SELECT id FROM agrochain_records WHERE resource = 'deliveryPartners' AND data->>'userId' = $1",
+          [req.auth.sub]
+        )).rows.map((row) => row.id)
+      );
+      rows = rows.filter((row) => ownPartnerIds.has(row.data?.partnerId));
+    }
+
     if (resource === 'orders') {
       const role = req.auth.role;
       if (role === 'buyer') {
@@ -1358,6 +1437,36 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
           await client.query('ROLLBACK');
           return res.status(400).json({ message: 'A QC decision requires valid measured values, grade, and inspection remarks' });
         }
+      }
+    }
+
+    // Delivery partners may only update jobs assigned to their own persisted
+    // partner profile. Enforce this for DELIVERY as well as PICKUP jobs.
+    if (resource === 'jobs' && role === 'delivery' && !existing) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'Delivery partners cannot create or self-assign jobs' });
+    }
+    if (resource === 'jobs' && role === 'delivery' && existing) {
+      const accountResult = await client.query(
+        'SELECT email FROM auth_users WHERE id = $1 LIMIT 1',
+        [req.auth.sub]
+      );
+      const accountEmail = accountResult.rows[0]?.email || req.auth.email || '';
+      const partnerResult = await client.query(
+        "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (data->>'userId' = $1 OR lower(data->>'email') = lower($2)) LIMIT 1",
+        [req.auth.sub, accountEmail]
+      );
+      const partner = partnerResult.rows[0]?.data;
+      const partnerId = partnerResult.rows[0]?.id;
+      const allowedStatuses = data.type === 'DELIVERY'
+        ? ['ASSIGNED', 'ACCEPTED', 'DECLINED', 'REJECTED', 'EN_ROUTE', 'ARRIVED_AT_GODOWN', 'COLLECTED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED']
+        : ['ASSIGNED', 'ACCEPTED', 'DECLINED', 'REJECTED', 'QC_PENDING', 'EN_ROUTE', 'PICKED_UP', 'WAREHOUSE_HANDOVER', 'ARRIVED_AT_GODOWN', 'FAILED'];
+      if (!partnerId || partner?.approvalStatus !== 'APPROVED' ||
+          existing.partnerId !== partnerId || data.partnerId !== partnerId ||
+          data.type !== existing.type ||
+          !allowedStatuses.includes(String(data.status || '').toUpperCase())) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'You may only update your own approved partner job' });
       }
     }
 

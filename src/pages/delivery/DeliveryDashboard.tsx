@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { store, agroApi } from '../../services/api';
@@ -27,9 +27,9 @@ import {
 export const DeliveryDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const partnerId = user?.id === 'u-delivery-1' ? 'dp-1' : 'dp-1';
+  const partnerId = user?.id || '';
 
-  const [jobs, setJobs] = useState(store.jobs.filter((j) => j.partnerId === partnerId));
+  const [jobs, setJobs] = useState(store.jobs.filter((j) => !!partnerId && j.partnerId === partnerId));
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -42,8 +42,18 @@ export const DeliveryDashboard: React.FC = () => {
   const [otpError, setOtpError] = useState<string | null>(null);
   const [otpSuccess, setOtpSuccess] = useState<string | null>(null);
 
-  const partner = store.deliveryPartners.find((p) => p.id === partnerId) || store.deliveryPartners[0];
-  const isApproved = partner.approvalStatus === 'APPROVED';
+  const [partner, setPartner] = useState<import('../../types').DeliveryPartner | null>(null);
+  useEffect(() => {
+    let active = true;
+    agroApi.getDeliveryPartners().then((partners) => {
+      const own = partners.find((p) => p.id === user?.id ||
+        (p as import('../../types').DeliveryPartner & { userId?: string }).userId === user?.id ||
+        p.email?.toLowerCase() === user?.email?.toLowerCase());
+      if (active) setPartner(own || null);
+    });
+    return () => { active = false; };
+  }, [user?.id, user?.email]);
+  const isApproved = partner?.approvalStatus === 'APPROVED';
 
   const todayPickups = jobs.filter((j) => j.type === 'PICKUP');
   const todayDeliveries = jobs.filter((j) => j.type === 'DELIVERY');
@@ -61,7 +71,7 @@ export const DeliveryDashboard: React.FC = () => {
     setErrorMsg(null);
     try {
       await agroApi.updateJobStatus(jobId, status);
-      setJobs([...store.jobs.filter((j) => j.partnerId === partnerId)]);
+      setJobs([...store.jobs.filter((j) => !!partnerId && j.partnerId === partnerId)]);
       setNotice(`Job status updated to ${status}.`);
       setTimeout(() => setNotice(null), 3500);
     } catch (err: any) {
@@ -140,18 +150,18 @@ export const DeliveryDashboard: React.FC = () => {
                   : 'bg-amber-50 text-amber-800 border-amber-200'
               }`}
             >
-              {partner.approvalStatus}
+              {partner?.approvalStatus || 'PENDING_APPROVAL'}
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
-            {partner.name} · Fleet Logistics Dashboard
+            {partner?.name || 'Delivery Partner'} · Fleet Logistics Dashboard
           </h1>
           <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5 text-slate-400" />
-              Assigned Operational Areas: <strong>{partner.assignedAreas.join(', ')}</strong>
+              Assigned Operational Areas: <strong>{partner?.assignedAreas?.join(', ') || 'Not assigned'}</strong>
             </span>
-            <span>· Vehicle: <strong>{partner.vehicleType} ({partner.vehicleRegNumber})</strong></span>
+            <span>· Vehicle: <strong>{partner?.vehicleType || 'Not set'} ({partner?.vehicleRegNumber || 'Not set'})</strong></span>
           </p>
         </div>
 
@@ -190,7 +200,7 @@ export const DeliveryDashboard: React.FC = () => {
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
           <div>
-            <span className="font-bold">Partner Account Status: {partner.approvalStatus}</span>
+            <span className="font-bold">Partner Account Status: {partner?.approvalStatus || 'PENDING_APPROVAL'}</span>
             <p className="mt-0.5 text-amber-800">
               Only approved delivery partners can accept and fulfill assignments. An Administrator or Warehouse Manager must approve your registration.
             </p>
@@ -216,7 +226,7 @@ export const DeliveryDashboard: React.FC = () => {
         />
         <MetricCard
           title="Completed This Month"
-          value={partner.completedJobsTotal || completedJobs.length}
+          value={partner?.completedJobsTotal || completedJobs.length}
           subtitle="99.2% on-time SLA"
           icon={CheckCircle}
           trend={{ value: 'Top 5% Partner', isPositive: true }}

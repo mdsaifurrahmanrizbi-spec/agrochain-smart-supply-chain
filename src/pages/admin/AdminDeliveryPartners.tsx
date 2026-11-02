@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import type { DeliveryPartner } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -6,11 +6,27 @@ import { Truck, MapPin, ShieldCheck, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const AdminDeliveryPartners: React.FC = () => {
-  const [partners, setPartners] = useState<DeliveryPartner[]>([
-    ...store.deliveryPartners,
-  ]);
+  const [partners, setPartners] = useState<DeliveryPartner[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [notice, setNotice] = useState('');
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    agroApi.getDeliveryPartners()
+      .then((items) => {
+        if (active) {
+          setPartners([...items]);
+          setLoadError('');
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setLoadError(error instanceof Error ? error.message : 'Could not load delivery partners.');
+        }
+      });
+    return () => { active = false; };
+  }, []);
 
   const [form, setForm] = useState({
     name: '',
@@ -90,6 +106,12 @@ export const AdminDeliveryPartners: React.FC = () => {
       {notice && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
           {notice}
+        </div>
+      )}
+
+      {loadError && (
+        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          {loadError}
         </div>
       )}
 
