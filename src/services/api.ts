@@ -1117,11 +1117,11 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
         codCollectedToday: Number(partner.codCollectedToday || 0),
         codPendingDeposit: Number(partner.codPendingDeposit || 0),
       })) as DeliveryPartner[];
-      const byId = new Map(store.deliveryPartners.map((p) => [p.id, p]));
-      normalized.forEach((p) => byId.set(p.id, p));
-      store.deliveryPartners = [...byId.values()];
-      localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
-      return store.deliveryPartners;
+      // A successful backend response is authoritative, including an empty list.
+      // Never merge seeded/local demo partners into persisted account data.
+      store.deliveryPartners = normalized;
+      localStorage.setItem('agro_delivery_partners', JSON.stringify(normalized));
+      return normalized;
     } catch (error) {
       console.warn('Could not load persisted delivery partner profiles:', error);
       return store.deliveryPartners;
