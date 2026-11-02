@@ -1385,16 +1385,32 @@ if (order && update.status) {
   if (update.status === 'APPROVED') {
     const existingPickup = store.jobs.find((job) => job.orderId === order.id && job.type === 'PICKUP');
     if (!existingPickup) {
-      const originArea = (qc.farmLocation || '').trim().toLowerCase();
-      const partner = store.deliveryPartners.find((candidate) => {
-        if (candidate.approvalStatus !== 'APPROVED' || !candidate.canPickup) return false;
-        // Do not assign a pickup to a partner explicitly restricted to other areas.
-        const areas = [...(candidate.assignedAreas || []), candidate.preferredArea || '']
-          .map((area) => area.trim().toLowerCase())
-          .filter(Boolean);
-        if (!areas.length || !originArea || originArea.includes('pending verification')) return false;
-        return areas.some((area) => originArea.includes(area) || area.includes(originArea));
-      });
+      // Refresh the shared partner records before assigning a farm pickup.
+      // This avoids selecting a stale/demo partner from the browser's local cache.
+      const latestPartners = await this.getDeliveryPartners();
+      const originArea = (qc.farmLocation || '').trim();
+      const normalizeArea = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
+      const origin = normalizeArea(originArea);
+      const partner = latestPartners
+        .filter((candidate) => {
+          if (candidate.approvalStatus !== 'APPROVED' || !candidate.canPickup) return false;
+          const activeJobs = Number(candidate.activeJobsCount || 0);
+          if (!Number.isFinite(activeJobs) || activeJobs >= 8) return false;
+          if (!origin || origin.includes('pending verification')) return false;
+          const serviceDistricts = Array.isArray((candidate as DeliveryPartner & { serviceDistricts?: string[] }).serviceDistricts)
+            ? (candidate as DeliveryPartner & { serviceDistricts?: string[] }).serviceDistricts || []
+            : [];
+          const areas = [
+            ...serviceDistricts,
+            ...(candidate.assignedAreas || []),
+            candidate.preferredArea || '',
+            (candidate as DeliveryPartner & { district?: string }).district || '',
+            (candidate as DeliveryPartner & { upazila?: string }).upazila || '',
+          ].map((area) => normalizeArea(area)).filter(Boolean);
+          // Match complete area tokens to avoid accidental substring matches.
+          return areas.some((area) => ` ${origin} `.includes(` ${area} `));
+        })
+        .sort((a, b) => Number(a.activeJobsCount || 0) - Number(b.activeJobsCount || 0) || Number(b.rating || 0) - Number(a.rating || 0))[0];
       if (partner) {
         const pickupJob: LogisticsJob = {
           id: `job-${Date.now()}`,
