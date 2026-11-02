@@ -1139,14 +1139,19 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     if (!partner) throw new Error('Partner not found');
 
     const now = new Date().toISOString().substring(0, 10);
-    partner.approvalStatus = status;
-    partner.approvedBy = `${approverName} (${approverRole === 'ADMIN' ? 'Admin' : 'Warehouse Manager'})`;
-    partner.approvalDate = now;
-    partner.approverRole = approverRole;
-    if (notes) {
-      partner.approvalNotes = notes;
-    }
+    const updatedPartner: DeliveryPartner & { status?: string } = {
+      ...partner,
+      approvalStatus: status,
+      status,
+      approvedBy: `${approverName} (${approverRole === 'ADMIN' ? 'Admin' : 'Warehouse Manager'})`,
+      approvalDate: now,
+      approverRole,
+      ...(notes ? { approvalNotes: notes } : {}),
+    };
 
+    // Persist approval in the shared backend record before updating local state.
+    await saveBackendRecord('deliveryPartners', updatedPartner);
+    Object.assign(partner, updatedPartner);
     localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
     return partner;
   },
