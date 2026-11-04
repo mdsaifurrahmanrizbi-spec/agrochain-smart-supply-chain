@@ -43,13 +43,30 @@ export const DeliveryDashboard: React.FC = () => {
   const [otpSuccess, setOtpSuccess] = useState<string | null>(null);
 
   const [partner, setPartner] = useState<import('../../types').DeliveryPartner | null>(null);
+  const [partnerLoading, setPartnerLoading] = useState(true);
+  const [partnerLoadError, setPartnerLoadError] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
+    setPartnerLoading(true);
+    setPartnerLoadError(null);
     agroApi.getDeliveryPartners().then((partners) => {
-      const own = partners.find((p) => p.id === user?.id ||
-        (p as import('../../types').DeliveryPartner & { userId?: string }).userId === user?.id ||
-        p.email?.toLowerCase() === user?.email?.toLowerCase());
-      if (active) setPartner(own || null);
+      // Prefer the explicit account link; only fall back to ID/email for legacy records.
+      const own = partners.find((p) =>
+        (p as import('../../types').DeliveryPartner & { userId?: string }).userId === user?.id
+      ) || partners.find((p) => p.id === user?.id) || partners.find((p) =>
+        Boolean(user?.email) && p.email?.trim().toLowerCase() === user.email.trim().toLowerCase()
+      );
+      if (!active) return;
+      setPartner(own || null);
+      if (!own) setPartnerLoadError('No delivery-partner profile is linked to this signed-in account. Please contact support.');
+      // Jobs are linked to the delivery-partner record ID, which may differ from the login user ID.
+      setJobs(store.jobs.filter((job) => Boolean(own?.id) && job.partnerId === own?.id));
+    }).catch((error: unknown) => {
+      if (!active) return;
+      setPartner(null);
+      setPartnerLoadError(error instanceof Error ? error.message : 'Could not load your delivery-partner profile.');
+    }).finally(() => {
+      if (active) setPartnerLoading(false);
     });
     return () => { active = false; };
   }, [user?.id, user?.email]);
@@ -150,7 +167,7 @@ export const DeliveryDashboard: React.FC = () => {
                   : 'bg-amber-50 text-amber-800 border-amber-200'
               }`}
             >
-              {partner?.approvalStatus || 'PENDING_APPROVAL'}
+              {partnerLoading ? 'LOADING…' : partner ? partner.approvalStatus : 'PROFILE UNAVAILABLE'}
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
@@ -196,11 +213,22 @@ export const DeliveryDashboard: React.FC = () => {
       )}
 
       {/* Account Status Notice if not approved */}
-      {!isApproved && (
+      {partnerLoading && (
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+          Loading your approved partner profile and assigned operational areas…
+        </div>
+      )}
+      {!partnerLoading && partnerLoadError && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800">
+          <span className="font-bold">Partner profile could not be confirmed.</span>
+          <p className="mt-1">{partnerLoadError}</p>
+        </div>
+      )}
+      {!partnerLoading && partner && !isApproved && (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
           <div>
-            <span className="font-bold">Partner Account Status: {partner?.approvalStatus || 'PENDING_APPROVAL'}</span>
+            <span className="font-bold">Partner Account Status: {partner.approvalStatus}</span>
             <p className="mt-0.5 text-amber-800">
               Only approved delivery partners can accept and fulfill assignments. An Administrator or Warehouse Manager must approve your registration.
             </p>
