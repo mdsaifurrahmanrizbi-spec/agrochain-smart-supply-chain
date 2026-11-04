@@ -55,9 +55,10 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function getBackendRecords<T>(resource: string): Promise<T[]> {
+async function getBackendRecords<T>(resource: string, signal?: AbortSignal): Promise<T[]> {
   const response = await fetch(`${API_BASE_URL}/records/${resource}`, {
     headers: authHeaders(),
+    signal,
   });
 
   if (!response.ok) {
@@ -1099,8 +1100,11 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
 
   // UPDATE 2: Delivery Partner Approvals (Admin & Warehouse Manager)
   async getDeliveryPartners(): Promise<DeliveryPartner[]> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
-      const backendPartners = await getBackendRecords<DeliveryPartner & { status?: string; serviceDistricts?: string[] }>('deliveryPartners');
+      // Never leave partner dashboards spinning forever if the API or a cold-starting host stalls.
+      const backendPartners = await getBackendRecords<DeliveryPartner & { status?: string; serviceDistricts?: string[] }>('deliveryPartners', controller.signal);
       const normalized = backendPartners.map((partner) => {
         // The approval endpoint persists the canonical account status in `status`.
         // Older records can retain a stale approvalStatus field, so prefer a
@@ -1141,6 +1145,8 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     } catch (error) {
       console.warn('Could not load persisted delivery partner profiles:', error);
       return store.deliveryPartners;
+    } finally {
+      clearTimeout(timeoutId);
     }
   },
 
