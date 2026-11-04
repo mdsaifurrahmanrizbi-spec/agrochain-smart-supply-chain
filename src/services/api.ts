@@ -1101,22 +1101,38 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
   async getDeliveryPartners(): Promise<DeliveryPartner[]> {
     try {
       const backendPartners = await getBackendRecords<DeliveryPartner & { status?: string; serviceDistricts?: string[] }>('deliveryPartners');
-      const normalized = backendPartners.map((partner) => ({
-        ...partner,
-        approvalStatus: partner.approvalStatus || (
-          partner.status === 'APPROVED' ? 'APPROVED' :
-          partner.status === 'REJECTED' ? 'REJECTED' :
-          partner.status === 'SUSPENDED' ? 'SUSPENDED' : 'PENDING_APPROVAL'
-        ),
-        assignedAreas: partner.assignedAreas || [],
-        canPickup: Boolean(partner.canPickup),
-        canDeliver: Boolean(partner.canDeliver),
-        rating: Number(partner.rating || 5),
-        activeJobsCount: Number(partner.activeJobsCount || 0),
-        completedJobsTotal: Number(partner.completedJobsTotal || 0),
-        codCollectedToday: Number(partner.codCollectedToday || 0),
-        codPendingDeposit: Number(partner.codPendingDeposit || 0),
-      })) as DeliveryPartner[];
+      const normalized = backendPartners.map((partner) => {
+        // The approval endpoint persists the canonical account status in `status`.
+        // Older records can retain a stale approvalStatus field, so prefer a
+        // recognized canonical status before consulting the legacy field.
+        const canonicalStatus = String(partner.status || '').toUpperCase();
+        const legacyApprovalStatus = String(partner.approvalStatus || '').toUpperCase();
+        const approvalStatus = ['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING_APPROVAL'].includes(canonicalStatus)
+          ? canonicalStatus
+          : ['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING_APPROVAL'].includes(legacyApprovalStatus)
+            ? legacyApprovalStatus
+            : 'PENDING_APPROVAL';
+
+        const areaCandidates = [
+          partner.assignedAreas,
+          (partner as DeliveryPartner & { serviceAreas?: string[] }).serviceAreas,
+          (partner as DeliveryPartner & { workingAreas?: string[] }).workingAreas,
+        ];
+        const assignedAreas = areaCandidates.find((areas) => Array.isArray(areas) && areas.length > 0) || [];
+
+        return {
+          ...partner,
+          approvalStatus: approvalStatus as DeliveryPartner['approvalStatus'],
+          assignedAreas,
+          canPickup: Boolean(partner.canPickup),
+          canDeliver: Boolean(partner.canDeliver),
+          rating: Number(partner.rating || 5),
+          activeJobsCount: Number(partner.activeJobsCount || 0),
+          completedJobsTotal: Number(partner.completedJobsTotal || 0),
+          codCollectedToday: Number(partner.codCollectedToday || 0),
+          codPendingDeposit: Number(partner.codPendingDeposit || 0),
+        };
+      }) as DeliveryPartner[];
       // A successful backend response is authoritative, including an empty list.
       // Never merge seeded/local demo partners into persisted account data.
       store.deliveryPartners = normalized;
