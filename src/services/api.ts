@@ -59,6 +59,8 @@ async function getBackendRecords<T>(resource: string, signal?: AbortSignal): Pro
   const response = await fetch(`${API_BASE_URL}/records/${resource}`, {
     headers: authHeaders(),
     signal,
+    // Avoid cached 304 responses: this endpoint expects a readable JSON record list.
+    cache: 'no-store',
   });
 
   if (!response.ok) {
