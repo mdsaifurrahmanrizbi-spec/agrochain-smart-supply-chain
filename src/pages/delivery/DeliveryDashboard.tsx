@@ -49,26 +49,39 @@ export const DeliveryDashboard: React.FC = () => {
     let active = true;
     setPartnerLoading(true);
     setPartnerLoadError(null);
+    // Keep the page from remaining in LOADING state if a browser/network request stalls.
+    let settled = false;
+    const loadingTimeout = window.setTimeout(() => {
+      if (!active || settled) return;
+      settled = true;
+      setPartner(null);
+      setPartnerLoadError('Partner profile request timed out. Please refresh the page and try again.');
+      setPartnerLoading(false);
+    }, 15000);
+
     agroApi.getDeliveryPartners().then((partners) => {
+      if (!active || settled) return;
       // Prefer the explicit account link; only fall back to ID/email for legacy records.
       const own = partners.find((p) =>
         (p as import('../../types').DeliveryPartner & { userId?: string }).userId === user?.id
       ) || partners.find((p) => p.id === user?.id) || partners.find((p) =>
         Boolean(user?.email) && p.email?.trim().toLowerCase() === user?.email?.trim().toLowerCase()
       );
-      if (!active) return;
       setPartner(own || null);
-      if (!own) setPartnerLoadError('No delivery-partner profile is linked to this signed-in account. Please contact support.');
+      if (!own) setPartnerLoadError('No delivery-partner profile is linked to this signed-in account.');
       // Jobs are linked to the delivery-partner record ID, which may differ from the login user ID.
       setJobs(store.jobs.filter((job) => Boolean(own?.id) && job.partnerId === own?.id));
     }).catch((error: unknown) => {
-      if (!active) return;
+      if (!active || settled) return;
       setPartner(null);
       setPartnerLoadError(error instanceof Error ? error.message : 'Could not load your delivery-partner profile.');
     }).finally(() => {
-      if (active) setPartnerLoading(false);
+      if (!active || settled) return;
+      settled = true;
+      window.clearTimeout(loadingTimeout);
+      setPartnerLoading(false);
     });
-    return () => { active = false; };
+    return () => { active = false; window.clearTimeout(loadingTimeout); };
   }, [user?.id, user?.email]);
   const isApproved = partner?.approvalStatus === 'APPROVED';
 
