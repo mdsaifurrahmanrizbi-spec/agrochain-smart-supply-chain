@@ -1387,7 +1387,8 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
           [existing.orderId, partner.id]
         );
         const pickupJob = pickupResult.rows[0]?.data;
-        if (pickupJob && !['CANCELLED', 'COMPLETED', 'PICKED_UP'].includes(String(pickupJob.status || '').toUpperCase())) {
+        // Farm-gate QC is permitted only after this partner accepts the assignment.
+        if (pickupJob && String(pickupJob.status || '').toUpperCase() === 'ACCEPTED') {
           assignedPickupQcPartner = { id: partner.id, name: partner.data?.name || partner.data?.partnerName || 'Assigned pickup person' };
         }
       }
