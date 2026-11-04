@@ -54,7 +54,7 @@ export const DeliveryDashboard: React.FC = () => {
       const own = partners.find((p) =>
         (p as import('../../types').DeliveryPartner & { userId?: string }).userId === user?.id
       ) || partners.find((p) => p.id === user?.id) || partners.find((p) =>
-        Boolean(user?.email) && p.email?.trim().toLowerCase() === user.email.trim().toLowerCase()
+        Boolean(user?.email) && p.email?.trim().toLowerCase() === user?.email?.trim().toLowerCase()
       );
       if (!active) return;
       setPartner(own || null);
