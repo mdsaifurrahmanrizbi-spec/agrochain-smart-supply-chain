@@ -41,6 +41,10 @@ export const BuyerTracking: React.FC = () => {
     return () => { active = false; };
   }, [order?.id]);
 
+  const farmQc = store.qualityChecks.find((check) =>
+    check.orderId === order?.id || check.id === order?.qualityCheckId
+  );
+
   // Check if current user is the owner of this order (or demo viewing customer panel)
   const isCorrectCustomer = user?.role === 'buyer' || user?.role === 'admin' || !user;
 
@@ -240,6 +244,27 @@ export const BuyerTracking: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {order.qualityStatus === 'REJECTED' && (
+        <section className="rounded-xl border border-rose-200 bg-rose-50 p-4 sm:p-5" role="status" aria-live="polite">
+          <div className="flex items-center gap-2 text-rose-900">
+            <AlertTriangle className="h-5 w-5" />
+            <h2 className="text-sm font-bold">Farm Quality Check Rejected</h2>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-rose-900">
+            This consignment did not pass the farm-gate quality inspection. Pickup is blocked and the order cannot proceed to the warehouse.
+          </p>
+          <div className="mt-3 rounded-lg border border-rose-200 bg-white p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-rose-700">Reason for rejection</div>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+              {farmQc?.remarks || events.find((event) => event.title.includes('QUALITY CHECK REJECTED'))?.description || 'The inspection was rejected. Please contact AgroChain support for details.'}
+            </p>
+            {farmQc?.inspectorName && (
+              <p className="mt-2 text-[11px] text-slate-500">Inspected by {farmQc.inspectorName} · {farmQc.inspectionDate}</p>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* The Reusable Tracking Timeline Component */}
       <TrackingTimeline events={events} orderNumber={order.orderNumber} />

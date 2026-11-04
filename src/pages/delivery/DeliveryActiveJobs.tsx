@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -20,12 +20,36 @@ import { Link, useNavigate } from 'react-router-dom';
 export const DeliveryActiveJobs: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const partnerId = user?.id === 'u-delivery-1' ? 'dp-1' : 'dp-1';
-  const [jobs, setJobs] = useState(store.jobs.filter((j) => j.partnerId === partnerId));
+  const [partnerId, setPartnerId] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<typeof store.jobs>([]);
+  const [currentPartner, setCurrentPartner] = useState<(typeof store.deliveryPartners)[number] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const currentPartner = store.deliveryPartners.find((p) => p.id === partnerId);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const partners = await agroApi.getDeliveryPartners();
+        const partner = partners.find((p) =>
+          (p as typeof p & { userId?: string }).userId === user?.id ||
+          p.id === user?.id ||
+          (!!user?.email && p.email?.toLowerCase() === user.email.toLowerCase())
+        ) || null;
+        if (!active) return;
+        setCurrentPartner(partner);
+        setPartnerId(partner?.id || null);
+        if (!partner) { setJobs([]); return; }
+        const assignedJobs = await agroApi.getLogisticsJobs(partner.id);
+        if (active) setJobs(assignedJobs.filter((job) => job.partnerId === partner.id));
+      } catch (error) {
+        console.error('Could not load this delivery partner\'s assigned jobs:', error);
+        if (active) { setCurrentPartner(null); setPartnerId(null); setJobs([]); }
+      }
+    })();
+    return () => { active = false; };
+  }, [user?.id, user?.email]);
+
   const isApproved = currentPartner?.approvalStatus === 'APPROVED';
 
   const handleUpdate = async (jobId: string, status: any) => {
@@ -197,6 +221,7 @@ export const DeliveryActiveJobs: React.FC = () => {
                     <button
                       onClick={async () => {
                         try {
+                          if (!partnerId) throw new Error('Your delivery partner profile could not be verified.');
                           await agroApi.deliveryPartnerConfirmReceipt(job.orderId, partnerId);
                           setJobs([...store.jobs.filter((j) => j.partnerId === partnerId)]);
                           setNotice('Produce receipt confirmed from local godown!');

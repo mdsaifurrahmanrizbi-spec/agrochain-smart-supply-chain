@@ -89,9 +89,20 @@ export const DeliveryPickups: React.FC = () => {
         status: qcForm.decision,
         remarks: qcForm.remarks.trim(),
       });
+
+      // A single farm-gate action completes both QC and physical pickup.
+      // The backend still independently verifies QC approval and job ownership.
+      if (result.status === 'APPROVED') {
+        await agroApi.updateJobStatus(jobId, 'PICKED_UP');
+      }
+
       setJobs(store.jobs.filter((item) => item.type === 'PICKUP' && item.partnerId === currentPartner.id));
       setSelectedQcJob(null);
-      setNotice(result.status === 'APPROVED' ? 'QC passed. Farm pickup is now unlocked.' : result.status === 'REJECTED' ? 'QC failed. Pickup remains blocked.' : 'QC requires recheck. Pickup remains on hold.');
+      setNotice(result.status === 'APPROVED'
+        ? 'QC PASSED — PRODUCT PICKED UP. Ready for warehouse handover.'
+        : result.status === 'REJECTED'
+          ? 'QC REJECTED. Pickup blocked. Rejection reason is recorded for the order parties.'
+          : 'QC requires recheck. Pickup remains on hold.');
       setTimeout(() => setNotice(null), 4500);
     } catch (err: any) {
       setErrorMsg(err.message || 'Could not save farm QC inspection.');

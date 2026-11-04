@@ -1389,7 +1389,7 @@ await saveBackendRecord('qualityChecks', qc);
 
 if (order && update.status) {
   if (update.status === 'REJECTED') {
-    order.orderStatus = 'CANCELLED';
+    order.orderStatus = 'QC_REJECTED';
     order.updatedAt = now;
   }
 
