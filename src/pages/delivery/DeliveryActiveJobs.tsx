@@ -45,7 +45,8 @@ export const DeliveryActiveJobs: React.FC = () => {
     return () => { active = false; };
   }, [user?.id, user?.email]);
 
-  const isApproved = String((currentPartner as (typeof currentPartner & { status?: string }) | null)?.status || currentPartner?.approvalStatus || '').trim().toUpperCase() === 'APPROVED';
+  const partnerApprovalStatus = String(currentPartner?.approvalStatus || 'PENDING_APPROVAL').trim().toUpperCase();
+  const isApproved = partnerApprovalStatus === 'APPROVED';
 
   const handleUpdate = async (jobId: string, status: any) => {
     setErrorMsg(null);
