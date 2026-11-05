@@ -49,7 +49,8 @@ export const DeliveryDeliveries: React.FC = () => {
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const isApproved = String((currentPartner as (typeof currentPartner & { status?: string }) | null)?.status || currentPartner?.approvalStatus || '').toUpperCase() === 'APPROVED';
+  const partnerApprovalStatus = String(currentPartner?.approvalStatus || 'PENDING_APPROVAL').trim().toUpperCase();
+  const isApproved = partnerApprovalStatus === 'APPROVED';
   const partnerId = currentPartner?.id || '';
 
   const refreshJobs = () => {
@@ -168,7 +169,7 @@ export const DeliveryDeliveries: React.FC = () => {
           <div>
             <span className="font-bold">Account Registration Pending or Suspended:</span>
             <p className="mt-0.5">
-              Your delivery partner status is currently <strong>{String((currentPartner as (typeof currentPartner & { status?: string }) | null)?.status || currentPartner?.approvalStatus || 'PENDING_APPROVAL').toUpperCase()}</strong>.
+              Your delivery partner status is currently <strong>{partnerApprovalStatus}</strong>.
               Only approved delivery partners are permitted to accept jobs and verify deliveries. Contact your regional Warehouse Manager or Administrator.
             </p>
           </div>

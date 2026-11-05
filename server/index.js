@@ -1476,7 +1476,16 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       );
       const partner = partnerResult.rows[0]?.data;
       const partnerId = partnerResult.rows[0]?.id;
-      const partnerApprovalStatus = String(partner?.status || partner?.approvalStatus || '').trim().toUpperCase();
+      // Account status (for example ACTIVE) is not partner approval.
+      // Trust explicit approvalStatus first; status is only a legacy fallback.
+      const explicitApprovalStatus = String(partner?.approvalStatus || '').trim().toUpperCase();
+      const legacyPartnerStatus = String(partner?.status || '').trim().toUpperCase();
+      const validPartnerApprovalStatuses = ['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING_APPROVAL'];
+      const partnerApprovalStatus = validPartnerApprovalStatuses.includes(explicitApprovalStatus)
+        ? explicitApprovalStatus
+        : validPartnerApprovalStatuses.includes(legacyPartnerStatus)
+          ? legacyPartnerStatus
+          : '';
       const allowedStatuses = data.type === 'DELIVERY'
         ? ['ASSIGNED', 'ACCEPTED', 'DECLINED', 'REJECTED', 'EN_ROUTE', 'ARRIVED_AT_GODOWN', 'COLLECTED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED']
         : ['ASSIGNED', 'ACCEPTED', 'DECLINED', 'REJECTED', 'QC_PENDING', 'EN_ROUTE', 'PICKED_UP', 'WAREHOUSE_HANDOVER', 'ARRIVED_AT_GODOWN', 'FAILED'];

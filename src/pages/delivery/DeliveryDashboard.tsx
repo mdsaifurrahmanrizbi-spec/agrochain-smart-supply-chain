@@ -87,7 +87,7 @@ export const DeliveryDashboard: React.FC = () => {
     });
     return () => { active = false; window.clearTimeout(loadingTimeout); };
   }, [user?.id, user?.email]);
-  const partnerStatus = String((partner as (import('../../types').DeliveryPartner & { status?: string }) | null)?.status || partner?.approvalStatus || '').toUpperCase();
+  const partnerStatus = String(partner?.approvalStatus || 'PENDING_APPROVAL').trim().toUpperCase();
   const isApproved = partnerStatus === 'APPROVED';
 
   const todayPickups = jobs.filter((j) => j.type === 'PICKUP');
