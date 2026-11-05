@@ -1465,15 +1465,16 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       );
       const accountEmail = accountResult.rows[0]?.email || req.auth.email || '';
       const partnerResult = await client.query(
-        "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (data->>'userId' = $1 OR lower(data->>'email') = lower($2)) LIMIT 1",
+        "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (id = $1 OR data->>'userId' = $1 OR lower(data->>'email') = lower($2)) ORDER BY CASE WHEN id = $1 THEN 0 WHEN data->>'userId' = $1 THEN 1 ELSE 2 END LIMIT 1",
         [req.auth.sub, accountEmail]
       );
       const partner = partnerResult.rows[0]?.data;
       const partnerId = partnerResult.rows[0]?.id;
+      const partnerApprovalStatus = String(partner?.status || partner?.approvalStatus || '').trim().toUpperCase();
       const allowedStatuses = data.type === 'DELIVERY'
         ? ['ASSIGNED', 'ACCEPTED', 'DECLINED', 'REJECTED', 'EN_ROUTE', 'ARRIVED_AT_GODOWN', 'COLLECTED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED']
         : ['ASSIGNED', 'ACCEPTED', 'DECLINED', 'REJECTED', 'QC_PENDING', 'EN_ROUTE', 'PICKED_UP', 'WAREHOUSE_HANDOVER', 'ARRIVED_AT_GODOWN', 'FAILED'];
-      if (!partnerId || partner?.approvalStatus !== 'APPROVED' ||
+      if (!partnerId || partnerApprovalStatus !== 'APPROVED' ||
           existing.partnerId !== partnerId || data.partnerId !== partnerId ||
           data.type !== existing.type ||
           !allowedStatuses.includes(String(data.status || '').toUpperCase())) {
