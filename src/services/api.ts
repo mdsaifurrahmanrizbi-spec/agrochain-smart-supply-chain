@@ -1108,15 +1108,15 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       // Never leave partner dashboards spinning forever if the API or a cold-starting host stalls.
       const backendPartners = await getBackendRecords<DeliveryPartner & { status?: string; serviceDistricts?: string[] }>('deliveryPartners', controller.signal);
       const normalized = backendPartners.map((partner) => {
-        // The approval endpoint persists the canonical account status in `status`.
-        // Older records can retain a stale approvalStatus field, so prefer a
-        // recognized canonical status before consulting the legacy field.
-        const canonicalStatus = String(partner.status || '').toUpperCase();
-        const legacyApprovalStatus = String(partner.approvalStatus || '').toUpperCase();
-        const approvalStatus = ['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING_APPROVAL'].includes(canonicalStatus)
-          ? canonicalStatus
-          : ['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING_APPROVAL'].includes(legacyApprovalStatus)
-            ? legacyApprovalStatus
+        // Partner approval is separate from the login account status (ACTIVE/PENDING).
+        // Prefer the explicit approvalStatus field; use status only for legacy records.
+        const explicitApprovalStatus = String(partner.approvalStatus || '').trim().toUpperCase();
+        const legacyStatus = String(partner.status || '').trim().toUpperCase();
+        const validApprovalStatuses = ['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING_APPROVAL'];
+        const approvalStatus = validApprovalStatuses.includes(explicitApprovalStatus)
+          ? explicitApprovalStatus
+          : validApprovalStatuses.includes(legacyStatus)
+            ? legacyStatus
             : 'PENDING_APPROVAL';
 
         const areaCandidates = [
