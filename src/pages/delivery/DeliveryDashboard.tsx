@@ -62,8 +62,19 @@ export const DeliveryDashboard: React.FC = () => {
     agroApi.getMyDeliveryPartner(user?.id || '', user?.email).then((own) => {
       if (!active || settled) return;
       setPartner(own);
-      if (!own) setPartnerLoadError('No delivery-partner profile is linked to this signed-in account.');
-      setJobs(store.jobs.filter((job) => Boolean(own?.id) && job.partnerId === own?.id));
+      if (!own) {
+        setPartnerLoadError('No delivery-partner profile is linked to this signed-in account.');
+        setJobs([]);
+        return;
+      }
+      // Load persisted assignments for the resolved partner profile, not only
+      // whatever happens to be present in the browser's local cache.
+      setJobs(store.jobs.filter((job) => job.partnerId === own.id));
+      agroApi.getLogisticsJobs(own.id).then((assignedJobs) => {
+        if (active) setJobs(assignedJobs.filter((job) => job.partnerId === own.id));
+      }).catch((error) => {
+        console.error('Could not load assigned delivery jobs:', error);
+      });
     }).catch((error: unknown) => {
       if (!active || settled) return;
       setPartner(null);
