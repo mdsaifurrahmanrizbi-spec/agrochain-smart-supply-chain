@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { store, agroApi } from '../../services/api';
@@ -45,47 +45,70 @@ export const DeliveryDashboard: React.FC = () => {
   const [partnerLoadError, setPartnerLoadError] = useState<string | null>(null);
   // Job ownership uses the persisted partner profile ID, not necessarily the auth user ID.
   const partnerId = partner?.id || user?.id || '';
+  // A monotonically increasing request ID ensures only the latest effect owns
+  // the loading state. Cleanup invalidates old responses without blocking the
+  // latest request from completing its own loading lifecycle.
+  const partnerRequestId = useRef(0);
+
   useEffect(() => {
-    let active = true;
+    const requestId = ++partnerRequestId.current;
     setPartnerLoading(true);
     setPartnerLoadError(null);
-    // Keep the page from remaining in LOADING state if a browser/network request stalls.
-    let settled = false;
-    const loadingTimeout = window.setTimeout(() => {
-      if (!active || settled) return;
-      settled = true;
+
+    if (!user?.id) {
       setPartner(null);
-      setPartnerLoadError('Partner profile request timed out. Please refresh the page and try again.');
+      setJobs([]);
+      setPartnerLoadError('Your signed-in account could not be identified. Please sign in again.');
+      setPartnerLoading(false);
+      return () => {
+        if (partnerRequestId.current === requestId) partnerRequestId.current += 1;
+      };
+    }
+
+    // Each active effect arms its own timeout. Dependency changes create a new
+    // effect and therefore a new timeout; unmount cleanup only cancels its own.
+    const loadingTimeout = window.setTimeout(() => {
+      if (partnerRequestId.current !== requestId) return;
+      setPartnerLoadError('Partner profile request timed out. Please check your connection and try again.');
       setPartnerLoading(false);
     }, 15000);
 
-    agroApi.getMyDeliveryPartner(user?.id || '', user?.email).then((own) => {
-      if (!active || settled) return;
+    agroApi.getMyDeliveryPartner(user.id, user.email).then((own) => {
+      if (partnerRequestId.current !== requestId) return;
       setPartner(own);
       if (!own) {
         setPartnerLoadError('No delivery-partner profile is linked to this signed-in account.');
         setJobs([]);
         return;
       }
+
+      setPartnerLoadError(null);
       // Load persisted assignments for the resolved partner profile, not only
       // whatever happens to be present in the browser's local cache.
       setJobs(store.jobs.filter((job) => job.partnerId === own.id));
       agroApi.getLogisticsJobs(own.id).then((assignedJobs) => {
-        if (active) setJobs(assignedJobs.filter((job) => job.partnerId === own.id));
+        if (partnerRequestId.current === requestId) {
+          setJobs(assignedJobs.filter((job) => job.partnerId === own.id));
+        }
       }).catch((error) => {
-        console.error('Could not load assigned delivery jobs:', error);
+        if (partnerRequestId.current === requestId) {
+          console.error('Could not load assigned delivery jobs:', error);
+        }
       });
     }).catch((error: unknown) => {
-      if (!active || settled) return;
+      if (partnerRequestId.current !== requestId) return;
       setPartner(null);
       setPartnerLoadError(error instanceof Error ? error.message : 'Could not load your delivery-partner profile.');
     }).finally(() => {
-      if (!active || settled) return;
-      settled = true;
+      if (partnerRequestId.current !== requestId) return;
       window.clearTimeout(loadingTimeout);
       setPartnerLoading(false);
     });
-    return () => { active = false; window.clearTimeout(loadingTimeout); };
+
+    return () => {
+      if (partnerRequestId.current === requestId) partnerRequestId.current += 1;
+      window.clearTimeout(loadingTimeout);
+    };
   }, [user?.id, user?.email]);
   const partnerStatus = String(partner?.approvalStatus || 'PENDING_APPROVAL').trim().toUpperCase();
   const isApproved = partnerStatus === 'APPROVED';
