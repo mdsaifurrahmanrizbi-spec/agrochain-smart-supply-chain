@@ -27,9 +27,7 @@ import {
 export const DeliveryDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const partnerId = user?.id || '';
-
-  const [jobs, setJobs] = useState(store.jobs.filter((j) => !!partnerId && j.partnerId === partnerId));
+  const [jobs, setJobs] = useState<LogisticsJob[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -45,6 +43,8 @@ export const DeliveryDashboard: React.FC = () => {
   const [partner, setPartner] = useState<import('../../types').DeliveryPartner | null>(null);
   const [partnerLoading, setPartnerLoading] = useState(true);
   const [partnerLoadError, setPartnerLoadError] = useState<string | null>(null);
+  // Job ownership uses the persisted partner profile ID, not necessarily the auth user ID.
+  const partnerId = partner?.id || user?.id || '';
   useEffect(() => {
     let active = true;
     setPartnerLoading(true);
