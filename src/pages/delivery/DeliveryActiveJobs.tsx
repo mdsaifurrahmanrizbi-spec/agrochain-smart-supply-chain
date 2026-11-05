@@ -30,12 +30,7 @@ export const DeliveryActiveJobs: React.FC = () => {
     let active = true;
     (async () => {
       try {
-        const partners = await agroApi.getDeliveryPartners();
-        const partner = partners.find((p) =>
-          (p as typeof p & { userId?: string }).userId === user?.id ||
-          p.id === user?.id ||
-          (!!user?.email && p.email?.toLowerCase() === user.email.toLowerCase())
-        ) || null;
+        const partner = await agroApi.getMyDeliveryPartner(user?.id || '', user?.email);
         if (!active) return;
         setCurrentPartner(partner);
         setPartnerId(partner?.id || null);
@@ -50,7 +45,7 @@ export const DeliveryActiveJobs: React.FC = () => {
     return () => { active = false; };
   }, [user?.id, user?.email]);
 
-  const isApproved = currentPartner?.approvalStatus === 'APPROVED';
+  const isApproved = String((currentPartner as (typeof currentPartner & { status?: string }) | null)?.status || currentPartner?.approvalStatus || '').trim().toUpperCase() === 'APPROVED';
 
   const handleUpdate = async (jobId: string, status: any) => {
     setErrorMsg(null);
