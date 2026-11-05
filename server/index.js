@@ -1231,17 +1231,34 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       }
     }
 
-    if (req.auth.role === 'delivery' && resource === 'deliveryPartners') {
-      rows = rows.filter((row) => row.data?.userId === req.auth.sub);
-    }
-    if (req.auth.role === 'delivery' && resource === 'jobs') {
-      const ownPartnerIds = new Set(
-        (await pool.query(
-          "SELECT id FROM agrochain_records WHERE resource = 'deliveryPartners' AND data->>'userId' = $1",
-          [req.auth.sub]
-        )).rows.map((row) => row.id)
+    if (req.auth.role === 'delivery' && ['deliveryPartners', 'jobs'].includes(resource)) {
+      // Use one account identity rule everywhere: linked user ID, legacy profile ID,
+      // or the authenticated account email for older partner records.
+      const accountResult = await pool.query(
+        "SELECT email FROM auth_users WHERE id = $1 AND role = 'delivery' LIMIT 1",
+        [req.auth.sub]
       );
-      rows = rows.filter((row) => ownPartnerIds.has(row.data?.partnerId));
+      const accountEmail = String(accountResult.rows[0]?.email || '').trim().toLowerCase();
+      const partnerRows = await pool.query(
+        "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners'"
+      );
+      const ownPartners = partnerRows.rows.filter((row) =>
+        row.id === req.auth.sub ||
+        row.data?.userId === req.auth.sub ||
+        (accountEmail && String(row.data?.email || '').trim().toLowerCase() === accountEmail)
+      ).sort((left, right) => {
+        const priority = (row) => row.data?.userId === req.auth.sub ? 0 : row.id === req.auth.sub ? 1 : 2;
+        return priority(left) - priority(right);
+      });
+      // A login account must resolve to one canonical partner profile, not
+      // accidentally combine multiple legacy records sharing an email.
+      const ownPartner = ownPartners[0];
+      if (resource === 'deliveryPartners') {
+        rows = ownPartner ? [ownPartner] : [];
+      } else {
+        const ownPartnerIds = new Set(ownPartner ? [ownPartner.id] : []);
+        rows = rows.filter((row) => ownPartnerIds.has(row.data?.partnerId));
+      }
     }
 
     if (resource === 'orders') {
@@ -1454,15 +1471,16 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       );
       const accountEmail = accountResult.rows[0]?.email || req.auth.email || '';
       const partnerResult = await client.query(
-        "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (data->>'userId' = $1 OR lower(data->>'email') = lower($2)) LIMIT 1",
+        "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (id = $1 OR data->>'userId' = $1 OR lower(data->>'email') = lower($2)) ORDER BY CASE WHEN data->>'userId' = $1 THEN 0 WHEN id = $1 THEN 1 ELSE 2 END LIMIT 1",
         [req.auth.sub, accountEmail]
       );
       const partner = partnerResult.rows[0]?.data;
       const partnerId = partnerResult.rows[0]?.id;
+      const partnerApprovalStatus = String(partner?.status || partner?.approvalStatus || '').trim().toUpperCase();
       const allowedStatuses = data.type === 'DELIVERY'
         ? ['ASSIGNED', 'ACCEPTED', 'DECLINED', 'REJECTED', 'EN_ROUTE', 'ARRIVED_AT_GODOWN', 'COLLECTED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED']
         : ['ASSIGNED', 'ACCEPTED', 'DECLINED', 'REJECTED', 'QC_PENDING', 'EN_ROUTE', 'PICKED_UP', 'WAREHOUSE_HANDOVER', 'ARRIVED_AT_GODOWN', 'FAILED'];
-      if (!partnerId || partner?.approvalStatus !== 'APPROVED' ||
+      if (!partnerId || partnerApprovalStatus !== 'APPROVED' ||
           existing.partnerId !== partnerId || data.partnerId !== partnerId ||
           data.type !== existing.type ||
           !allowedStatuses.includes(String(data.status || '').toUpperCase())) {

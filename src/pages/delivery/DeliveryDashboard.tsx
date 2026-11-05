@@ -27,9 +27,7 @@ import {
 export const DeliveryDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const partnerId = user?.id || '';
-
-  const [jobs, setJobs] = useState(store.jobs.filter((j) => !!partnerId && j.partnerId === partnerId));
+  const [jobs, setJobs] = useState<LogisticsJob[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -45,6 +43,8 @@ export const DeliveryDashboard: React.FC = () => {
   const [partner, setPartner] = useState<import('../../types').DeliveryPartner | null>(null);
   const [partnerLoading, setPartnerLoading] = useState(true);
   const [partnerLoadError, setPartnerLoadError] = useState<string | null>(null);
+  // Job ownership uses the persisted partner profile ID, not necessarily the auth user ID.
+  const partnerId = partner?.id || user?.id || '';
   useEffect(() => {
     let active = true;
     setPartnerLoading(true);
@@ -59,18 +59,22 @@ export const DeliveryDashboard: React.FC = () => {
       setPartnerLoading(false);
     }, 15000);
 
-    agroApi.getDeliveryPartners().then((partners) => {
+    agroApi.getMyDeliveryPartner(user?.id || '', user?.email).then((own) => {
       if (!active || settled) return;
-      // Prefer the explicit account link; only fall back to ID/email for legacy records.
-      const own = partners.find((p) =>
-        (p as import('../../types').DeliveryPartner & { userId?: string }).userId === user?.id
-      ) || partners.find((p) => p.id === user?.id) || partners.find((p) =>
-        Boolean(user?.email) && p.email?.trim().toLowerCase() === user?.email?.trim().toLowerCase()
-      );
-      setPartner(own || null);
-      if (!own) setPartnerLoadError('No delivery-partner profile is linked to this signed-in account.');
-      // Jobs are linked to the delivery-partner record ID, which may differ from the login user ID.
-      setJobs(store.jobs.filter((job) => Boolean(own?.id) && job.partnerId === own?.id));
+      setPartner(own);
+      if (!own) {
+        setPartnerLoadError('No delivery-partner profile is linked to this signed-in account.');
+        setJobs([]);
+        return;
+      }
+      // Load persisted assignments for the resolved partner profile, not only
+      // whatever happens to be present in the browser's local cache.
+      setJobs(store.jobs.filter((job) => job.partnerId === own.id));
+      agroApi.getLogisticsJobs(own.id).then((assignedJobs) => {
+        if (active) setJobs(assignedJobs.filter((job) => job.partnerId === own.id));
+      }).catch((error) => {
+        console.error('Could not load assigned delivery jobs:', error);
+      });
     }).catch((error: unknown) => {
       if (!active || settled) return;
       setPartner(null);

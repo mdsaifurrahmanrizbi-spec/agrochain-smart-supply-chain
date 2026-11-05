@@ -11,13 +11,10 @@ export const DeliveryProfile: React.FC = () => {
 
   useEffect(() => {
     let active = true;
-    agroApi.getDeliveryPartners().then((partners) => {
-      const own = partners.find((item) =>
-        item.id === user?.id || (item as DeliveryPartner & { userId?: string }).userId === user?.id ||
-        item.email?.toLowerCase() === user?.email?.toLowerCase()
-      );
-      if (active) setPartner(own || null);
-    }).finally(() => { if (active) setLoading(false); });
+    agroApi.getMyDeliveryPartner(user?.id || '', user?.email)
+      .then((own) => { if (active) setPartner(own); })
+      .catch((error) => { console.error('Could not load your delivery partner profile:', error); if (active) setPartner(null); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [user?.id, user?.email]);
 
