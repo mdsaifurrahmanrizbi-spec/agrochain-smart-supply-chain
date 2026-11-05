@@ -1145,11 +1145,24 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       localStorage.setItem('agro_delivery_partners', JSON.stringify(normalized));
       return normalized;
     } catch (error) {
-      console.warn('Could not load persisted delivery partner profiles:', error);
-      return store.deliveryPartners;
+      console.error('Could not load persisted delivery partner profiles:', error);
+      throw error instanceof Error ? error : new Error('Could not load delivery partner profile');
     } finally {
       clearTimeout(timeoutId);
     }
+  },
+
+  // Resolve the signed-in delivery account to exactly one persisted partner profile.
+  // All delivery workspaces use this shared identity lookup.
+  async getMyDeliveryPartner(userId: string, email?: string): Promise<DeliveryPartner | null> {
+    if (!userId) throw new Error('Your signed-in delivery account could not be identified.');
+    const partners = await this.getDeliveryPartners();
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    return partners.find((partner) =>
+      (partner as DeliveryPartner & { userId?: string }).userId === userId ||
+      partner.id === userId ||
+      (normalizedEmail && String(partner.email || '').trim().toLowerCase() === normalizedEmail)
+    ) || null;
   },
 
   async updatePartnerApproval(
