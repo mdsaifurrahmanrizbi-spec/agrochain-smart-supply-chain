@@ -1159,10 +1159,10 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     const partners = await this.getDeliveryPartners();
     const normalizedEmail = String(email || '').trim().toLowerCase();
     return partners.find((partner) =>
-      (partner as DeliveryPartner & { userId?: string }).userId === userId ||
-      partner.id === userId ||
-      (normalizedEmail && String(partner.email || '').trim().toLowerCase() === normalizedEmail)
-    ) || null;
+      (partner as DeliveryPartner & { userId?: string }).userId === userId
+    ) || partners.find((partner) => partner.id === userId) || (normalizedEmail
+      ? partners.find((partner) => String(partner.email || '').trim().toLowerCase() === normalizedEmail)
+      : null) || null;
   },
 
   async updatePartnerApproval(
