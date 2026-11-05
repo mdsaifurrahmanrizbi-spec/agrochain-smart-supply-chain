@@ -83,7 +83,8 @@ export const DeliveryDashboard: React.FC = () => {
     });
     return () => { active = false; window.clearTimeout(loadingTimeout); };
   }, [user?.id, user?.email]);
-  const isApproved = partner?.approvalStatus === 'APPROVED';
+  const partnerStatus = String((partner as (import('../../types').DeliveryPartner & { status?: string }) | null)?.status || partner?.approvalStatus || '').toUpperCase();
+  const isApproved = partnerStatus === 'APPROVED';
 
   const todayPickups = jobs.filter((j) => j.type === 'PICKUP');
   const todayDeliveries = jobs.filter((j) => j.type === 'DELIVERY');
@@ -180,7 +181,7 @@ export const DeliveryDashboard: React.FC = () => {
                   : 'bg-amber-50 text-amber-800 border-amber-200'
               }`}
             >
-              {partnerLoading ? 'LOADING…' : partner ? partner.approvalStatus : 'PROFILE UNAVAILABLE'}
+              {partnerLoading ? 'LOADING…' : partner ? partnerStatus : 'PROFILE UNAVAILABLE'}
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900">

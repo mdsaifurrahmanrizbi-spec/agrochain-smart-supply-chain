@@ -24,7 +24,7 @@ export const DeliveryPickups: React.FC = () => {
     let active = true;
     (async () => {
       try {
-        const [partners] = await Promise.all([agroApi.getDeliveryPartners(), agroApi.getOrders()]);
+        const partners = await agroApi.getDeliveryPartners();
         const partner = partners.find((p) => (p as typeof p & { userId?: string }).userId === user?.id || p.id === user?.id || (!!user?.email && p.email?.toLowerCase() === user.email.toLowerCase())) || null;
         if (!active) return;
         setCurrentPartner(partner);
@@ -48,7 +48,7 @@ export const DeliveryPickups: React.FC = () => {
   });
 
   // The authenticated user's linked partner profile is loaded above; never fall back to a seeded partner.
-  const isApprovedPartner = currentPartner?.approvalStatus === 'APPROVED';
+  const isApprovedPartner = String((currentPartner as (typeof currentPartner & { status?: string }) | null)?.status || currentPartner?.approvalStatus || '').toUpperCase() === 'APPROVED';
 
   const handleAction = async (jobId: string, status: any) => {
     setErrorMsg(null);
@@ -124,7 +124,7 @@ export const DeliveryPickups: React.FC = () => {
           <div>
             <span className="font-bold">Partner Authorization Notice:</span>
             <p className="mt-0.5">
-              Your account status is currently <strong>{currentPartner?.approvalStatus || 'PENDING_APPROVAL'}</strong>.
+              Your account status is currently <strong>{String((currentPartner as (typeof currentPartner & { status?: string }) | null)?.status || currentPartner?.approvalStatus || 'PENDING_APPROVAL').toUpperCase()}</strong>.
               Only approved delivery partners can accept and fulfill pickup consignments.
             </p>
           </div>

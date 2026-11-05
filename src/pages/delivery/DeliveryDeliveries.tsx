@@ -28,7 +28,7 @@ export const DeliveryDeliveries: React.FC = () => {
     let active = true;
     (async () => {
       try {
-        const [partners] = await Promise.all([agroApi.getDeliveryPartners(), agroApi.getOrders()]);
+        const partners = await agroApi.getDeliveryPartners();
         const partner = partners.find((p) => (p as typeof p & { userId?: string }).userId === user?.id || p.id === user?.id || (!!user?.email && p.email?.toLowerCase() === user.email.toLowerCase())) || null;
         if (!active) return;
         setCurrentPartner(partner);
@@ -50,7 +50,7 @@ export const DeliveryDeliveries: React.FC = () => {
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const isApproved = currentPartner?.approvalStatus === 'APPROVED';
+  const isApproved = String((currentPartner as (typeof currentPartner & { status?: string }) | null)?.status || currentPartner?.approvalStatus || '').toUpperCase() === 'APPROVED';
   const partnerId = currentPartner?.id || '';
 
   const refreshJobs = () => {
@@ -169,7 +169,7 @@ export const DeliveryDeliveries: React.FC = () => {
           <div>
             <span className="font-bold">Account Registration Pending or Suspended:</span>
             <p className="mt-0.5">
-              Your delivery partner status is currently <strong>{currentPartner?.approvalStatus || 'PENDING_APPROVAL'}</strong>.
+              Your delivery partner status is currently <strong>{String((currentPartner as (typeof currentPartner & { status?: string }) | null)?.status || currentPartner?.approvalStatus || 'PENDING_APPROVAL').toUpperCase()}</strong>.
               Only approved delivery partners are permitted to accept jobs and verify deliveries. Contact your regional Warehouse Manager or Administrator.
             </p>
           </div>
