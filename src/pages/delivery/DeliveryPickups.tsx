@@ -24,8 +24,7 @@ export const DeliveryPickups: React.FC = () => {
     let active = true;
     (async () => {
       try {
-        const partners = await agroApi.getDeliveryPartners();
-        const partner = partners.find((p) => (p as typeof p & { userId?: string }).userId === user?.id || p.id === user?.id || (!!user?.email && p.email?.toLowerCase() === user.email.toLowerCase())) || null;
+        const partner = await agroApi.getMyDeliveryPartner(user?.id || '', user?.email);
         if (!active) return;
         setCurrentPartner(partner);
         if (!partner) { setJobs([]); return; }
