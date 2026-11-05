@@ -1231,17 +1231,28 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       }
     }
 
-    if (req.auth.role === 'delivery' && resource === 'deliveryPartners') {
-      rows = rows.filter((row) => row.data?.userId === req.auth.sub);
-    }
-    if (req.auth.role === 'delivery' && resource === 'jobs') {
-      const ownPartnerIds = new Set(
-        (await pool.query(
-          "SELECT id FROM agrochain_records WHERE resource = 'deliveryPartners' AND data->>'userId' = $1",
-          [req.auth.sub]
-        )).rows.map((row) => row.id)
+    if (req.auth.role === 'delivery' && ['deliveryPartners', 'jobs'].includes(resource)) {
+      // Use one account identity rule everywhere: linked user ID, legacy profile ID,
+      // or the authenticated account email for older partner records.
+      const accountResult = await pool.query(
+        "SELECT email FROM auth_users WHERE id = $1 AND role = 'delivery' LIMIT 1",
+        [req.auth.sub]
       );
-      rows = rows.filter((row) => ownPartnerIds.has(row.data?.partnerId));
+      const accountEmail = String(accountResult.rows[0]?.email || '').trim().toLowerCase();
+      const partnerRows = await pool.query(
+        "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners'"
+      );
+      const ownPartners = partnerRows.rows.filter((row) =>
+        row.id === req.auth.sub ||
+        row.data?.userId === req.auth.sub ||
+        (accountEmail && String(row.data?.email || '').trim().toLowerCase() === accountEmail)
+      );
+      if (resource === 'deliveryPartners') {
+        rows = ownPartners;
+      } else {
+        const ownPartnerIds = new Set(ownPartners.map((row) => row.id));
+        rows = rows.filter((row) => ownPartnerIds.has(row.data?.partnerId));
+      }
     }
 
     if (resource === 'orders') {
