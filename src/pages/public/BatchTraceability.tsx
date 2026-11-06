@@ -20,17 +20,10 @@ export const BatchTraceability: React.FC = () => {
 
     const loadTraceability = async () => {
       try {
-        const result = await agroApi.getBatchByCode(batchCode);
+        const result = await agroApi.getPublicBatchTraceability(batchCode);
         if (!active) return;
-        setBatch(result);
-        if (result) {
-          try {
-            const linkedProducts = await agroApi.getProductsForBatch(result.id);
-            if (active) setProducts(linkedProducts);
-          } catch (error) {
-            console.error('Could not load products linked to batch:', error);
-          }
-        }
+        setBatch(result?.batch || null);
+        setProducts(result?.products || []);
       } catch (error) {
         console.error('Could not load batch traceability record:', error);
         if (active) setLoadError('We could not connect to the traceability service. Please try again.');
