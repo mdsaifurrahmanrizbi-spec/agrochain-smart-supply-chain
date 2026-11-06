@@ -1,20 +1,59 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { store } from '../../services/api';
-import { ShieldCheck, Sprout, CalendarDays, Package, MapPin, ArrowLeft } from 'lucide-react';
+import { agroApi, store } from '../../services/api';
+import { CropBatch } from '../../types';
+import { ShieldCheck, Package, ArrowLeft } from 'lucide-react';
 
 export const BatchTraceability: React.FC = () => {
   const { batchCode = '' } = useParams<{ batchCode: string }>();
-  const batch = store.batches.find((item) => item.batchCode.toLowerCase() === batchCode.toLowerCase());
+  const [batch, setBatch] = useState<CropBatch | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setLoadError('');
+    setBatch(null);
+
+    agroApi.getBatchByCode(batchCode)
+      .then((result) => {
+        if (active) setBatch(result);
+      })
+      .catch((error) => {
+        console.error('Could not load batch traceability record:', error);
+        if (active) setLoadError('We could not connect to the traceability service. Please try again.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [batchCode]);
+
   const farm = batch ? store.farms.find((item) => item.id === batch.farmId) : undefined;
 
-  if (!batch) {
+  if (loading) {
+    return (
+      <main className="min-h-[70vh] bg-slate-50 px-4 py-16">
+        <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center">
+          <Package className="mx-auto mb-4 h-10 w-10 animate-pulse text-emerald-700" />
+          <h1 className="text-xl font-bold text-slate-900">Loading batch details…</h1>
+          <p className="mt-2 text-sm text-slate-600">Checking the latest saved traceability record.</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (loadError || !batch) {
     return (
       <main className="min-h-[70vh] bg-slate-50 px-4 py-16">
         <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center">
           <Package className="mx-auto mb-4 h-10 w-10 text-slate-400" />
-          <h1 className="text-xl font-bold text-slate-900">Batch not found</h1>
-          <p className="mt-2 text-sm text-slate-600">We could not find batch {batchCode} in the currently available traceability records.</p>
+          <h1 className="text-xl font-bold text-slate-900">{loadError ? 'Traceability service unavailable' : 'Batch not found'}</h1>
+          <p className="mt-2 break-words text-sm text-slate-600">
+            {loadError || `We could not find batch ${batchCode} in the saved traceability records.`}
+          </p>
           <Link to="/" className="mt-5 inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white"><ArrowLeft className="h-4 w-4" /> Back to AgroChain</Link>
         </div>
       </main>
@@ -54,11 +93,11 @@ export const BatchTraceability: React.FC = () => {
           </div>
           {batch.blockchainHash && (
             <div className="mx-5 mb-5 rounded-xl border border-slate-200 p-4 sm:mx-8 sm:mb-8">
-              <div className="flex items-center gap-2 text-sm font-bold text-slate-800"><ShieldCheck className="h-4 w-4 text-emerald-700" /> Ledger fingerprint</div>
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-800"><ShieldCheck className="h-4 w-4 text-emerald-700" /> Record fingerprint</div>
               <p className="mt-2 break-all font-mono text-xs text-slate-600">{batch.blockchainHash}</p>
             </div>
           )}
-          <div className="border-t border-slate-100 px-6 py-4 text-xs text-slate-500">Details shown are from the traceability record available to this AgroChain demo.</div>
+          <div className="border-t border-slate-100 px-6 py-4 text-xs text-slate-500">Details are loaded from the saved AgroChain batch record.</div>
         </section>
       </div>
     </main>
