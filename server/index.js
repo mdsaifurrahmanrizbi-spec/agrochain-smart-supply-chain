@@ -977,6 +977,46 @@ app.get('/api/me', requireAuth, async (req, res) => {
     return res.status(503).json({ message: 'Could not verify current account' });
   }
 });
+ 
+// Resolve the authenticated delivery account to its single persisted partner profile.
+// This avoids client-side list matching and keeps identity/approval authoritative.
+app.get('/api/delivery/me', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'delivery') {
+    return res.status(403).json({ message: 'Only delivery partner accounts can access this profile' });
+  }
+  try {
+    const accountResult = await pool.query(
+      "SELECT id, email, status FROM auth_users WHERE id = $1 AND role = 'delivery' LIMIT 1",
+      [req.auth.sub]
+    );
+    const account = accountResult.rows[0];
+    if (!account || account.status !== 'ACTIVE') {
+      return res.status(401).json({ message: 'Delivery account is inactive or unavailable' });
+    }
+
+    const partnerResult = await pool.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (data->>'userId' = $1 OR id = $1 OR lower(data->>'email') = lower($2)) ORDER BY CASE WHEN data->>'userId' = $1 THEN 0 WHEN id = $1 THEN 1 ELSE 2 END LIMIT 1",
+      [req.auth.sub, account.email]
+    );
+    const row = partnerResult.rows[0];
+    if (!row || !row.data) {
+      return res.status(404).json({ message: 'No delivery-partner profile is linked to this account' });
+    }
+
+    return res.set('Cache-Control', 'no-store').json({
+      partner: {
+        ...row.data,
+        id: row.id,
+        userId: req.auth.sub,
+        accountStatus: account.status,
+      },
+    });
+  } catch (error) {
+    console.error('Current delivery-partner profile lookup failed:', error.message);
+    return res.status(503).json({ message: 'Could not verify delivery-partner profile' });
+  }
+});
+
 
 const allowedResources = new Set([
   'users',
