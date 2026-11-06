@@ -1752,6 +1752,23 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         await client.query('ROLLBACK');
         return res.status(403).json({ message: 'You may only update your own approved partner job' });
       }
+
+      // Enforce the pickup sequence on the server: accept first, QC while
+      // accepted, then confirm physical pickup, then warehouse handover.
+      if (existing.type === 'PICKUP') {
+        const currentStatus = String(existing.status || '').toUpperCase();
+        const nextStatus = String(data.status || '').toUpperCase();
+        const transitions = {
+          ASSIGNED: ['ACCEPTED', 'DECLINED'],
+          ACCEPTED: ['PICKED_UP', 'FAILED'],
+          PICKED_UP: ['WAREHOUSE_HANDOVER'],
+          QC_PENDING: ['ACCEPTED', 'PICKED_UP', 'FAILED'],
+        };
+        if (!(transitions[currentStatus] || []).includes(nextStatus)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'Pickup must follow this sequence: Assigned → Accepted → Farm QC Pass → Picked Up → Warehouse Handover' });
+        }
+      }
     }
 
     // Pickup jobs can be created as an assignment before QC, but only the
