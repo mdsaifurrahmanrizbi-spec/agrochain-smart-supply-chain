@@ -1317,26 +1317,16 @@ async getQualityChecks(): Promise<QualityCheck[]> {
   try {
     const backendChecks = await getBackendRecords<QualityCheck>('qualityChecks');
 
-    // Keep backend records authoritative, but do not discard locally-created records
-    // when the backend collection is temporarily empty (e.g. first-time migration).
-    const checksById = new Map<string, QualityCheck>();
-    for (const qc of [...store.qualityChecks, ...backendChecks]) checksById.set(qc.id, qc);
-    store.qualityChecks = [...checksById.values()];
-
-    // Migrate local-only QC records without blocking the whole queue if one write fails.
-    for (const qc of store.qualityChecks) {
-      if (!backendChecks.some((backendQc) => backendQc.id === qc.id)) {
-        try { await saveBackendRecord('qualityChecks', qc); }
-        catch (error) { console.warn('Could not migrate QC record:', qc.id, error); }
-      }
-    }
+    // The backend is authoritative for inspection records. Never upload seeded
+    // browser/demo QC records into a real customer's or delivery partner's queue.
+    store.qualityChecks = backendChecks;
 
     // Reconcile confirmed orders created before the QC queue was introduced.
     // Create only a PENDING inspection record; never invent inspection results.
     const backendOrders = await getBackendRecords<Order>('orders');
     store.orders = backendOrders;
     for (const order of backendOrders) {
-      if (String(order.orderStatus || '').toUpperCase() !== 'CONFIRMED') continue;
+      if (!['CONFIRMED', 'QC_SCHEDULED', 'PICKUP_ASSIGNED'].includes(String(order.orderStatus || '').toUpperCase())) continue;
 
       const existing = store.qualityChecks.find((check) =>
         check.orderId === order.id ||
