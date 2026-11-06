@@ -112,16 +112,12 @@ export const DeliveryPickups: React.FC = () => {
         remarks: qcForm.remarks.trim(),
       });
 
-      // A single farm-gate action completes both QC and physical pickup.
-      // The backend still independently verifies QC approval and job ownership.
-      if (result.status === 'APPROVED') {
-        await agroApi.updateJobStatus(jobId, 'PICKED_UP');
-      }
-
+      // QC and physical collection are separate steps. Passing QC only unlocks
+      // the assigned partner's explicit Confirm Farm Pickup action.
       setJobs(store.jobs.filter((item) => item.type === 'PICKUP' && item.partnerId === currentPartner.id));
       setSelectedQcJob(null);
       setNotice(result.status === 'APPROVED'
-        ? 'QC PASSED — PRODUCT PICKED UP. Ready for warehouse handover.'
+        ? 'QC PASSED — pickup is now unlocked. Confirm Farm Pickup when you physically collect the product.'
         : result.status === 'REJECTED'
           ? 'QC REJECTED. Pickup blocked. Rejection reason is recorded for the order parties.'
           : 'QC requires recheck. Pickup remains on hold.');
@@ -136,7 +132,7 @@ export const DeliveryPickups: React.FC = () => {
       <div>
         <h1 className="text-xl font-bold text-slate-900">Farm Origin Pickups</h1>
         <p className="text-xs text-slate-500 mt-1">
-          Collect fresh agricultural produce from rural farms. Quality inspection must pass at the farm prior to pickup handover.
+          Collect fresh agricultural produce from rural farms. Accept the pickup request first, inspect the produce at the farm, then confirm physical pickup only after QC passes.
         </p>
       </div>
 
@@ -187,7 +183,7 @@ export const DeliveryPickups: React.FC = () => {
         <div className="space-y-1">
           <span className="font-bold">Farm-Gate Quality Control Rule:</span>
           <p className="text-emerald-800/90 leading-relaxed">
-            Quality Control occurs directly at the farmer's property <strong>before</strong> pickup completion.
+            The assigned partner must <strong>accept the request first</strong>, then perform QC at the farmer's property. QC Pass unlocks a separate physical pickup confirmation.
             If QC is <strong>APPROVED</strong>, collection is unlocked. If <strong>RECHECK_REQUIRED</strong> or <strong>PENDING</strong>,
             the pickup remains on hold. If <strong>REJECTED</strong>, pickup is blocked to safeguard consumer standards.
           </p>
