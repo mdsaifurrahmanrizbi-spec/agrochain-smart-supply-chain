@@ -559,6 +559,14 @@ async getCrops(): Promise<Crop[]> {
     ) || null;
   },
 
+  // Load marketplace listings linked to a batch from persisted backend records.
+  async getProductsForBatch(batchId: string): Promise<Product[]> {
+    const products = await getBackendRecords<Product>('products');
+    store.products = products;
+    localStorage.setItem('agro_products', JSON.stringify(products));
+    return products.filter((product) => product.batchId === batchId);
+  },
+
   // GET /api/batches/
   
 async getBatches(farmerId?: string): Promise<CropBatch[]> {
