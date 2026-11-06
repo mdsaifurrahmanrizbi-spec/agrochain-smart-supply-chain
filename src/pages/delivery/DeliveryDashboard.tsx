@@ -83,16 +83,16 @@ export const DeliveryDashboard: React.FC = () => {
       }
 
       setPartnerLoadError(null);
-      // Load persisted assignments for the resolved partner profile, not only
-      // whatever happens to be present in the browser's local cache.
-      setJobs(store.jobs.filter((job) => job.partnerId === own.id));
-      agroApi.getLogisticsJobs(own.id).then((assignedJobs) => {
+      // Refresh persisted order/QC data before rendering the pickup gate.
+      agroApi.getQualityChecks().then(() => agroApi.getLogisticsJobs(own.id)).then((assignedJobs) => {
         if (partnerRequestId.current === requestId) {
           setJobs(assignedJobs.filter((job) => job.partnerId === own.id));
         }
       }).catch((error) => {
         if (partnerRequestId.current === requestId) {
-          console.error('Could not load assigned delivery jobs:', error);
+          console.error('Could not load delivery workspace data:', error);
+          setPartnerLoadError(error instanceof Error ? error.message : 'Could not load assigned jobs and QC status.');
+          setJobs([]);
         }
       });
     }).catch((error: unknown) => {
