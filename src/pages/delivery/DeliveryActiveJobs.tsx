@@ -45,6 +45,7 @@ export const DeliveryActiveJobs: React.FC = () => {
           setPartnerLoadError('No delivery-partner profile is linked to this signed-in account.');
           return;
         }
+        await agroApi.getQualityChecks(); // refresh linked order/QC state before rendering pickup actions
         const assignedJobs = await agroApi.getLogisticsJobs(partner.id);
         if (active) setJobs(assignedJobs.filter((job) => job.partnerId === partner.id));
       } catch (error) {
