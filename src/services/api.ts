@@ -1183,10 +1183,33 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
   // All delivery workspaces use this shared identity lookup.
   async getMyDeliveryPartner(userId: string, email?: string): Promise<DeliveryPartner | null> {
     if (!userId) throw new Error('Your signed-in delivery account could not be identified.');
-    const partners = await this.getDeliveryPartners();
+
+    // Normalize the collection here as a defensive boundary: API records may arrive
+    // either flattened or wrapped as { id, data }. Every delivery workspace receives
+    // the same flat partner shape regardless of the transport representation.
+    const records: unknown[] = await this.getDeliveryPartners();
+    const partners = records.map((record) => {
+      const candidate = record && typeof record === 'object'
+        ? record as { id?: unknown; data?: unknown }
+        : {};
+      const wrappedData = candidate.data && typeof candidate.data === 'object' && !Array.isArray(candidate.data)
+        ? candidate.data as Record<string, unknown>
+        : null;
+      const data = wrappedData || (record && typeof record === 'object'
+        ? record as Record<string, unknown>
+        : {});
+      const recordId = typeof data.id === 'string'
+        ? data.id
+        : typeof candidate.id === 'string'
+          ? candidate.id
+          : '';
+
+      return { ...data, id: recordId } as unknown as DeliveryPartner;
+    });
+
     const normalizedEmail = String(email || '').trim().toLowerCase();
     return partners.find((partner) =>
-      (partner as DeliveryPartner & { userId?: string }).userId === userId
+      String((partner as DeliveryPartner & { userId?: string }).userId || '') === userId
     ) || partners.find((partner) => partner.id === userId) || (normalizedEmail
       ? partners.find((partner) => String(partner.email || '').trim().toLowerCase() === normalizedEmail)
       : null) || null;
