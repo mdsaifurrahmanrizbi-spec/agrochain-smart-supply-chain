@@ -977,6 +977,183 @@ app.get('/api/me', requireAuth, async (req, res) => {
     return res.status(503).json({ message: 'Could not verify current account' });
   }
 });
+ 
+// Resolve the authenticated delivery account to its single persisted partner profile.
+// This avoids client-side list matching and keeps identity/approval authoritative.
+app.get('/api/delivery/me', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'delivery') {
+    return res.status(403).json({ message: 'Only delivery partner accounts can access this profile' });
+  }
+  try {
+    const accountResult = await pool.query(
+      "SELECT id, email, status FROM auth_users WHERE id = $1 AND role = 'delivery' LIMIT 1",
+      [req.auth.sub]
+    );
+    const account = accountResult.rows[0];
+    if (!account || account.status !== 'ACTIVE') {
+      return res.status(401).json({ message: 'Delivery account is inactive or unavailable' });
+    }
+
+    const partnerResult = await pool.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (data->>'userId' = $1 OR id = $1 OR lower(data->>'email') = lower($2)) ORDER BY CASE WHEN data->>'userId' = $1 THEN 0 WHEN id = $1 THEN 1 ELSE 2 END LIMIT 1",
+      [req.auth.sub, account.email]
+    );
+    const row = partnerResult.rows[0];
+    if (!row || !row.data) {
+      return res.status(404).json({ message: 'No delivery-partner profile is linked to this account' });
+    }
+
+    return res.set('Cache-Control', 'no-store').json({
+      partner: {
+        ...row.data,
+        id: row.id,
+        userId: req.auth.sub,
+        accountStatus: account.status,
+      },
+    });
+  } catch (error) {
+    console.error('Current delivery-partner profile lookup failed:', error.message);
+    return res.status(503).json({ message: 'Could not verify delivery-partner profile' });
+  }
+});
+
+// Create the farm pickup assignment as soon as an order is confirmed.
+// QC is intentionally not a prerequisite for assignment: the assigned partner
+// must accept first, travel to the farm, perform QC, and only then collect.
+app.post('/api/orders/:orderId/assign-pickup', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'buyer') {
+    return res.status(403).json({ message: 'Only the customer who placed the order can request its pickup assignment' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const orderResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+      [req.params.orderId]
+    );
+    const orderRow = orderResult.rows[0];
+    const order = orderRow?.data;
+    if (!order || String(order.buyerId || '') !== String(req.auth.sub)) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Order not found for this customer account' });
+    }
+
+    const existingResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'PICKUP' LIMIT 1",
+      [orderRow.id]
+    );
+    if (existingResult.rows[0]) {
+      await client.query('COMMIT');
+      return res.json({ job: { ...existingResult.rows[0].data, id: existingResult.rows[0].id } });
+    }
+
+    const firstItem = Array.isArray(order.items) ? order.items[0] : null;
+    const productId = String(firstItem?.productId || '');
+    const productResult = productId
+      ? await client.query("SELECT data FROM agrochain_records WHERE resource = 'products' AND id = $1 LIMIT 1", [productId])
+      : { rows: [] };
+    const product = productResult.rows[0]?.data || {};
+    const farmResult = firstItem?.farmerId
+      ? await client.query("SELECT data FROM agrochain_records WHERE resource = 'farms' AND data->>'farmerId' = $1 ORDER BY created_at ASC LIMIT 1", [String(firstItem.farmerId)])
+      : { rows: [] };
+    const farm = farmResult.rows[0]?.data || {};
+    const originAddress = String(product.farmLocation || product.farmAddress || farm.location || farm.address || firstItem?.farmLocation || '').trim();
+    const normalizeArea = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+    const origin = normalizeArea(originAddress);
+
+    const partnersResult = await client.query(
+      "SELECT dp.id, dp.data FROM agrochain_records dp JOIN auth_users au ON au.role = 'delivery' AND au.status = 'ACTIVE' AND (au.id = dp.id OR au.id = dp.data->>'userId' OR lower(au.email) = lower(dp.data->>'email')) WHERE dp.resource = 'deliveryPartners'"
+    );
+    const eligible = partnersResult.rows.filter(({ data }) => {
+      if (String(data?.approvalStatus || '').toUpperCase() !== 'APPROVED' || data?.canPickup !== true) return false;
+      if (!origin || origin.includes('pending verification')) return false;
+      const areas = [
+        ...(Array.isArray(data.serviceDistricts) ? data.serviceDistricts : []),
+        ...(Array.isArray(data.assignedAreas) ? data.assignedAreas : []),
+        data.preferredArea || '',
+        data.district || '',
+        data.upazila || '',
+      ].map(normalizeArea).filter(Boolean);
+      return areas.some((area) => ` ${origin} `.includes(` ${area} `));
+    });
+
+    if (!eligible.length) {
+      await client.query('COMMIT');
+      return res.status(409).json({ message: 'No approved pickup partner currently serves this farm area. The order is confirmed and awaits dispatch assignment.' });
+    }
+
+    const partnerRows = await Promise.all(eligible.map(async (candidate) => {
+      const active = await client.query(
+        "SELECT COUNT(*)::int AS count FROM agrochain_records WHERE resource = 'jobs' AND data->>'partnerId' = $1 AND data->>'status' NOT IN ('DELIVERED', 'WAREHOUSE_HANDOVER', 'FAILED')",
+        [candidate.id]
+      );
+      return { ...candidate, activeCount: Number(active.rows[0]?.count || 0) };
+    }));
+    partnerRows.sort((a, b) => a.activeCount - b.activeCount || Number(b.data.rating || 0) - Number(a.data.rating || 0));
+    const partner = partnerRows[0];
+
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    const jobId = `job-pkp-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    const job = {
+      id: jobId,
+      jobCode: `JOB-PKP-${Math.floor(1000 + Math.random() * 9000)}`,
+      orderId: orderRow.id,
+      orderNumber: order.orderNumber,
+      partnerId: partner.id,
+      partnerName: partner.data.name || partner.data.partnerName || 'Assigned Delivery Partner',
+      type: 'PICKUP',
+      productSummary: (order.items || []).map((item) => `${item.quantity} ${item.unit} ${item.productName}`).join(', '),
+      originAddress: originAddress || 'Farm location pending verification',
+      destinationAddress: order.warehouseName || 'Origin warehouse intake',
+      assignedDate: now,
+      status: 'ASSIGNED',
+      codAmount: 0,
+      updatedAt: now,
+    };
+
+    await client.query(
+      "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('jobs', $1, $2::jsonb, NOW(), NOW())",
+      [jobId, JSON.stringify(job)]
+    );
+
+    order.pickupPartnerId = partner.id;
+    order.pickupPartnerName = job.partnerName;
+    order.orderStatus = 'QC_SCHEDULED';
+    order.updatedAt = now;
+    await client.query(
+      "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1",
+      [orderRow.id, JSON.stringify(order)]
+    );
+
+    const event = {
+      id: `trk-pickup-assigned-${Date.now()}`,
+      orderId: orderRow.id,
+      title: 'PICKUP REQUEST ASSIGNED — ACCEPTANCE & FARM QC REQUIRED',
+      description: `${job.partnerName} has received the farm pickup request. The assigned partner must accept it, perform farm-gate QC, pass inspection, and then confirm physical pickup.`,
+      location: job.originAddress,
+      timestamp: now,
+      actorRole: 'AgroChain Dispatch',
+      actorName: 'Area-based Auto Assignment',
+      status: 'IN_PROGRESS',
+    };
+    await client.query(
+      "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('trackingEvents', $1, $2::jsonb, NOW(), NOW()) ON CONFLICT (resource, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()",
+      [event.id, JSON.stringify(event)]
+    );
+
+    await client.query('COMMIT');
+    return res.status(201).json({ job });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Pre-QC pickup assignment failed:', error.message);
+    return res.status(500).json({ message: 'Could not assign a pickup partner to this order' });
+  } finally {
+    client.release();
+  }
+});
+
+
 
 const allowedResources = new Set([
   'users',
@@ -1286,6 +1463,7 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
     );
 
     let rows = result.rows;
+    let deliveryPartnerProfileId = null;
     if (resource === 'settlements') {
       const role = req.auth.role;
       if (role === 'farmer') {
@@ -1299,7 +1477,7 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       }
     }
 
-    if (req.auth.role === 'delivery' && ['deliveryPartners', 'jobs'].includes(resource)) {
+    if (req.auth.role === 'delivery' && ['deliveryPartners', 'jobs', 'orders', 'qualityChecks'].includes(resource)) {
       // Use one account identity rule everywhere: linked user ID, legacy profile ID,
       // or the authenticated account email for older partner records.
       const accountResult = await pool.query(
@@ -1321,9 +1499,10 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       // A login account must resolve to one canonical partner profile, not
       // accidentally combine multiple legacy records sharing an email.
       const ownPartner = ownPartners[0];
+      deliveryPartnerProfileId = ownPartner?.id || null;
       if (resource === 'deliveryPartners') {
         rows = ownPartner ? [ownPartner] : [];
-      } else {
+      } else if (resource === 'jobs') {
         const ownPartnerIds = new Set(ownPartner ? [ownPartner.id] : []);
         rows = rows.filter((row) => ownPartnerIds.has(row.data?.partnerId));
       }
@@ -1344,9 +1523,18 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       } else if (role === 'delivery') {
         rows = rows.filter((row) =>
           row.data?.deliveryPartnerId === req.auth.sub ||
-          row.data?.pickupPartnerId === req.auth.sub
+          (deliveryPartnerProfileId && row.data?.pickupPartnerId === deliveryPartnerProfileId)
         );
       }
+    }
+
+    if (req.auth.role === 'delivery' && resource === 'qualityChecks' && deliveryPartnerProfileId) {
+      const assignedPickupOrders = await pool.query(
+        "SELECT data->>'orderId' AS order_id FROM agrochain_records WHERE resource = 'jobs' AND data->>'type' = 'PICKUP' AND data->>'partnerId' = $1",
+        [deliveryPartnerProfileId]
+      );
+      const orderIds = new Set(assignedPickupOrders.rows.map((row) => row.order_id).filter(Boolean));
+      rows = rows.filter((row) => orderIds.has(row.data?.orderId));
     }
     res.json(rows);
   } catch (error) {
@@ -1563,6 +1751,23 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
           !allowedStatuses.includes(String(data.status || '').toUpperCase())) {
         await client.query('ROLLBACK');
         return res.status(403).json({ message: 'You may only update your own approved partner job' });
+      }
+
+      // Enforce the pickup sequence on the server: accept first, QC while
+      // accepted, then confirm physical pickup, then warehouse handover.
+      if (existing.type === 'PICKUP') {
+        const currentStatus = String(existing.status || '').toUpperCase();
+        const nextStatus = String(data.status || '').toUpperCase();
+        const transitions = {
+          ASSIGNED: ['ACCEPTED', 'DECLINED'],
+          ACCEPTED: ['PICKED_UP', 'FAILED'],
+          PICKED_UP: ['WAREHOUSE_HANDOVER'],
+          QC_PENDING: ['ACCEPTED', 'PICKED_UP', 'FAILED'],
+        };
+        if (!(transitions[currentStatus] || []).includes(nextStatus)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'Pickup must follow this sequence: Assigned → Accepted → Farm QC Pass → Picked Up → Warehouse Handover' });
+        }
       }
     }
 
