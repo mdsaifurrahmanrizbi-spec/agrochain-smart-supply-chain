@@ -1063,7 +1063,7 @@ app.post('/api/orders/:orderId/assign-pickup', requireAuth, async (req, res) => 
     const origin = normalizeArea(originAddress);
 
     const partnersResult = await client.query(
-      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners'"
+      "SELECT dp.id, dp.data FROM agrochain_records dp JOIN auth_users au ON au.role = 'delivery' AND au.status = 'ACTIVE' AND (au.id = dp.id OR au.id = dp.data->>'userId' OR lower(au.email) = lower(dp.data->>'email')) WHERE dp.resource = 'deliveryPartners'"
     );
     const eligible = partnersResult.rows.filter(({ data }) => {
       if (String(data?.approvalStatus || '').toUpperCase() !== 'APPROVED' || data?.canPickup !== true) return false;
