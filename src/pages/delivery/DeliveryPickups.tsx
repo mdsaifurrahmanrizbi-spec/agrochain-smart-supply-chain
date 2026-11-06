@@ -38,6 +38,7 @@ export const DeliveryPickups: React.FC = () => {
           setPartnerLoadError('No delivery-partner profile is linked to this signed-in account.');
           return;
         }
+        await agroApi.getQualityChecks(); // refresh this partner's persisted orders and QC results
         const freshJobs = await agroApi.getLogisticsJobs(partner.id);
         if (active) setJobs(freshJobs.filter((job) => job.type === 'PICKUP' && job.partnerId === partner.id));
       } catch (error) {
