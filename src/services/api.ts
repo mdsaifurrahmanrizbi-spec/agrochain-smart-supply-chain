@@ -544,6 +544,21 @@ async getCrops(): Promise<Crop[]> {
   }
 },
 
+  // Resolve a public QR batch code against persisted backend records.
+  // Do not rely on the browser's potentially stale local demo cache.
+  async getBatchByCode(batchCode: string): Promise<CropBatch | null> {
+    const normalizedCode = String(batchCode || '').trim().toUpperCase();
+    if (!normalizedCode) return null;
+
+    const batches = await getBackendRecords<CropBatch>('batches');
+    store.batches = batches;
+    localStorage.setItem('agro_batches', JSON.stringify(batches));
+
+    return batches.find((batch) =>
+      String(batch.batchCode || '').trim().toUpperCase() === normalizedCode
+    ) || null;
+  },
+
   // GET /api/batches/
   
 async getBatches(farmerId?: string): Promise<CropBatch[]> {
