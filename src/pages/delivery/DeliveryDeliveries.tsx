@@ -23,19 +23,39 @@ export const DeliveryDeliveries: React.FC = () => {
   const { user } = useAuth();
   const [jobs, setJobs] = useState<typeof store.jobs>([]);
   const [currentPartner, setCurrentPartner] = useState<(typeof store.deliveryPartners)[number] | null>(null);
+  const [partnerLoading, setPartnerLoading] = useState(true);
+  const [partnerLoadError, setPartnerLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
+    setPartnerLoading(true);
+    setPartnerLoadError(null);
+
     (async () => {
       try {
-        const partner = await agroApi.getMyDeliveryPartner(user?.id || '', user?.email);
+        if (!user?.id) throw new Error('Your signed-in delivery account could not be identified. Please sign in again.');
+        const partner = await agroApi.getMyDeliveryPartner(user.id, user.email);
         if (!active) return;
         setCurrentPartner(partner);
-        if (!partner) { setJobs([]); return; }
+        if (!partner) {
+          setJobs([]);
+          setPartnerLoadError('No delivery-partner profile is linked to this signed-in account.');
+          return;
+        }
         const freshJobs = await agroApi.getLogisticsJobs(partner.id);
         if (active) setJobs(freshJobs.filter((job) => job.type === 'DELIVERY' && job.partnerId === partner.id));
-      } catch (error) { console.error('Could not refresh assigned deliveries:', error); }
+      } catch (error) {
+        if (active) {
+          console.error('Could not refresh assigned deliveries:', error);
+          setCurrentPartner(null);
+          setJobs([]);
+          setPartnerLoadError(error instanceof Error ? error.message : 'Could not verify your delivery-partner profile.');
+        }
+      } finally {
+        if (active) setPartnerLoading(false);
+      }
     })();
+
     return () => { active = false; };
   }, [user?.id, user?.email]);
   const [selectedJob, setSelectedJob] = useState<LogisticsJob | null>(null);
@@ -49,7 +69,9 @@ export const DeliveryDeliveries: React.FC = () => {
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const partnerApprovalStatus = String(currentPartner?.approvalStatus || 'PENDING_APPROVAL').trim().toUpperCase();
+  const partnerApprovalStatus = currentPartner
+    ? String(currentPartner.approvalStatus || '').trim().toUpperCase()
+    : '';
   const isApproved = partnerApprovalStatus === 'APPROVED';
   const partnerId = currentPartner?.id || '';
 
@@ -163,7 +185,21 @@ export const DeliveryDeliveries: React.FC = () => {
         </p>
       </div>
 
-      {!isApproved && (
+      {partnerLoading && (
+        <div className="p-3 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-600">
+          Verifying your delivery-partner profile and approval status…
+        </div>
+      )}
+
+      {!partnerLoading && partnerLoadError && (
+        <div role="alert" className="p-4 rounded-xl border border-rose-200 bg-rose-50 text-xs text-rose-800">
+          <strong>Partner profile could not be verified.</strong>
+          <p className="mt-1">{partnerLoadError}</p>
+          <p className="mt-1">This is not an approval rejection. Refresh this page after checking your connection.</p>
+        </div>
+      )}
+
+      {!partnerLoading && currentPartner && !isApproved && (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
           <div>
