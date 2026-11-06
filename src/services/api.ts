@@ -764,57 +764,26 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     localStorage.setItem('agro_quality_checks', JSON.stringify(store.qualityChecks));
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
 
-    // Assign a pickup partner BEFORE farm-gate QC. The assigned partner must
-    // accept this request first; only that partner may inspect and collect it.
-    const existingPickup = store.jobs.find((job) => job.orderId === newOrder.id && job.type === 'PICKUP');
-    if (!existingPickup) {
-      const latestPartners = await this.getDeliveryPartners();
-      const originArea = (pendingQc.farmLocation || '').trim();
-      const normalizeArea = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
-      const origin = normalizeArea(originArea);
-      const partner = latestPartners
-        .filter((candidate) => {
-          if (candidate.approvalStatus !== 'APPROVED' || !candidate.canPickup) return false;
-          const activeJobs = Number(candidate.activeJobsCount || 0);
-          if (!Number.isFinite(activeJobs) || activeJobs >= 8) return false;
-          if (!origin || origin.includes('pending verification')) return false;
-          const serviceDistricts = Array.isArray((candidate as DeliveryPartner & { serviceDistricts?: string[] }).serviceDistricts)
-            ? (candidate as DeliveryPartner & { serviceDistricts?: string[] }).serviceDistricts || []
-            : [];
-          const areas = [
-            ...serviceDistricts,
-            ...(candidate.assignedAreas || []),
-            candidate.preferredArea || '',
-            (candidate as DeliveryPartner & { district?: string }).district || '',
-            (candidate as DeliveryPartner & { upazila?: string }).upazila || '',
-          ].map((area) => normalizeArea(area)).filter(Boolean);
-          return areas.some((area) => ` ${origin} `.includes(` ${area} `));
-        })
-        .sort((a, b) => Number(a.activeJobsCount || 0) - Number(b.activeJobsCount || 0) || Number(b.rating || 0) - Number(a.rating || 0))[0];
-
-      if (partner) {
-        const pickupJob: LogisticsJob = {
-          id: `job-${Date.now()}`,
-          jobCode: `JOB-PKP-${Math.floor(1000 + Math.random() * 9000)}`,
-          orderId: newOrder.id,
-          orderNumber: newOrder.orderNumber,
-          partnerId: partner.id,
-          partnerName: partner.name,
-          type: 'PICKUP',
-          productSummary: newOrder.items.map((item) => `${item.quantity} ${item.unit} ${item.productName}`).join(', '),
-          originAddress: pendingQc.farmLocation || 'Farm location pending verification',
-          destinationAddress: newOrder.warehouseName || 'Origin warehouse intake',
-          assignedDate: newOrder.createdAt,
-          status: 'ASSIGNED',
-          codAmount: 0,
-          updatedAt: newOrder.createdAt,
-        };
-        await saveBackendRecord('jobs', pickupJob);
-        store.jobs.unshift(pickupJob);
+    // Ask the backend to assign an approved, area-matched pickup partner now,
+    // before QC. The server owns partner selection and persists the assignment.
+    try {
+      const assignmentResponse = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(newOrder.id)}/assign-pickup`, {
+        method: 'POST',
+        headers: authHeaders(),
+        cache: 'no-store',
+      });
+      const assignmentPayload = await assignmentResponse.json().catch(() => ({}));
+      if (assignmentResponse.ok && assignmentPayload.job) {
+        const assignedJob = assignmentPayload.job as LogisticsJob;
+        store.jobs = [assignedJob, ...store.jobs.filter((job) => job.id !== assignedJob.id)];
         localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
       } else {
-        console.warn(`Order ${newOrder.orderNumber} created without a pickup assignment: no approved partner matches the farm service area.`);
+        // The order remains confirmed; dispatch can assign it when an eligible
+        // pickup partner becomes available. Do not falsely mark QC as passed.
+        console.warn('Pickup assignment is pending:', assignmentPayload.message || assignmentResponse.status);
       }
+    } catch (assignmentError) {
+      console.warn('Could not create the pre-QC pickup assignment:', assignmentError);
     }
 
     // Initialize tracking timeline for this order
@@ -1228,7 +1197,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
   async getMyDeliveryPartner(userId: string, _email?: string): Promise<DeliveryPartner | null> {
     if (!userId) throw new Error('Your signed-in delivery account could not be identified.');
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
       const response = await fetch(`${API_BASE_URL}/delivery/me`, {
         headers: authHeaders(),
@@ -1257,7 +1226,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       }
       throw error instanceof Error ? error : new Error('Could not verify delivery-partner profile.');
     } finally {
-      window.clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
     }
   },
 
