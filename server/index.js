@@ -1477,7 +1477,7 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       }
     }
 
-    if (req.auth.role === 'delivery' && ['deliveryPartners', 'jobs'].includes(resource)) {
+    if (req.auth.role === 'delivery' && ['deliveryPartners', 'jobs', 'orders', 'qualityChecks'].includes(resource)) {
       // Use one account identity rule everywhere: linked user ID, legacy profile ID,
       // or the authenticated account email for older partner records.
       const accountResult = await pool.query(
@@ -1502,7 +1502,7 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       deliveryPartnerProfileId = ownPartner?.id || null;
       if (resource === 'deliveryPartners') {
         rows = ownPartner ? [ownPartner] : [];
-      } else {
+      } else if (resource === 'jobs') {
         const ownPartnerIds = new Set(ownPartner ? [ownPartner.id] : []);
         rows = rows.filter((row) => ownPartnerIds.has(row.data?.partnerId));
       }
