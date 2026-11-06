@@ -546,25 +546,29 @@ async getCrops(): Promise<Crop[]> {
 
   // Resolve a public QR batch code against persisted backend records.
   // Do not rely on the browser's potentially stale local demo cache.
-  async getBatchByCode(batchCode: string): Promise<CropBatch | null> {
+  async getPublicBatchTraceability(batchCode: string): Promise<{ batch: CropBatch; products: Product[] } | null> {
     const normalizedCode = String(batchCode || '').trim().toUpperCase();
     if (!normalizedCode) return null;
 
-    const batches = await getBackendRecords<CropBatch>('batches');
-    store.batches = batches;
-    localStorage.setItem('agro_batches', JSON.stringify(batches));
+    const response = await fetch(`${API_BASE_URL}/public/batches/${encodeURIComponent(normalizedCode)}`, {
+      headers: { 'Accept': 'application/json' },
+      cache: 'no-store',
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Traceability lookup failed: ${response.status}`);
 
-    return batches.find((batch) =>
-      String(batch.batchCode || '').trim().toUpperCase() === normalizedCode
-    ) || null;
-  },
-
-  // Load marketplace listings linked to a batch from persisted backend records.
-  async getProductsForBatch(batchId: string): Promise<Product[]> {
-    const products = await getBackendRecords<Product>('products');
-    store.products = products;
-    localStorage.setItem('agro_products', JSON.stringify(products));
-    return products.filter((product) => product.batchId === batchId);
+    const result = await response.json();
+    if (!result?.batch || !Array.isArray(result.products)) {
+      throw new Error('Traceability service returned an invalid response');
+    }
+    store.batches = [result.batch, ...store.batches.filter((item) => item.id !== result.batch.id)];
+    store.products = [
+      ...result.products,
+      ...store.products.filter((item) => !result.products.some((product: Product) => product.id === item.id)),
+    ];
+    localStorage.setItem('agro_batches', JSON.stringify(store.batches));
+    localStorage.setItem('agro_products', JSON.stringify(store.products));
+    return result as { batch: CropBatch; products: Product[] };
   },
 
   // GET /api/batches/
