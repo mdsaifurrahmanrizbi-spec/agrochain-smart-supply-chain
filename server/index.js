@@ -1463,6 +1463,7 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
     );
 
     let rows = result.rows;
+    let deliveryPartnerProfileId = null;
     if (resource === 'settlements') {
       const role = req.auth.role;
       if (role === 'farmer') {
@@ -1498,6 +1499,7 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       // A login account must resolve to one canonical partner profile, not
       // accidentally combine multiple legacy records sharing an email.
       const ownPartner = ownPartners[0];
+      deliveryPartnerProfileId = ownPartner?.id || null;
       if (resource === 'deliveryPartners') {
         rows = ownPartner ? [ownPartner] : [];
       } else {
@@ -1521,9 +1523,18 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       } else if (role === 'delivery') {
         rows = rows.filter((row) =>
           row.data?.deliveryPartnerId === req.auth.sub ||
-          row.data?.pickupPartnerId === req.auth.sub
+          (deliveryPartnerProfileId && row.data?.pickupPartnerId === deliveryPartnerProfileId)
         );
       }
+    }
+
+    if (req.auth.role === 'delivery' && resource === 'qualityChecks' && deliveryPartnerProfileId) {
+      const assignedPickupOrders = await pool.query(
+        "SELECT data->>'orderId' AS order_id FROM agrochain_records WHERE resource = 'jobs' AND data->>'type' = 'PICKUP' AND data->>'partnerId' = $1",
+        [deliveryPartnerProfileId]
+      );
+      const orderIds = new Set(assignedPickupOrders.rows.map((row) => row.order_id).filter(Boolean));
+      rows = rows.filter((row) => orderIds.has(row.data?.orderId));
     }
     res.json(rows);
   } catch (error) {
