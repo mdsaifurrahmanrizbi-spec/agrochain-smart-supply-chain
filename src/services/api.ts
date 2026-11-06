@@ -843,16 +843,21 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
 
   // Logistics Jobs
   async getLogisticsJobs(partnerId?: string): Promise<LogisticsJob[]> {
-    // Production assignments are authoritative. Do not turn API failures into
-    // an apparently empty queue or stale local/demo jobs.
-    const backendJobs = await getBackendRecords<LogisticsJob>('jobs');
-    store.jobs = backendJobs;
-    localStorage.setItem('agro_jobs', JSON.stringify(backendJobs));
-
-    if (partnerId) {
-      return backendJobs.filter((job) => job.partnerId === partnerId);
+    try {
+      // A successful empty backend response is authoritative; do not merge seeded
+      // or stale local jobs into a real delivery partner's assignment queue.
+      const backendJobs = await getBackendRecords<LogisticsJob>('jobs');
+      store.jobs = backendJobs;
+      localStorage.setItem('agro_jobs', JSON.stringify(backendJobs));
+      return partnerId
+        ? backendJobs.filter((job) => job.partnerId === partnerId)
+        : backendJobs;
+    } catch (error) {
+      // Delivery workspaces must see a real API error rather than fake jobs.
+      if (partnerId) throw error;
+      console.warn('Could not refresh logistics jobs; using cached records for non-partner views.', error);
+      return store.jobs;
     }
-    return backendJobs;
   },
 
   async updateJobStatus(jobId: string, status: LogisticsJob['status'], notes?: string): Promise<LogisticsJob> {
