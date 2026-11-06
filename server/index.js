@@ -1195,6 +1195,74 @@ app.post('/api/orders/:id/cancel', requireAuth, async (req, res) => {
   } catch (error) { await client.query('ROLLBACK').catch(() => {}); console.error('Order cancellation failed:', error.message); return res.status(500).json({ message: 'Could not cancel this order' }); }
   finally { client.release(); }
 });
+// Public, read-only QR lookup. Return only fields intended for customer-facing traceability.
+app.get('/api/public/batches/:batchCode', async (req, res) => {
+  const batchCode = String(req.params.batchCode || '').trim().toUpperCase();
+  if (!batchCode || batchCode.length > 100) {
+    return res.status(400).json({ message: 'A valid batch code is required' });
+  }
+
+  try {
+    const batchResult = await pool.query(
+      `SELECT id, data FROM agrochain_records
+       WHERE resource = 'batches' AND UPPER(BTRIM(data->>'batchCode')) = $1
+       LIMIT 1`,
+      [batchCode]
+    );
+    if (!batchResult.rowCount) return res.status(404).json({ message: 'Batch not found' });
+
+    const batchRow = batchResult.rows[0];
+    const batchData = batchRow.data || {};
+    const batch = {
+      id: batchRow.id,
+      batchCode: batchData.batchCode || batchCode,
+      cropName: batchData.cropName || '',
+      variety: batchData.variety || '',
+      farmId: batchData.farmId || '',
+      farmName: batchData.farmName || '',
+      farmerName: batchData.farmerName || '',
+      sowingDate: batchData.sowingDate || '',
+      harvestDate: batchData.harvestDate || '',
+      estimatedQuantityKg: Number(batchData.estimatedQuantityKg || 0),
+      actualQuantityKg: Number(batchData.actualQuantityKg || 0),
+      qualityStatus: batchData.qualityStatus || 'PENDING',
+    };
+
+    const productsResult = await pool.query(
+      `SELECT id, data FROM agrochain_records
+       WHERE resource = 'products' AND data->>'batchId' = $1
+       ORDER BY created_at DESC`,
+      [batchRow.id]
+    );
+    const products = productsResult.rows.map((row) => {
+      const data = row.data || {};
+      return {
+        id: row.id,
+        batchId: data.batchId || batchRow.id,
+        farmerName: data.farmerName || batch.farmerName,
+        farmName: data.farmName || batch.farmName,
+        name: data.name || batch.cropName,
+        category: data.category || '',
+        cropType: data.cropType || batch.cropName,
+        variety: data.variety || batch.variety,
+        description: data.description || '',
+        pricePerUnit: Number(data.pricePerUnit || 0),
+        unit: data.unit || 'kg',
+        availableQuantity: Number(data.availableQuantity || 0),
+        harvestDate: data.harvestDate || batch.harvestDate,
+        imageUrl: data.imageUrl || '',
+        qualityStatus: data.qualityStatus || batch.qualityStatus,
+        isOrganic: Boolean(data.isOrganic),
+      };
+    });
+
+    return res.set('Cache-Control', 'no-store').json({ batch, products });
+  } catch (error) {
+    console.error('Public batch traceability lookup failed:', error.message);
+    return res.status(500).json({ message: 'Could not load batch traceability details' });
+  }
+});
+
 // Read records for a resource.
 app.get('/api/records/:resource', requireAuth, async (req, res) => {
   const { resource } = req.params;
