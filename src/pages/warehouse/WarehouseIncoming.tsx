@@ -1,10 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Truck, CheckCircle2, ShieldCheck, Scale, Check, AlertTriangle, PackageCheck } from 'lucide-react';
 
 export const WarehouseIncoming: React.FC = () => {
   const [jobs, setJobs] = useState(store.jobs.filter((j) => j.type === 'PICKUP'));
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let active = true;
+    Promise.all([agroApi.getLogisticsJobs(), agroApi.getOrders()])
+      .then(([records]) => { if (active) setJobs(records.filter((job) => job.type === 'PICKUP')); })
+      .catch((error: unknown) => { if (active) setErrorMsg(error instanceof Error ? error.message : 'Could not load incoming jobs.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -64,7 +73,7 @@ export const WarehouseIncoming: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {jobs.map((job) => {
+        {loading ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Loading incoming consignments…</div> : jobs.length === 0 ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No incoming pickup jobs are assigned to this warehouse.</div> : <>{jobs.map((job) => {
           const ord = store.orders.find((o) => o.id === job.orderId || o.orderNumber === job.orderNumber);
           const isReceived = job.status === 'WAREHOUSE_HANDOVER';
 
@@ -123,7 +132,7 @@ export const WarehouseIncoming: React.FC = () => {
               </div>
             </div>
           );
-        })}
+        })}</>}
       </div>
     </div>
   );
