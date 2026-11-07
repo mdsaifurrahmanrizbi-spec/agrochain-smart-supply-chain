@@ -1817,11 +1817,16 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         const destinationOwned = hasDestination && ownedGodownIds.has(destinationId);
         const existingSourceOwned = !existing || !existingSourceId || ownedWarehouseIds.has(existingSourceId);
         const existingDestinationOwned = !existing || !existingDestinationId || ownedGodownIds.has(existingDestinationId);
+        const existingAccess = !existing || existingSourceOwned || existingDestinationOwned;
+        // A manager may process a transfer when either endpoint is theirs.
+        // An external endpoint may be preserved, but never changed or redirected.
+        const sourceAllowed = sourceOwned || (Boolean(existing) && sourceId === existingSourceId && !existingSourceOwned);
+        const destinationAllowed = destinationOwned || (Boolean(existing) && destinationId === existingDestinationId && !existingDestinationOwned);
         permitted = (hasSource || hasDestination) &&
-          (!hasSource || sourceOwned) &&
-          (!hasDestination || destinationOwned) &&
-          (sourceOwned || destinationOwned) &&
-          existingSourceOwned && existingDestinationOwned;
+          sourceAllowed &&
+          destinationAllowed &&
+          (sourceOwned || destinationOwned || existingAccess) &&
+          existingAccess;
       }
       if (!permitted) {
         await client.query('ROLLBACK');
