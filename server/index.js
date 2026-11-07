@@ -1748,10 +1748,24 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         permitted = data.managerId === req.auth.sub &&
           (!existing || existing.managerId === req.auth.sub);
       } else if (resource === 'godownShipments') {
-        permitted = (ownedWarehouseIds.has(String(data.sourceWarehouseId || '')) ||
-          ownedGodownIds.has(String(data.destinationGodownId || ''))) &&
-          (!existing || ownedWarehouseIds.has(String(existing.sourceWarehouseId || '')) ||
-            ownedGodownIds.has(String(existing.destinationGodownId || '')));
+        // Every endpoint supplied by the client must belong to this manager.
+        // Checking only one side would let a manager create or redirect a
+        // transfer into another manager's godown.
+        const sourceId = String(data.sourceWarehouseId || '');
+        const destinationId = String(data.destinationGodownId || '');
+        const existingSourceId = String(existing?.sourceWarehouseId || '');
+        const existingDestinationId = String(existing?.destinationGodownId || '');
+        const hasSource = Boolean(sourceId);
+        const hasDestination = Boolean(destinationId);
+        const sourceOwned = hasSource && ownedWarehouseIds.has(sourceId);
+        const destinationOwned = hasDestination && ownedGodownIds.has(destinationId);
+        const existingSourceOwned = !existing || !existingSourceId || ownedWarehouseIds.has(existingSourceId);
+        const existingDestinationOwned = !existing || !existingDestinationId || ownedGodownIds.has(existingDestinationId);
+        permitted = (hasSource || hasDestination) &&
+          (!hasSource || sourceOwned) &&
+          (!hasDestination || destinationOwned) &&
+          (sourceOwned || destinationOwned) &&
+          existingSourceOwned && existingDestinationOwned;
       }
       if (!permitted) {
         await client.query('ROLLBACK');
