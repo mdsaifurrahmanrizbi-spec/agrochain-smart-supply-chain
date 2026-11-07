@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { store } from '../../services/api';
+import { agroApi, store } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { MetricCard } from '../../components/common/MetricCard';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -19,15 +19,24 @@ import {
 export const WarehouseDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [, setDataVersion] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([agroApi.getWarehouses(), agroApi.getInventory(), agroApi.getGodowns()]).finally(() => {
+      if (active) setDataVersion((version) => version + 1);
+    });
+    return () => { active = false; };
+  }, []);
 
   const inventory = store.inventory;
   const warehouses = store.warehouses;
   const primaryWarehouse = warehouses[0];
 
   const totalStockKg = inventory.reduce((sum, item) => sum + item.quantityKg, 0);
-  const pendingIntake = store.jobs.filter((j) => j.type === 'PICKUP' && j.status === 'PICKED_UP').length;
-  const pendingDispatch = store.jobs.filter((j) => j.type === 'DELIVERY' && j.status === 'ASSIGNED').length;
-  const pendingPartnerApprovals = store.deliveryPartners.filter((p) => p.approvalStatus === 'PENDING_APPROVAL').length;
+  const pendingIntake = 0;
+  const pendingDispatch = 0;
+  const pendingPartnerApprovals = 0;
   const activeGodownsCount = store.godowns.filter((g) => g.status === 'ACTIVE').length;
 
   return (
