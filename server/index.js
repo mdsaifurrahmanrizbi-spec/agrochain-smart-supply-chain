@@ -903,14 +903,42 @@ app.patch('/api/admin/warehouse-applications/:id/approval/', requireAuth, async 
     }
 
     const reviewedAt = new Date().toISOString();
+    let createdWarehouse = null;
+    if (decision === 'APPROVED') {
+      const existingWarehouse = await client.query(
+        "SELECT id, data FROM agrochain_records WHERE resource = 'warehouses' AND (data->>'managerId' = $1 OR data->>'applicationId' = $2) LIMIT 1 FOR UPDATE",
+        [linkedUserId, applicationId]
+      );
+      if (existingWarehouse.rows[0]) {
+        createdWarehouse = { ...existingWarehouse.rows[0].data, id: existingWarehouse.rows[0].id };
+      } else {
+        const crypto = await import('node:crypto');
+        const warehouseId = 'wh_' + crypto.randomUUID();
+        const prefix = String(application.city || application.area || 'WH').replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 5) || 'WH';
+        const warehouseData = {
+          id: warehouseId, applicationId, name: String(application.name || 'Warehouse').trim(),
+          code: `${prefix}-${warehouseId.slice(-6).toUpperCase()}`,
+          type: application.type === 'CENTRAL' ? 'CENTRAL' : 'REGIONAL_GODOWN',
+          location: [application.area, application.city].filter(Boolean).join(', '),
+          address: application.address || '', city: application.city || '', area: application.area || '',
+          managerName: application.managerName || accountResult.rows[0].name, managerId: linkedUserId,
+          capacityMetricTons: Number(application.capacityMetricTons) || 0,
+          currentStockMetricTons: 0, temperatureControlled: Boolean(application.temperatureControlled),
+          createdAt: reviewedAt,
+        };
+        const inserted = await client.query(
+          "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('warehouses', $1, $2::jsonb, NOW(), NOW()) RETURNING id, data",
+          [warehouseId, JSON.stringify(warehouseData)]
+        );
+        createdWarehouse = { ...inserted.rows[0].data, id: inserted.rows[0].id };
+      }
+    }
     const reviewedApplication = {
-      ...application,
-      status: decision,
-      approvalStatus: decision,
+      ...application, status: decision, approvalStatus: decision,
       approvedBy: decision === 'APPROVED' ? 'Admin' : undefined,
-      reviewedBy: 'Admin',
-      reviewedAt,
+      reviewedBy: 'Admin', reviewedAt,
       ...(notes ? { approvalNotes: notes } : {}),
+      ...(createdWarehouse ? { warehouseId: createdWarehouse.id } : {}),
     };
     const saved = await client.query(
       "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'warehouseApplications' AND id = $1 RETURNING id, data, updated_at",
@@ -920,6 +948,7 @@ app.patch('/api/admin/warehouse-applications/:id/approval/', requireAuth, async 
     return res.json({
       application: { ...saved.rows[0].data, id: saved.rows[0].id, updatedAt: saved.rows[0].updated_at },
       account: { ...accountResult.rows[0], createdAt: accountResult.rows[0].created_at },
+      warehouse: createdWarehouse,
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
@@ -1052,13 +1081,13 @@ app.get('/api/me', requireAuth, async (req, res) => {
     if (!account || account.status !== 'ACTIVE') {
       return res.status(401).json({ message: 'Account is inactive or unavailable' });
     }
+    const managed = account.role === 'warehouse'
+      ? await pool.query("SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1", [account.id])
+      : { rows: [] };
     return res.json({
-      id: account.id,
-      name: account.name,
-      email: account.email,
-      role: account.role,
-      status: account.status,
-      createdAt: account.created_at,
+      id: account.id, name: account.name, email: account.email, role: account.role,
+      status: account.status, createdAt: account.created_at,
+      ...(account.role === 'warehouse' ? { isWarehouseManager: true, managedWarehouseIds: managed.rows.map((row) => row.id) } : {}),
     });
   } catch (error) {
     console.error('Current-user lookup failed:', error.message);
@@ -1552,6 +1581,43 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
 
     let rows = result.rows;
     let deliveryPartnerProfileId = null;
+    if (req.auth.role === 'warehouse') {
+      const owned = await pool.query("SELECT id, data FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1", [req.auth.sub]);
+      const warehouseIds = new Set(owned.rows.map((row) => row.id));
+      const godownsResult = await pool.query("SELECT id, data FROM agrochain_records WHERE resource = 'godowns'");
+      const godownIds = new Set(godownsResult.rows.filter((row) =>
+        row.data?.managerId === req.auth.sub || warehouseIds.has(row.data?.warehouseId)
+      ).map((row) => row.id));
+      if (resource === 'warehouses') rows = owned.rows;
+      else if (resource === 'inventory') rows = rows.filter((row) => warehouseIds.has(row.data?.warehouseId));
+      else if (resource === 'godowns') rows = godownsResult.rows.filter((row) => godownIds.has(row.id));
+      else if (resource === 'godownShipments') rows = rows.filter((row) =>
+        warehouseIds.has(row.data?.sourceWarehouseId) || godownIds.has(row.data?.destinationGodownId)
+      );
+      else if (resource === 'jobs') {
+        // A warehouse manager may only see pickup jobs for orders assigned to
+        // their warehouse, and delivery jobs routed to one of their godowns.
+        // Resolve the relationship through persisted order records; LogisticsJob
+        // intentionally has no warehouseId field of its own.
+        const orderRows = await pool.query(
+          "SELECT id, data FROM agrochain_records WHERE resource = 'orders'"
+        );
+        const orderById = new Map(orderRows.rows.map((row) => [row.id, row.data]));
+        rows = rows.filter((row) => {
+          const job = row.data || {};
+          const order = orderById.get(job.orderId);
+          if (!order) return false;
+          if (job.type === 'PICKUP') {
+            return warehouseIds.has(String(order.warehouseId || ''));
+          }
+          if (job.type === 'DELIVERY') {
+            const destinationGodownId = String(job.godownId || order.destinationGodownId || order.godownId || '');
+            return godownIds.has(destinationGodownId);
+          }
+          return false;
+        });
+      }
+    }
     if (resource === 'settlements') {
       const role = req.auth.role;
       if (role === 'farmer') {
@@ -1683,6 +1749,90 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     );
 
     const existing = existingResult.rows[0]?.data;
+
+    if (role === 'warehouse' && resource === 'jobs') {
+      const ownedWarehouseRows = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1",
+        [req.auth.sub]
+      );
+      const ownedWarehouseIds = new Set(ownedWarehouseRows.rows.map((row) => row.id));
+      const ownedGodownRows = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'godowns' AND (data->>'managerId' = $1 OR data->>'warehouseId' IN (SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1))",
+        [req.auth.sub]
+      );
+      const ownedGodownIds = new Set(ownedGodownRows.rows.map((row) => row.id));
+      const canManageJob = async (job) => {
+        if (!job || !['PICKUP', 'DELIVERY'].includes(job.type) || !job.orderId) return false;
+        const orderResult = await client.query(
+          "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND id = $1",
+          [String(job.orderId)]
+        );
+        const order = orderResult.rows[0]?.data;
+        if (!order) return false;
+        if (job.type === 'PICKUP') {
+          return ownedWarehouseIds.has(String(order.warehouseId || ''));
+        }
+        const destinationGodownId = String(job.godownId || order.destinationGodownId || order.godownId || '');
+        return ownedGodownIds.has(destinationGodownId);
+      };
+      const existingOwned = !existing || await canManageJob(existing);
+      const incomingOwned = await canManageJob(data);
+      if (!existingOwned || !incomingOwned) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'You can only manage pickup and delivery jobs linked to your assigned warehouse or godown' });
+      }
+    }
+
+    if (role === 'warehouse' && ['warehouses', 'inventory', 'godowns', 'godownShipments'].includes(resource)) {
+      const ownedRows = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1",
+        [req.auth.sub]
+      );
+      const ownedWarehouseIds = new Set(ownedRows.rows.map((row) => row.id));
+      const ownedGodownRows = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'godowns' AND (data->>'managerId' = $1 OR data->>'warehouseId' IN (SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1))",
+        [req.auth.sub]
+      );
+      const ownedGodownIds = new Set(ownedGodownRows.rows.map((row) => row.id));
+      let permitted = false;
+      if (resource === 'warehouses') {
+        permitted = Boolean(existing && existing.managerId === req.auth.sub && data.managerId === req.auth.sub);
+      } else if (resource === 'inventory') {
+        permitted = ownedWarehouseIds.has(String(data.warehouseId || '')) &&
+          (!existing || ownedWarehouseIds.has(String(existing.warehouseId || '')));
+      } else if (resource === 'godowns') {
+        permitted = data.managerId === req.auth.sub &&
+          (!existing || existing.managerId === req.auth.sub);
+      } else if (resource === 'godownShipments') {
+        // Every endpoint supplied by the client must belong to this manager.
+        // Checking only one side would let a manager create or redirect a
+        // transfer into another manager's godown.
+        const sourceId = String(data.sourceWarehouseId || '');
+        const destinationId = String(data.destinationGodownId || '');
+        const existingSourceId = String(existing?.sourceWarehouseId || '');
+        const existingDestinationId = String(existing?.destinationGodownId || '');
+        const hasSource = Boolean(sourceId);
+        const hasDestination = Boolean(destinationId);
+        const sourceOwned = hasSource && ownedWarehouseIds.has(sourceId);
+        const destinationOwned = hasDestination && ownedGodownIds.has(destinationId);
+        const existingSourceOwned = !existing || !existingSourceId || ownedWarehouseIds.has(existingSourceId);
+        const existingDestinationOwned = !existing || !existingDestinationId || ownedGodownIds.has(existingDestinationId);
+        const existingAccess = !existing || existingSourceOwned || existingDestinationOwned;
+        // A manager may process a transfer when either endpoint is theirs.
+        // An external endpoint may be preserved, but never changed or redirected.
+        const sourceAllowed = sourceOwned || (Boolean(existing) && sourceId === existingSourceId && !existingSourceOwned);
+        const destinationAllowed = destinationOwned || (Boolean(existing) && destinationId === existingDestinationId && !existingDestinationOwned);
+        permitted = (hasSource || hasDestination) &&
+          sourceAllowed &&
+          destinationAllowed &&
+          (sourceOwned || destinationOwned || existingAccess) &&
+          existingAccess;
+      }
+      if (!permitted) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'You can only manage records belonging to your assigned warehouse or godown' });
+      }
+    }
 
     if (buyerPendingQcCreate) {
       if (existing) {

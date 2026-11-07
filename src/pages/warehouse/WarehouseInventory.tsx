@@ -1,10 +1,21 @@
-import React, { useState } from 'react';
-import { store } from '../../services/api';
+import React, { useEffect, useState } from 'react';
+import { store, agroApi } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Warehouse, Search, Filter, ShieldCheck } from 'lucide-react';
 
 export const WarehouseInventory: React.FC = () => {
   const [inventory, setInventory] = useState(store.inventory);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([agroApi.getInventory(), agroApi.getWarehouses()])
+      .then(([records]) => { if (active) setInventory([...records]); })
+      .catch((error: unknown) => { if (active) setLoadError(error instanceof Error ? error.message : 'Could not load warehouse inventory.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
   const [search, setSearch] = useState('');
   const [selectedWarehouse, setSelectedWarehouse] = useState('All');
 
@@ -20,7 +31,7 @@ export const WarehouseInventory: React.FC = () => {
         <div>
           <h1 className="text-xl font-bold text-slate-900">Warehouse Inventory & Stock Control</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Real-time multi-godown stock allocation across Central Gazipur, Tejgaon, and Bogura hubs.
+            Stock records assigned to your approved warehouse facility.
           </p>
         </div>
       </div>
@@ -50,6 +61,7 @@ export const WarehouseInventory: React.FC = () => {
         </select>
       </div>
 
+      {loadError && <div className="p-3 rounded-lg border border-rose-200 bg-rose-50 text-xs text-rose-800">{loadError}</div>}
       {/* Inventory Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
         <div className="overflow-x-auto">
@@ -67,7 +79,7 @@ export const WarehouseInventory: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map((item) => (
+              {loading ? <tr><td colSpan={8} className="py-8 text-center text-slate-500">Loading inventory…</td></tr> : filtered.length === 0 ? <tr><td colSpan={8} className="py-8 text-center text-slate-500">No inventory records found for this warehouse.</td></tr> : filtered.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                   <td className="py-3 px-4 font-semibold text-slate-900">{item.warehouseName}</td>
                   <td className="py-3 px-4">{item.cropName}</td>

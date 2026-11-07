@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { store, agroApi } from '../../services/api';
 import { GodownShipment, LocalGodown, DeliveryPartner } from '../../types';
@@ -34,8 +34,9 @@ export const GodownHub: React.FC = () => {
 
   // Selected Godown state - defaults to Tejgaon Godown (or manager's assigned godown)
   const [godowns, setGodowns] = useState<LocalGodown[]>(store.godowns);
+  const [loading, setLoading] = useState(true);
   const [selectedGodownId, setSelectedGodownId] = useState<string>(
-    user?.godownId || store.godowns[0]?.id || 'godown-tejgaon'
+    user?.godownId || store.godowns[0]?.id || ''
   );
 
   const selectedGodown = godowns.find((g) => g.id === selectedGodownId) || godowns[0];
@@ -61,6 +62,20 @@ export const GodownHub: React.FC = () => {
 
   // Shipments state
   const [shipments, setShipments] = useState<GodownShipment[]>(store.godownShipments);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([agroApi.getGodowns(), agroApi.getGodownShipments()])
+      .then(([records, shipmentRecords]) => {
+        if (!active) return;
+        setGodowns([...records]);
+        setShipments([...shipmentRecords]);
+        setSelectedGodownId((current) => current && records.some((g) => g.id === current) ? current : (user?.godownId && records.some((g) => g.id === user.godownId) ? user.godownId : records[0]?.id || ''));
+      })
+      .catch((error: unknown) => { if (active) setErrorMsg(error instanceof Error ? error.message : 'Could not load godown records.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [user?.godownId]);
 
   // Modals state
   const [selectedShipment, setSelectedShipment] = useState<GodownShipment | null>(null);
@@ -118,16 +133,17 @@ export const GodownHub: React.FC = () => {
   );
 
   // Refresh data helper
-  const refreshData = () => {
-    setShipments([...store.godownShipments]);
-    setGodowns([...store.godowns]);
+  const refreshData = async () => {
+    const [nextGodowns, nextShipments] = await Promise.all([agroApi.getGodowns(), agroApi.getGodownShipments()]);
+    setGodowns([...nextGodowns]);
+    setShipments([...nextShipments]);
   };
 
   // Action: Mark shipment arrived at local godown (simulation helper)
   const handleMarkArrived = async (shipmentId: string) => {
     try {
       await agroApi.markArrivedAtLocalGodown(shipmentId);
-      refreshData();
+      await refreshData();
       setNotice('Shipment transfer carrier logged arrived at unloading bay.');
       setTimeout(() => setNotice(null), 3000);
     } catch (err: any) {
@@ -269,6 +285,9 @@ export const GodownHub: React.FC = () => {
       setErrorMsg(err.message || 'Manual assignment failed');
     }
   };
+
+  if (loading) return <div className="p-8 text-center text-sm text-slate-500">Loading your godown records…</div>;
+  if (!selectedGodown) return <div className="rounded-xl border border-slate-200 bg-white p-8 text-center"><h2 className="font-semibold text-slate-900">No godown facility linked</h2><p className="mt-2 text-sm text-slate-500">Your approved warehouse account does not currently have a local godown facility assigned.</p></div>;
 
   return (
     <div className="space-y-6">

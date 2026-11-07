@@ -1,10 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Package, Truck, Check, ArrowRight, UserCheck } from 'lucide-react';
 
 export const WarehouseDispatch: React.FC = () => {
   const [jobs, setJobs] = useState(store.jobs.filter((j) => j.type === 'DELIVERY'));
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let active = true;
+    Promise.all([agroApi.getLogisticsJobs(), agroApi.getOrders()])
+      .then(([records]) => { if (active) setJobs(records.filter((job) => job.type === 'DELIVERY')); })
+      .catch((error: unknown) => { if (active) setErrorNotice(error instanceof Error ? error.message : 'Could not load dispatch jobs.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
@@ -48,7 +57,7 @@ export const WarehouseDispatch: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {loading ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Loading dispatch jobs…</div> : jobs.length === 0 ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No delivery jobs are assigned to this warehouse.</div> : <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {jobs.map((job) => (
           <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -96,7 +105,7 @@ export const WarehouseDispatch: React.FC = () => {
             </div>
           </div>
         ))}
-      </div>
+      </div>}
     </div>
   );
 };

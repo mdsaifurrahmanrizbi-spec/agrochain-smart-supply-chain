@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { store } from '../../services/api';
+import { agroApi, store } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { MetricCard } from '../../components/common/MetricCard';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -19,15 +19,24 @@ import {
 export const WarehouseDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [, setDataVersion] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([agroApi.getWarehouses(), agroApi.getInventory(), agroApi.getGodowns()]).finally(() => {
+      if (active) setDataVersion((version) => version + 1);
+    });
+    return () => { active = false; };
+  }, []);
 
   const inventory = store.inventory;
   const warehouses = store.warehouses;
-  const centralWh = warehouses.find((w) => w.type === 'CENTRAL') || warehouses[0];
+  const primaryWarehouse = warehouses[0];
 
   const totalStockKg = inventory.reduce((sum, item) => sum + item.quantityKg, 0);
-  const pendingIntake = store.jobs.filter((j) => j.type === 'PICKUP' && j.status === 'PICKED_UP').length;
-  const pendingDispatch = store.jobs.filter((j) => j.type === 'DELIVERY' && j.status === 'ASSIGNED').length;
-  const pendingPartnerApprovals = store.deliveryPartners.filter((p) => p.approvalStatus === 'PENDING_APPROVAL').length;
+  const pendingIntake = 'N/A';
+  const pendingDispatch = 'N/A';
+  const pendingPartnerApprovals = 'N/A';
   const activeGodownsCount = store.godowns.filter((g) => g.status === 'ACTIVE').length;
 
   return (
@@ -42,10 +51,10 @@ export const WarehouseDashboard: React.FC = () => {
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mt-0.5">
-            {centralWh.name}
+            {primaryWarehouse?.name || 'No warehouse linked to this account'}
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Supervised by <strong>{user?.name || centralWh.managerName}</strong> · Joydebpur, Gazipur · Cold Storage Active
+            Supervised by <strong>{user?.name || 'Warehouse Manager'}</strong>{primaryWarehouse?.location ? ` · ${primaryWarehouse.location}` : ''}
           </p>
         </div>
 
@@ -92,24 +101,23 @@ export const WarehouseDashboard: React.FC = () => {
         />
         <MetricCard
           title="Incoming Farm Intake"
-          value={pendingIntake || 2}
-          subtitle="Sacks en route from pickup fleet"
+          value={pendingIntake}
+          subtitle="Live manager-scoped intake counts unavailable"
           icon={Truck}
           onClick={() => navigate('/warehouse/incoming')}
         />
         <MetricCard
           title="Pending Last-Mile Dispatches"
-          value={pendingDispatch || 3}
-          subtitle="Ready for local delivery partner"
+          value={pendingDispatch}
+          subtitle="Live manager-scoped dispatch counts unavailable"
           icon={Package}
           onClick={() => navigate('/warehouse/dispatch')}
         />
         <MetricCard
           title="Delivery Verifications"
-          value="1 Pending"
-          subtitle="Awaiting supervisor audit"
+          value="N/A"
+          subtitle="Verified delivery audit totals unavailable"
           icon={CheckCircle}
-          trend={{ value: 'Authorize Payout', isPositive: true }}
           onClick={() => navigate('/warehouse/verifications')}
         />
       </div>
@@ -137,11 +145,12 @@ export const WarehouseDashboard: React.FC = () => {
             <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
               <div
                 className="bg-emerald-600 h-full rounded-full"
-                style={{ width: `${(wh.currentStockMetricTons / wh.capacityMetricTons) * 100}%` }}
+                style={{ width: `${wh.capacityMetricTons > 0 ? Math.min(100, (wh.currentStockMetricTons / wh.capacityMetricTons) * 100) : 0}%` }}
               />
             </div>
           </div>
         ))}
+        {warehouses.length === 0 && <div className="col-span-full rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">No warehouse facility has been linked to this account yet.</div>}
       </div>
 
       {/* Current Stored Inventory Snapshot */}
@@ -178,6 +187,7 @@ export const WarehouseDashboard: React.FC = () => {
                   </td>
                 </tr>
               ))}
+              {inventory.length === 0 && <tr><td colSpan={6} className="py-8 px-4 text-center text-slate-500">No inventory records found for this warehouse.</td></tr>}
             </tbody>
           </table>
         </div>
