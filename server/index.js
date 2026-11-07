@@ -1594,6 +1594,29 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       else if (resource === 'godownShipments') rows = rows.filter((row) =>
         warehouseIds.has(row.data?.sourceWarehouseId) || godownIds.has(row.data?.destinationGodownId)
       );
+      else if (resource === 'jobs') {
+        // A warehouse manager may only see pickup jobs for orders assigned to
+        // their warehouse, and delivery jobs routed to one of their godowns.
+        // Resolve the relationship through persisted order records; LogisticsJob
+        // intentionally has no warehouseId field of its own.
+        const orderRows = await pool.query(
+          "SELECT id, data FROM agrochain_records WHERE resource = 'orders'"
+        );
+        const orderById = new Map(orderRows.rows.map((row) => [row.id, row.data]));
+        rows = rows.filter((row) => {
+          const job = row.data || {};
+          const order = orderById.get(job.orderId);
+          if (!order) return false;
+          if (job.type === 'PICKUP') {
+            return warehouseIds.has(String(order.warehouseId || ''));
+          }
+          if (job.type === 'DELIVERY') {
+            const destinationGodownId = String(job.godownId || order.destinationGodownId || order.godownId || '');
+            return godownIds.has(destinationGodownId);
+          }
+          return false;
+        });
+      }
     }
     if (resource === 'settlements') {
       const role = req.auth.role;
@@ -1726,6 +1749,39 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     );
 
     const existing = existingResult.rows[0]?.data;
+
+    if (role === 'warehouse' && resource === 'jobs') {
+      const ownedWarehouseRows = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1",
+        [req.auth.sub]
+      );
+      const ownedWarehouseIds = new Set(ownedWarehouseRows.rows.map((row) => row.id));
+      const ownedGodownRows = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'godowns' AND (data->>'managerId' = $1 OR data->>'warehouseId' IN (SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1))",
+        [req.auth.sub]
+      );
+      const ownedGodownIds = new Set(ownedGodownRows.rows.map((row) => row.id));
+      const canManageJob = async (job) => {
+        if (!job || !['PICKUP', 'DELIVERY'].includes(job.type) || !job.orderId) return false;
+        const orderResult = await client.query(
+          "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND id = $1",
+          [String(job.orderId)]
+        );
+        const order = orderResult.rows[0]?.data;
+        if (!order) return false;
+        if (job.type === 'PICKUP') {
+          return ownedWarehouseIds.has(String(order.warehouseId || ''));
+        }
+        const destinationGodownId = String(job.godownId || order.destinationGodownId || order.godownId || '');
+        return ownedGodownIds.has(destinationGodownId);
+      };
+      const existingOwned = !existing || await canManageJob(existing);
+      const incomingOwned = await canManageJob(data);
+      if (!existingOwned || !incomingOwned) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'You can only manage pickup and delivery jobs linked to your assigned warehouse or godown' });
+      }
+    }
 
     if (role === 'warehouse' && ['warehouses', 'inventory', 'godowns', 'godownShipments'].includes(resource)) {
       const ownedRows = await client.query(
