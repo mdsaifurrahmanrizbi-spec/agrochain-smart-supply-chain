@@ -842,6 +842,94 @@ app.patch('/api/admin/delivery-partners/:id/approval/', requireAuth, async (req,
   }
 });
 
+// Admin-only Warehouse Manager application review. Account activation and application
+// status are committed together so a failed review cannot leave a half-approved account.
+app.get('/api/admin/warehouse-applications/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  try {
+    const result = await pool.query(
+      `SELECT id, data, created_at, updated_at
+       FROM agrochain_records
+       WHERE resource = 'warehouseApplications'
+       ORDER BY created_at DESC`
+    );
+    return res.json(result.rows.map((row) => ({
+      ...(row.data || {}),
+      id: row.id,
+      createdAt: row.data?.createdAt || row.created_at,
+      updatedAt: row.updated_at,
+    })));
+  } catch (error) {
+    console.error('Could not load warehouse applications:', error.message);
+    return res.status(500).json({ message: 'Could not load warehouse applications' });
+  }
+});
+
+app.patch('/api/admin/warehouse-applications/:id/approval/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  const applicationId = String(req.params.id || '').trim();
+  const decision = String(req.body?.status || '').trim().toUpperCase();
+  const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim().slice(0, 2000) : '';
+  if (!applicationId) return res.status(400).json({ message: 'Warehouse application ID is required' });
+  if (!['APPROVED', 'REJECTED'].includes(decision)) {
+    return res.status(400).json({ message: 'Choose APPROVED or REJECTED' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const applicationResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'warehouseApplications' AND id = $1 FOR UPDATE",
+      [applicationId]
+    );
+    const applicationRow = applicationResult.rows[0];
+    if (!applicationRow) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Warehouse application not found' });
+    }
+    const application = applicationRow.data || {};
+    if (application.status === 'APPROVED' || application.status === 'REJECTED') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'This warehouse application has already been reviewed' });
+    }
+    const linkedUserId = String(application.userId || application.id || '').trim();
+    const accountResult = await client.query(
+      "UPDATE auth_users SET status = $1 WHERE id = $2 AND role = 'warehouse' RETURNING id, name, email, role, status, created_at",
+      [decision === 'APPROVED' ? 'ACTIVE' : 'SUSPENDED', linkedUserId]
+    );
+    if (!accountResult.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'The linked Warehouse Manager account was not found. No changes were made.' });
+    }
+
+    const reviewedAt = new Date().toISOString();
+    const reviewedApplication = {
+      ...application,
+      status: decision,
+      approvalStatus: decision,
+      approvedBy: decision === 'APPROVED' ? 'Admin' : undefined,
+      reviewedBy: 'Admin',
+      reviewedAt,
+      ...(notes ? { approvalNotes: notes } : {}),
+    };
+    const saved = await client.query(
+      "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'warehouseApplications' AND id = $1 RETURNING id, data, updated_at",
+      [applicationId, JSON.stringify(reviewedApplication)]
+    );
+    await client.query('COMMIT');
+    return res.json({
+      application: { ...saved.rows[0].data, id: saved.rows[0].id, updatedAt: saved.rows[0].updated_at },
+      account: { ...accountResult.rows[0], createdAt: accountResult.rows[0].created_at },
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Warehouse application review failed:', error.message);
+    return res.status(500).json({ message: 'Warehouse application review could not be completed' });
+  } finally {
+    client.release();
+  }
+});
+
 app.patch('/api/admin/users/:id/status/', requireAuth, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
   const status = typeof req.body?.status === 'string' ? req.body.status.trim().toUpperCase() : '';
