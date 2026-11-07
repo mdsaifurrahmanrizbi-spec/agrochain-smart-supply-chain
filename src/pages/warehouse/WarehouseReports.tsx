@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { store } from '../../services/api';
+import { agroApi, store } from '../../services/api';
 import { Download, BarChart3, Warehouse, Truck, Package } from 'lucide-react';
 import {
   BarChart,
@@ -16,6 +16,7 @@ export const WarehouseReports: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState('April');
   const [selectedYear, setSelectedYear] = useState('2026');
   const { user } = useAuth();
+  useEffect(() => { void agroApi.getWarehouses(); }, []);
   const facilities = store.warehouses.filter((warehouse) => user?.role !== 'warehouse' || warehouse.managerId === user.id);
   const throughputData = facilities.map((facility) => ({ facility: facility.name, intakeMt: 0, dispatchMt: 0 }));
 
