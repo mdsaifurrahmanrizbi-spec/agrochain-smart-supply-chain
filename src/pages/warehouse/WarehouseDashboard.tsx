@@ -34,9 +34,9 @@ export const WarehouseDashboard: React.FC = () => {
   const primaryWarehouse = warehouses[0];
 
   const totalStockKg = inventory.reduce((sum, item) => sum + item.quantityKg, 0);
-  const pendingIntake = 0;
-  const pendingDispatch = 0;
-  const pendingPartnerApprovals = 0;
+  const pendingIntake = 'N/A';
+  const pendingDispatch = 'N/A';
+  const pendingPartnerApprovals = 'N/A';
   const activeGodownsCount = store.godowns.filter((g) => g.status === 'ACTIVE').length;
 
   return (
@@ -102,21 +102,21 @@ export const WarehouseDashboard: React.FC = () => {
         <MetricCard
           title="Incoming Farm Intake"
           value={pendingIntake}
-          subtitle="Sacks en route from pickup fleet"
+          subtitle="Live manager-scoped intake counts unavailable"
           icon={Truck}
           onClick={() => navigate('/warehouse/incoming')}
         />
         <MetricCard
           title="Pending Last-Mile Dispatches"
           value={pendingDispatch}
-          subtitle="Ready for local delivery partner"
+          subtitle="Live manager-scoped dispatch counts unavailable"
           icon={Package}
           onClick={() => navigate('/warehouse/dispatch')}
         />
         <MetricCard
           title="Delivery Verifications"
-          value={0}
-          subtitle="Awaiting supervisor audit"
+          value="N/A"
+          subtitle="Verified delivery audit totals unavailable"
           icon={CheckCircle}
           onClick={() => navigate('/warehouse/verifications')}
         />
@@ -145,7 +145,7 @@ export const WarehouseDashboard: React.FC = () => {
             <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
               <div
                 className="bg-emerald-600 h-full rounded-full"
-                style={{ width: `${(wh.currentStockMetricTons / wh.capacityMetricTons) * 100}%` }}
+                style={{ width: `${wh.capacityMetricTons > 0 ? Math.min(100, (wh.currentStockMetricTons / wh.capacityMetricTons) * 100) : 0}%` }}
               />
             </div>
           </div>
