@@ -22,7 +22,7 @@ export const WarehouseDashboard: React.FC = () => {
 
   const inventory = store.inventory;
   const warehouses = store.warehouses;
-  const centralWh = warehouses.find((w) => w.type === 'CENTRAL') || warehouses[0];
+  const primaryWarehouse = warehouses[0];
 
   const totalStockKg = inventory.reduce((sum, item) => sum + item.quantityKg, 0);
   const pendingIntake = store.jobs.filter((j) => j.type === 'PICKUP' && j.status === 'PICKED_UP').length;
@@ -42,10 +42,10 @@ export const WarehouseDashboard: React.FC = () => {
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mt-0.5">
-            {centralWh.name}
+            {primaryWarehouse?.name || 'No warehouse linked to this account'}
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Supervised by <strong>{user?.name || centralWh.managerName}</strong> · Joydebpur, Gazipur · Cold Storage Active
+            Supervised by <strong>{user?.name || 'Warehouse Manager'}</strong>{primaryWarehouse?.location ? ` · ${primaryWarehouse.location}` : ''}
           </p>
         </div>
 
@@ -92,24 +92,23 @@ export const WarehouseDashboard: React.FC = () => {
         />
         <MetricCard
           title="Incoming Farm Intake"
-          value={pendingIntake || 2}
+          value={pendingIntake}
           subtitle="Sacks en route from pickup fleet"
           icon={Truck}
           onClick={() => navigate('/warehouse/incoming')}
         />
         <MetricCard
           title="Pending Last-Mile Dispatches"
-          value={pendingDispatch || 3}
+          value={pendingDispatch}
           subtitle="Ready for local delivery partner"
           icon={Package}
           onClick={() => navigate('/warehouse/dispatch')}
         />
         <MetricCard
           title="Delivery Verifications"
-          value="1 Pending"
+          value={0}
           subtitle="Awaiting supervisor audit"
           icon={CheckCircle}
-          trend={{ value: 'Authorize Payout', isPositive: true }}
           onClick={() => navigate('/warehouse/verifications')}
         />
       </div>
@@ -142,6 +141,7 @@ export const WarehouseDashboard: React.FC = () => {
             </div>
           </div>
         ))}
+        {warehouses.length === 0 && <div className="col-span-full rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">No warehouse facility has been linked to this account yet.</div>}
       </div>
 
       {/* Current Stored Inventory Snapshot */}
@@ -178,6 +178,7 @@ export const WarehouseDashboard: React.FC = () => {
                   </td>
                 </tr>
               ))}
+              {inventory.length === 0 && <tr><td colSpan={6} className="py-8 px-4 text-center text-slate-500">No inventory records found for this warehouse.</td></tr>}
             </tbody>
           </table>
         </div>
