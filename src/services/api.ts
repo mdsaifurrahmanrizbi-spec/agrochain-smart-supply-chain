@@ -1,4 +1,4 @@
-﻿import {
+import {
   User,
   Farm,
   Crop,
@@ -42,6 +42,27 @@ export type AdminAccount = Pick<User, 'id' | 'name' | 'email' | 'role' | 'status
   createdAt?: string;
   created_at?: string;
 };
+
+export interface WarehouseApplication {
+  id: string;
+  userId: string;
+  managerName: string;
+  email: string;
+  phone?: string;
+  managerNid: string;
+  name: string;
+  type: 'CENTRAL' | 'REGIONAL_GODOWN';
+  address: string;
+  city: string;
+  area: string;
+  capacityMetricTons: number;
+  temperatureControlled: boolean;
+  status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  createdAt?: string;
+  reviewedAt?: string;
+  approvalNotes?: string;
+}
+
 
 type BackendRecord<T> = {
   id: string;
@@ -308,6 +329,29 @@ export const agroApi = {
     if (!res.ok) throw new Error(data.message || `Could not load accounts (${res.status})`);
     if (!Array.isArray(data)) throw new Error('The server returned an invalid account list');
     return data as AdminAccount[];
+  },
+
+  async getWarehouseApplications(): Promise<WarehouseApplication[]> {
+    const res = await fetch(`${API_BASE_URL}/admin/warehouse-applications/`, { headers: authHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Could not load warehouse applications (${res.status})`);
+    if (!Array.isArray(data)) throw new Error('The server returned an invalid warehouse application list');
+    return data as WarehouseApplication[];
+  },
+
+  async reviewWarehouseApplication(
+    id: string,
+    status: 'APPROVED' | 'REJECTED',
+    notes?: string
+  ): Promise<{ application: WarehouseApplication; account: AdminAccount }> {
+    const res = await fetch(`${API_BASE_URL}/admin/warehouse-applications/${encodeURIComponent(id)}/approval/`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ status, notes }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Could not review warehouse application (${res.status})`);
+    return data as { application: WarehouseApplication; account: AdminAccount };
   },
 
   async createStaffAccount(input: { name: string; email: string; password: string; role: 'warehouse' | 'inspector' }): Promise<AdminAccount> {
