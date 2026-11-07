@@ -1711,6 +1711,16 @@ return qc;
     return list;
   },
 
+  async updateGodownShipment(shipment: GodownShipment): Promise<GodownShipment> {
+    if (!shipment?.id) throw new Error('A shipment ID is required');
+    await saveBackendRecord('godownShipments', shipment);
+    const index = store.godownShipments.findIndex((item) => item.id === shipment.id);
+    if (index >= 0) store.godownShipments[index] = shipment;
+    else store.godownShipments.unshift(shipment);
+    localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
+    return shipment;
+  },
+
   async getGodownShipment(id: string): Promise<GodownShipment | undefined> {
     try {
       const backendList = await getBackendRecords<GodownShipment>('godownShipments');
