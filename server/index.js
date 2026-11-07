@@ -1727,6 +1727,38 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     const existing = existingResult.rows[0]?.data;
 
+    if (role === 'warehouse' && ['warehouses', 'inventory', 'godowns', 'godownShipments'].includes(resource)) {
+      const ownedRows = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1",
+        [req.auth.sub]
+      );
+      const ownedWarehouseIds = new Set(ownedRows.rows.map((row) => row.id));
+      const ownedGodownRows = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'godowns' AND data->>'managerId' = $1",
+        [req.auth.sub]
+      );
+      const ownedGodownIds = new Set(ownedGodownRows.rows.map((row) => row.id));
+      let permitted = false;
+      if (resource === 'warehouses') {
+        permitted = Boolean(existing && existing.managerId === req.auth.sub && data.managerId === req.auth.sub);
+      } else if (resource === 'inventory') {
+        permitted = ownedWarehouseIds.has(String(data.warehouseId || '')) &&
+          (!existing || ownedWarehouseIds.has(String(existing.warehouseId || '')));
+      } else if (resource === 'godowns') {
+        permitted = data.managerId === req.auth.sub &&
+          (!existing || existing.managerId === req.auth.sub);
+      } else if (resource === 'godownShipments') {
+        permitted = (ownedWarehouseIds.has(String(data.sourceWarehouseId || '')) ||
+          ownedGodownIds.has(String(data.destinationGodownId || ''))) &&
+          (!existing || ownedWarehouseIds.has(String(existing.sourceWarehouseId || '')) ||
+            ownedGodownIds.has(String(existing.destinationGodownId || '')));
+      }
+      if (!permitted) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'You can only manage records belonging to your assigned warehouse or godown' });
+      }
+    }
+
     if (buyerPendingQcCreate) {
       if (existing) {
         await client.query('ROLLBACK');
