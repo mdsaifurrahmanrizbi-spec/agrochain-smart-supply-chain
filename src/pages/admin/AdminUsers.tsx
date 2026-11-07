@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, RefreshCw, UserPlus, Users } from 'lucide-react';
-import { agroApi, AdminAccount } from '../../services/api';
+import { agroApi, AdminAccount, WarehouseApplication } from '../../services/api';
 
 export const AdminUsers: React.FC = () => {
-  const [users, setUsers] = useState<AdminAccount[]>([]);
+  const [users, setUsers] = useState<AdminAccount[]>([]);\n  const [warehouseApplications, setWarehouseApplications] = useState<WarehouseApplication[]>([]);\n  const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [name, setName] = useState('');
@@ -19,7 +19,7 @@ export const AdminUsers: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      setUsers(await agroApi.getAdminUsers());
+      const [accounts, applications] = await Promise.all([agroApi.getAdminUsers(), agroApi.getWarehouseApplications()]);\n      setUsers(accounts);\n      setWarehouseApplications(applications);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load accounts');
     } finally {
@@ -51,6 +51,21 @@ export const AdminUsers: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Could not create staff account');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const reviewWarehouseApplication = async (application: WarehouseApplication, status: 'APPROVED' | 'REJECTED') => {
+    setError('');
+    setNotice('');
+    setReviewingId(application.id);
+    try {
+      await agroApi.reviewWarehouseApplication(application.id, status);
+      setNotice(`${application.name}: application ${status.toLowerCase()}; account ${status === 'APPROVED' ? 'activated' : 'blocked'}.`);
+      await loadUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not review warehouse application');
+    } finally {
+      setReviewingId(null);
     }
   };
 
@@ -111,6 +126,53 @@ export const AdminUsers: React.FC = () => {
 
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-emerald-700" />
+          <h2 className="font-bold text-slate-900">Warehouse Registration Requests</h2>
+          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">
+            {warehouseApplications.filter((application) => application.status === 'PENDING_APPROVAL').length} pending
+          </span>
+        </div>
+        <p className="text-xs text-slate-500">Review self-registered Warehouse Manager applications. Approving activates the linked login account; rejecting blocks login.</p>
+        {warehouseApplications.length === 0 ? (
+          <p className="py-5 text-center text-sm text-slate-500">No warehouse applications found.</p>
+        ) : (
+          <div className="space-y-3">
+            {warehouseApplications.map((application) => (
+              <div key={application.id} className="rounded-lg border border-slate-200 p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="font-semibold text-slate-900">{application.name}</p>
+                    <p className="text-xs text-slate-600">{application.managerName} · {application.email}</p>
+                    <p className="mt-1 text-xs text-slate-600">{application.type === 'CENTRAL' ? 'Central Warehouse' : 'Regional Godown'} · {application.area}, {application.city}</p>
+                    <p className="text-xs text-slate-600">{application.address}</p>
+                    <p className="text-xs text-slate-600">Capacity: {application.capacityMetricTons} MT · Cold storage: {application.temperatureControlled ? 'Yes' : 'No'}</p>
+                    <p className="mt-1 text-[11px] text-slate-500">Submitted: {application.createdAt ? new Date(application.createdAt).toLocaleString() : 'Date unavailable'}</p>
+                    {application.approvalNotes && <p className="mt-1 text-xs text-slate-600">Review note: {application.approvalNotes}</p>}
+                  </div>
+                  <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+                    <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${application.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-800' : application.status === 'REJECTED' ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'}`}>
+                      {application.status || 'PENDING_APPROVAL'}
+                    </span>
+                    {application.status === 'PENDING_APPROVAL' && (
+                      <div className="flex gap-2">
+                        <button type="button" disabled={reviewingId === application.id} onClick={() => void reviewWarehouseApplication(application, 'APPROVED')} className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-60">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Approve & Activate
+                        </button>
+                        <button type="button" disabled={reviewingId === application.id} onClick={() => void reviewWarehouseApplication(application, 'REJECTED')} className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60">
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex items-center gap-2">
           <Users className="h-5 w-5 text-slate-600" />
           <h2 className="font-bold text-slate-900">All Accounts</h2>
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{users.length}</span>
@@ -141,9 +203,9 @@ export const AdminUsers: React.FC = () => {
                     <td className="px-3 py-3 uppercase">{user.role}</td>
                     <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${user.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-800' : user.status === 'PENDING' ? 'bg-amber-50 text-amber-800' : 'bg-red-50 text-red-800'}`}>{user.status}</span></td>
                     <td className="px-3 py-3">
-                      {user.role === 'delivery' && user.status === 'PENDING' ? (
+                      {(user.role === 'delivery') && user.status === 'PENDING' ? (
                         <button type="button" onClick={() => void changeStatus(user, 'ACTIVE')} className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-2.5 py-1.5 font-bold text-white hover:bg-emerald-800"><CheckCircle2 className="h-3.5 w-3.5" /> Approve</button>
-                      ) : user.role !== 'admin' ? (
+                      ) : user.role !== 'admin' && user.status !== 'PENDING' ? (
                         <button type="button" onClick={() => void changeStatus(user, user.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED')} className="rounded-md border border-slate-200 px-2.5 py-1.5 font-semibold hover:bg-slate-50">{user.status === 'SUSPENDED' ? 'Reactivate' : 'Suspend'}</button>
                       ) : <span className="text-slate-400">Protected</span>}
                     </td>
