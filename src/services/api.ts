@@ -709,7 +709,12 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       store.orders = backendOrders;
       localStorage.setItem('agro_orders', JSON.stringify(backendOrders));
     } catch (error) {
-      console.warn('Could not refresh orders from backend; using cached orders.', error);
+      if (role === 'warehouse' || isWarehouseSession()) {
+        store.orders = [];
+        localStorage.setItem('agro_orders', JSON.stringify([]));
+        throw error;
+      }
+      console.warn('Could not refresh orders from backend; using cached orders for non-warehouse views.', error);
     }
     if (role === 'buyer' && userId) {
       return store.orders.filter((o) => o.buyerId === userId);
