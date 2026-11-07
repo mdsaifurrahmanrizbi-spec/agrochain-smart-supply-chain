@@ -1,16 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { agroApi, store } from '../../services/api';
-import { Download, BarChart3, Warehouse, Truck, Package } from 'lucide-react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import { Download } from 'lucide-react';
 
 export const WarehouseReports: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState('April');
@@ -30,7 +21,7 @@ export const WarehouseReports: React.FC = () => {
   const handleExportCSV = () => {
     const csv =
       'data:text/csv;charset=utf-8,Facility,Intake Volume (MT),Dispatch Volume (MT)\n' +
-      throughputData.map((d) => `${d.facility},${d.intakeMt},${d.dispatchMt}`).join('\n');
+      facilities.map((facility) => `${facility.name},N/A,N/A`).join('\\n');
     const encodedUri = encodeURI(csv);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
@@ -90,7 +81,7 @@ export const WarehouseReports: React.FC = () => {
 
         <div className="bg-white p-4 rounded-xl border border-slate-200">
           <span className="text-slate-500 font-medium">Monthly Outbound Dispatch</span>
-          <div className="text-xl font-bold text-slate-900 mt-1 tabular-nums">0 MT</div>
+          <div className="text-xl font-bold text-slate-900 mt-1 tabular-nums">N/A</div>
           <div className="text-slate-500 text-[11px] mt-0.5">Customer & retail fulfillment</div>
         </div>
 
