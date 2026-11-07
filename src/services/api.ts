@@ -71,6 +71,14 @@ type BackendRecord<T> = {
   updated_at: string;
 };
 
+function isWarehouseSession(): boolean {
+  try {
+    return JSON.parse(localStorage.getItem('agro_active_user') || '{}').role === 'warehouse';
+  } catch {
+    return false;
+  }
+}
+
 function authHeaders(): Record<string, string> {
   const token = localStorage.getItem('agro_auth_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -899,9 +907,9 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
         ? backendJobs.filter((job) => job.partnerId === partnerId)
         : backendJobs;
     } catch (error) {
-      // Delivery workspaces must see a real API error rather than fake jobs.
-      if (partnerId) throw error;
-      console.warn('Could not refresh logistics jobs; using cached records for non-partner views.', error);
+      // Warehouse and delivery workspaces must never fall back to demo or stale jobs.
+      if (partnerId || isWarehouseSession()) throw error;
+      console.warn('Could not refresh logistics jobs; using cached records for non-restricted views.', error);
       return store.jobs;
     }
   },
@@ -1723,13 +1731,18 @@ return qc;
 
   async getGodownShipment(id: string): Promise<GodownShipment | undefined> {
     try {
+      // Replace the cache even when the server returns an empty list. An empty
+      // authoritative response must not resurrect a shipment from demo/local data.
       const backendList = await getBackendRecords<GodownShipment>('godownShipments');
-      if (backendList.length > 0) {
-        store.godownShipments = backendList;
-        localStorage.setItem('agro_godown_shipments', JSON.stringify(backendList));
-      }
+      store.godownShipments = backendList;
+      localStorage.setItem('agro_godown_shipments', JSON.stringify(backendList));
     } catch (error) {
-      console.warn('Could not load shipment from backend; using local data.', error);
+      if (isWarehouseSession()) {
+        store.godownShipments = [];
+        localStorage.setItem('agro_godown_shipments', JSON.stringify([]));
+        throw error;
+      }
+      console.warn('Could not load shipment from backend; using local data for non-warehouse views.', error);
     }
 
     return store.godownShipments.find(
