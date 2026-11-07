@@ -1734,7 +1734,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       );
       const ownedWarehouseIds = new Set(ownedRows.rows.map((row) => row.id));
       const ownedGodownRows = await client.query(
-        "SELECT id FROM agrochain_records WHERE resource = 'godowns' AND data->>'managerId' = $1",
+        "SELECT id FROM agrochain_records WHERE resource = 'godowns' AND (data->>'managerId' = $1 OR data->>'warehouseId' IN (SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1))",
         [req.auth.sub]
       );
       const ownedGodownIds = new Set(ownedGodownRows.rows.map((row) => row.id));
