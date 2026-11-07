@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { GodownShipment, LocalGodown } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -20,21 +20,36 @@ export const WarehouseTransfers: React.FC = () => {
   const [godowns, setGodowns] = useState<LocalGodown[]>(store.godowns);
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Manual rerouting state
   const [reroutingShipment, setReroutingShipment] = useState<GodownShipment | null>(null);
   const [targetGodownId, setTargetGodownId] = useState('');
 
-  const refreshData = () => {
-    setShipments([...store.godownShipments]);
-    setGodowns([...store.godowns]);
+  const refreshData = async () => {
+    const [nextShipments, nextGodowns] = await Promise.all([agroApi.getGodownShipments(), agroApi.getGodowns()]);
+    setShipments([...nextShipments]);
+    setGodowns([...nextGodowns]);
   };
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([agroApi.getGodownShipments(), agroApi.getGodowns()])
+      .then(([nextShipments, nextGodowns]) => {
+        if (!active) return;
+        setShipments([...nextShipments]);
+        setGodowns([...nextGodowns]);
+      })
+      .catch((error: unknown) => { if (active) setErrorMsg(error instanceof Error ? error.message : 'Could not load transfer records.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const handleDispatch = async (shipmentId: string) => {
     setErrorMsg(null);
     try {
       await agroApi.dispatchToLocalGodown(shipmentId);
-      refreshData();
+      await refreshData();
       setNotice('Shipment successfully dispatched to destination local godown!');
       setTimeout(() => setNotice(null), 3500);
     } catch (err: any) {
@@ -72,6 +87,7 @@ export const WarehouseTransfers: React.FC = () => {
       reroutingShipment.destinationGodownName = targetGodown.name;
       reroutingShipment.transferStatus = 'PENDING_DISPATCH';
       reroutingShipment.exceptionNotes = undefined;
+      await agroApi.updateGodownShipment(reroutingShipment);
 
       const order = store.orders.find((o) => o.id === reroutingShipment.orderId);
       if (order) {
@@ -122,7 +138,7 @@ export const WarehouseTransfers: React.FC = () => {
       )}
 
       {/* Manual Routing Queue (Matching section 2 rule: Do not assign to inactive godowns) */}
-      {manualQueue.length > 0 && (
+      {loading ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Loading warehouse transfers…</div> : <>{manualQueue.length > 0 && (
         <div className="bg-amber-50/60 border border-amber-300 rounded-2xl p-5 shadow-2xs space-y-3">
           <div className="flex items-center gap-2 text-amber-900">
             <AlertTriangle className="w-5 h-5 text-amber-700" />
@@ -236,6 +252,7 @@ export const WarehouseTransfers: React.FC = () => {
         </div>
       </div>
 
+      {transferShipments.length === 0 && manualQueue.length === 0 && <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No transfer records are assigned to this warehouse.</div>}
       {/* Re-route Modal */}
       {reroutingShipment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
@@ -290,7 +307,7 @@ export const WarehouseTransfers: React.FC = () => {
             </form>
           </div>
         </div>
-      )}
+      )}</>}
     </div>
   );
 };
