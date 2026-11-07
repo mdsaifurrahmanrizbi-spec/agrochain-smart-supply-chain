@@ -3,7 +3,9 @@ import { CheckCircle2, RefreshCw, UserPlus, Users } from 'lucide-react';
 import { agroApi, AdminAccount, WarehouseApplication } from '../../services/api';
 
 export const AdminUsers: React.FC = () => {
-  const [users, setUsers] = useState<AdminAccount[]>([]);\n  const [warehouseApplications, setWarehouseApplications] = useState<WarehouseApplication[]>([]);\n  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [users, setUsers] = useState<AdminAccount[]>([]);
+  const [warehouseApplications, setWarehouseApplications] = useState<WarehouseApplication[]>([]);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [name, setName] = useState('');
@@ -19,7 +21,9 @@ export const AdminUsers: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const [accounts, applications] = await Promise.all([agroApi.getAdminUsers(), agroApi.getWarehouseApplications()]);\n      setUsers(accounts);\n      setWarehouseApplications(applications);
+      const [accounts, applications] = await Promise.all([agroApi.getAdminUsers(), agroApi.getWarehouseApplications()]);
+      setUsers(accounts);
+      setWarehouseApplications(applications);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load accounts');
     } finally {
