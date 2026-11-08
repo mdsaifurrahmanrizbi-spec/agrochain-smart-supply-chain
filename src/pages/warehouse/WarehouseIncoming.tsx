@@ -2,14 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Truck, CheckCircle2, ShieldCheck, Scale, Check, AlertTriangle, PackageCheck } from 'lucide-react';
+import type { Warehouse, GodownShipment } from '../../types';
 
 export const WarehouseIncoming: React.FC = () => {
   const [jobs, setJobs] = useState(store.jobs.filter((j) => j.type === 'PICKUP'));
+  const [warehouseFacility, setWarehouseFacility] = useState<Warehouse | null>(null);
+  const [shipments, setShipments] = useState<GodownShipment[]>(store.godownShipments);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
-    Promise.all([agroApi.getLogisticsJobs(), agroApi.getOrders()])
-      .then(([records]) => { if (active) setJobs(records.filter((job) => job.type === 'PICKUP')); })
+    Promise.all([agroApi.getLogisticsJobs(), agroApi.getOrders(), agroApi.getWarehouses({ strict: true }), agroApi.getGodownShipments()])
+      .then(([records, , facilities, shipmentRecords]) => { if (active) { setJobs(records.filter((job) => job.type === 'PICKUP')); setWarehouseFacility(facilities[0] || null); setShipments(shipmentRecords); } })
       .catch((error: unknown) => { if (active) setErrorMsg(error instanceof Error ? error.message : 'Could not load incoming jobs.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -22,6 +25,7 @@ export const WarehouseIncoming: React.FC = () => {
     try {
       const res = await agroApi.centralWarehouseReceive(jobId);
       setJobs([...store.jobs.filter((j) => j.type === 'PICKUP')]);
+      setShipments([...store.godownShipments]);
       if (res.order.destinationGodownName) {
         setSuccessMsg(
           `Intake verified! Status updated to WAREHOUSE_RECEIVED. Destination automatically routed to: ${res.order.destinationGodownName}.`
@@ -75,7 +79,8 @@ export const WarehouseIncoming: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {loading ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Loading incoming consignments…</div> : jobs.length === 0 ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No incoming pickup jobs are assigned to this warehouse.</div> : <>{jobs.map((job) => {
           const ord = store.orders.find((o) => o.id === job.orderId || o.orderNumber === job.orderNumber);
-          const isReceived = job.status === 'WAREHOUSE_HANDOVER';
+          const isReceived = shipments.some((shipment) => shipment.orderId === job.orderId);
+          const awaitingIntake = ['PICKED_UP', 'WAREHOUSE_HANDOVER'].includes(job.status) && !isReceived;
 
           return (
             <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
@@ -106,25 +111,26 @@ export const WarehouseIncoming: React.FC = () => {
 
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 text-slate-700 space-y-1">
                   <div><strong>Farm Origin:</strong> {job.originAddress}</div>
-                  <div><strong>Receiving Bay:</strong> Central Gazipur Agro-Logistics Center, Bay #3</div>
+                  <div><strong>Origin Warehouse:</strong> {warehouseFacility?.name || 'Assigned warehouse facility not resolved'}</div>
+                  <div><strong>Receiving Location:</strong> {warehouseFacility?.location || warehouseFacility?.address || 'Confirm facility location with Admin'}</div>
                 </div>
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                 <span className="text-[11px] font-mono text-slate-500">{job.assignedDate}</span>
 
-                {job.status === 'PICKED_UP' ? (
+                {awaitingIntake ? (
                   <button
                     onClick={() => handleConfirmIntake(job.id)}
                     className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
                   >
                     <Scale className="w-3.5 h-3.5" />
-                    <span>Verify Weight & Receive Sacks</span>
+                    <span>Verify Weight & Receive at {warehouseFacility?.name || 'Assigned Warehouse'}</span>
                   </button>
                 ) : isReceived ? (
                   <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Checked into Warehouse Godown</span>
+                    <span>Warehouse intake verified</span>
                   </span>
                 ) : (
                   <span className="text-xs text-slate-400 font-medium">Awaiting delivery to warehouse</span>

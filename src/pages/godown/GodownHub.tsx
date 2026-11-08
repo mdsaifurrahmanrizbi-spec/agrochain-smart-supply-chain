@@ -70,7 +70,8 @@ export const GodownHub: React.FC = () => {
         if (!active) return;
         setGodowns([...records]);
         setShipments([...shipmentRecords]);
-        setSelectedGodownId((current) => current && records.some((g) => g.id === current) ? current : (user?.godownId && records.some((g) => g.id === user.godownId) ? user.godownId : records[0]?.id || ''));
+        const ownedGodown = records.find((godown) => godown.managerId === user?.id);
+        setSelectedGodownId((current) => current && records.some((g) => g.id === current) ? current : (ownedGodown?.id || (user?.godownId && records.some((g) => g.id === user.godownId) ? user.godownId : records[0]?.id || '')));
       })
       .catch((error: unknown) => { if (active) setErrorMsg(error instanceof Error ? error.message : 'Could not load godown records.'); })
       .finally(() => { if (active) setLoading(false); });
