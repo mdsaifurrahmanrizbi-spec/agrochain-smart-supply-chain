@@ -2584,9 +2584,18 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
         rows = rows.filter((row) => row.data?.paymentMethod === 'COD');
       } else if (role === 'delivery') {
         rows = rows.filter((row) =>
+          (deliveryPartnerProfileId && row.data?.deliveryPartnerId === deliveryPartnerProfileId) ||
           row.data?.deliveryPartnerId === req.auth.sub ||
           (deliveryPartnerProfileId && row.data?.pickupPartnerId === deliveryPartnerProfileId)
         );
+      }
+      // The recipient's OTP is a bearer secret: only the owning buyer may read it.
+      if (role !== 'buyer') {
+        rows = rows.map((row) => {
+          if (!row.data) return row;
+          const { deliveryOtp, otpAttemptsRemaining, otpExpiresAt, ...safeOrder } = row.data;
+          return { ...row, data: safeOrder };
+        });
       }
     }
 
