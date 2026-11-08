@@ -1764,7 +1764,7 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
   } finally {
     client.release();
   }
-
+});
 
 // Destination godown acceptance is authoritative and atomic. It cannot be
 // performed by the origin warehouse manager or by a manager of another godown.
@@ -1911,7 +1911,6 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
   } finally {
     client.release();
   }
-});
 });
 
 // Server-authoritative delivery confirmation. COD customer payment becomes PAID
