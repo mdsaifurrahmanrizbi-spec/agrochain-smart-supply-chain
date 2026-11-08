@@ -253,7 +253,7 @@ export const DeliveryActiveJobs: React.FC = () => {
                       onClick={async () => {
                         try {
                           if (!partnerId) throw new Error('Your delivery partner profile could not be verified.');
-                          await agroApi.deliveryPartnerConfirmReceipt(job.orderId, partnerId);
+                          await agroApi.updateJobStatus(job.id, 'COLLECTED');
                           setJobs([...store.jobs.filter((j) => j.partnerId === partnerId)]);
                           setNotice('Produce receipt confirmed from local godown!');
                           setTimeout(() => setNotice(null), 3000);
