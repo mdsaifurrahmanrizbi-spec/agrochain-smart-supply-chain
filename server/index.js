@@ -2093,6 +2093,144 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
   }
 });
 
+// Last-mile delivery job progression is server-authoritative and transactional.
+app.post('/api/delivery/jobs/:jobId/status', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'delivery') return res.status(403).json({ message: 'Only the assigned delivery partner can advance this delivery job' });
+  const nextStatus = String(req.body?.status || '').trim().toUpperCase();
+  const allowedNext = ['ACCEPTED', 'DECLINED', 'ARRIVED_AT_GODOWN', 'COLLECTED', 'OUT_FOR_DELIVERY', 'FAILED'];
+  if (!allowedNext.includes(nextStatus)) return res.status(400).json({ message: 'Unsupported delivery job status' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const accountResult = await client.query("SELECT email FROM auth_users WHERE id = $1 AND role = 'delivery' LIMIT 1", [req.auth.sub]);
+    const email = String(accountResult.rows[0]?.email || req.auth.email || '').trim().toLowerCase();
+    const partnerResult = await client.query(
+      "SELECT id,data FROM agrochain_records WHERE resource='deliveryPartners' AND (data->>'userId'=$1 OR id=$1 OR lower(data->>'email')=lower($2)) ORDER BY CASE WHEN data->>'userId'=$1 THEN 0 WHEN id=$1 THEN 1 ELSE 2 END LIMIT 1 FOR UPDATE",
+      [req.auth.sub, email]
+    );
+    const partnerRow = partnerResult.rows[0];
+    const partner = partnerRow?.data || {};
+    if (!partnerRow || String(partner.approvalStatus || '').toUpperCase() !== 'APPROVED' || partner.canDeliver !== true) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'Your delivery-partner profile must be approved and enabled for doorstep delivery' });
+    }
+    const jobResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='jobs' AND id=$1 FOR UPDATE", [req.params.jobId]);
+    const jobRow = jobResult.rows[0];
+    const job = jobRow?.data || {};
+    if (!jobRow || job.type !== 'DELIVERY' || job.partnerId !== partnerRow.id) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'This delivery job is not assigned to your partner account' });
+    }
+    const current = String(job.status || '').toUpperCase();
+    const transitions = {
+      ASSIGNED: ['ACCEPTED', 'DECLINED'],
+      ACCEPTED: ['ARRIVED_AT_GODOWN', 'FAILED'],
+      ARRIVED_AT_GODOWN: ['COLLECTED', 'FAILED'],
+      COLLECTED: ['OUT_FOR_DELIVERY', 'FAILED'],
+    };
+    if (nextStatus !== current && !(transitions[current] || []).includes(nextStatus)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Delivery must follow Assigned → Accepted → Arrived at destination godown → Collected → Out for Delivery → Customer OTP confirmation' });
+    }
+    if (nextStatus === current) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'This delivery step has already been recorded' });
+    }
+    const orderResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='orders' AND id=$1 FOR UPDATE", [String(job.orderId || '')]);
+    const orderRow = orderResult.rows[0];
+    const order = orderRow?.data || {};
+    if (!orderRow || order.deliveryPartnerId !== partnerRow.id) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'The related order is not assigned to this delivery partner' });
+    }
+    const shipmentResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND data->>'orderId'=$1 LIMIT 1 FOR UPDATE", [orderRow.id]);
+    const shipmentRow = shipmentResult.rows[0];
+    const shipment = shipmentRow?.data || {};
+    if (!shipmentRow) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Destination godown consignment record is missing' });
+    }
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    let title = '';
+    let description = '';
+    let location = '';
+    let eventStatus = 'COMPLETED';
+    if (nextStatus === 'ACCEPTED') {
+      if (shipment.transferStatus !== 'DELIVERY_PARTNER_ASSIGNED' || shipment.assignedPartnerId !== partnerRow.id) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'Destination godown has not assigned this consignment to you' });
+      }
+      shipment.transferStatus = 'DELIVERY_ACCEPTED';
+      shipment.partnerAcceptedDate = now;
+      order.orderStatus = 'DELIVERY_ACCEPTED';
+      order.deliveryAssignmentStatus = 'ACCEPTED';
+      title = 'DELIVERY ASSIGNMENT ACCEPTED';
+      description = 'Assigned delivery partner accepted the destination godown collection and doorstep delivery.';
+      location = shipment.destinationGodownName || job.godownName || '';
+    } else if (nextStatus === 'ARRIVED_AT_GODOWN') {
+      if (shipment.transferStatus !== 'DELIVERY_ACCEPTED') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'Accept the delivery assignment before arriving at the destination godown' });
+      }
+      title = 'DELIVERY PARTNER ARRIVED AT DESTINATION GODOWN';
+      description = 'Assigned delivery partner arrived for consignment handover.';
+      location = shipment.destinationGodownName || job.godownName || '';
+    } else if (nextStatus === 'COLLECTED') {
+      if (current !== 'ARRIVED_AT_GODOWN' || shipment.transferStatus !== 'DELIVERY_ACCEPTED' || !shipment.handoverInitiatedAt) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'The destination godown manager must initiate handover before you confirm collection' });
+      }
+      shipment.transferStatus = 'DELIVERY_PARTNER_COLLECTED';
+      shipment.handoverConfirmedAt = now;
+      job.handoverConfirmed = true;
+      order.orderStatus = 'DELIVERY_PARTNER_COLLECTED';
+      order.partnerCollectedAt = now;
+      title = 'COLLECTED BY DELIVERY PARTNER';
+      description = 'Delivery partner physically received the consignment after destination godown handover.';
+      location = shipment.destinationGodownName || job.godownName || '';
+    } else if (nextStatus === 'OUT_FOR_DELIVERY') {
+      if (current !== 'COLLECTED' || shipment.transferStatus !== 'DELIVERY_PARTNER_COLLECTED' || !job.handoverConfirmed) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'Confirm destination godown collection before starting doorstep delivery' });
+      }
+      shipment.transferStatus = 'OUT_FOR_DELIVERY';
+      shipment.outForDeliveryAt = now;
+      order.orderStatus = 'OUT_FOR_DELIVERY';
+      order.outForDeliveryAt = now;
+      title = 'OUT FOR DELIVERY';
+      description = 'Delivery partner left the destination godown and is travelling to the customer address.';
+      location = job.destinationAddress || order.buyerAddress || '';
+      eventStatus = 'IN_PROGRESS';
+    } else {
+      job.failureReason = String(req.body?.notes || 'Delivery could not be completed').slice(0, 500);
+      order.orderStatus = 'DELIVERY_FAILED';
+      title = 'DELIVERY ATTEMPT FAILED';
+      description = job.failureReason;
+      location = job.destinationAddress || order.buyerAddress || '';
+      eventStatus = 'IN_PROGRESS';
+    }
+    job.status = nextStatus;
+    job.updatedAt = now;
+    if (typeof req.body?.notes === 'string' && req.body.notes.trim()) job.proofNotes = req.body.notes.trim().slice(0, 500);
+    const { randomUUID } = await import('node:crypto');
+    const event = {
+      id: 'trk_' + randomUUID(), orderId: orderRow.id, title, description, location,
+      timestamp: now, actorRole: 'Delivery Partner', actorName: partner.name || partner.partnerName || 'Delivery Partner',
+      status: eventStatus,
+    };
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='jobs' AND id=$1", [jobRow.id, JSON.stringify(job)]);
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='orders' AND id=$1", [orderRow.id, JSON.stringify(order)]);
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godownShipments' AND id=$1", [shipmentRow.id, JSON.stringify(shipment)]);
+    await client.query("INSERT INTO agrochain_records(resource,id,data,created_at,updated_at) VALUES('trackingEvents',$1,$2::jsonb,NOW(),NOW())", [event.id, JSON.stringify(event)]);
+    await client.query('COMMIT');
+    return res.json({ success: true, job, order, shipment, event });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Delivery job progression failed:', error.message);
+    return res.status(500).json({ message: 'Delivery step failed; no partial changes were committed' });
+  } finally { client.release(); }
+});
+
 // Server-authoritative delivery confirmation. COD customer payment becomes PAID
 // at the exact moment the assigned delivery partner verifies the customer's OTP.
 app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
