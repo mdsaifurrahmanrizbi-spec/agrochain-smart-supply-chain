@@ -111,7 +111,7 @@ export const DeliveryDeliveries: React.FC = () => {
   const handleConfirmProductReceived = async (job: LogisticsJob) => {
     setErrorMsg(null);
     try {
-      await agroApi.deliveryPartnerConfirmReceipt(job.orderId, partnerId);
+      await agroApi.updateJobStatus(job.id, 'COLLECTED');
       refreshJobs();
       setActionNotice('Product receipt confirmed! Crates collected from godown and ready for delivery.');
       setTimeout(() => setActionNotice(null), 3500);
@@ -125,7 +125,7 @@ export const DeliveryDeliveries: React.FC = () => {
   const handleStartOutForDelivery = async (jobId: string) => {
     setErrorMsg(null);
     try {
-      await agroApi.deliveryPartnerOutForDelivery(jobId, partnerId);
+      await agroApi.updateJobStatus(jobId, 'OUT_FOR_DELIVERY');
       refreshJobs();
       setActionNotice('Produce is now OUT FOR DELIVERY! Customer has received their secret delivery OTP.');
       setTimeout(() => setActionNotice(null), 3500);
