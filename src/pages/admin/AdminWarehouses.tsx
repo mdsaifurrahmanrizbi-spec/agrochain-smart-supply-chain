@@ -15,6 +15,11 @@ export const AdminWarehouses: React.FC = () => {
   const [repairRunning, setRepairRunning] = useState(false);
   const [repairError, setRepairError] = useState('');
   const [repairMessage, setRepairMessage] = useState('');
+  const [godownLinkCandidates, setGodownLinkCandidates] = useState<Array<{ warehouseId: string; facilityName: string; code: string; managerId: string; managerName: string; city: string; area: string; existingMatches: Array<{ id: string; warehouseLinked: boolean }> }>>([]);
+  const [godownLinkLoading, setGodownLinkLoading] = useState(false);
+  const [godownLinkRunning, setGodownLinkRunning] = useState(false);
+  const [godownLinkError, setGodownLinkError] = useState('');
+  const [godownLinkMessage, setGodownLinkMessage] = useState('');
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
   const [locationDraft, setLocationDraft] = useState({ area: '', city: '', address: '' });
   const [locationSaving, setLocationSaving] = useState(false);
@@ -36,6 +41,24 @@ export const AdminWarehouses: React.FC = () => {
       }
     };
     void loadRepairPreview();
+    return () => { active = false; };
+  }, [refreshVersion]);
+
+  useEffect(() => {
+    let active = true;
+    const loadGodownLinkPreview = async () => {
+      setGodownLinkLoading(true);
+      setGodownLinkError('');
+      try {
+        const result = await agroApi.previewGodownLinkRepair();
+        if (active) setGodownLinkCandidates(result.candidates);
+      } catch (loadError) {
+        if (active) setGodownLinkError(loadError instanceof Error ? loadError.message : 'Could not load operational godown-link preview.');
+      } finally {
+        if (active) setGodownLinkLoading(false);
+      }
+    };
+    void loadGodownLinkPreview();
     return () => { active = false; };
   }, [refreshVersion]);
 
@@ -160,6 +183,60 @@ export const AdminWarehouses: React.FC = () => {
         {repairMessage && <p role="status" className="text-xs font-semibold text-emerald-800">{repairMessage}</p>}
         {repairError && <p role="alert" className="text-xs text-rose-700">{repairError}</p>}
         <p className="text-[11px] text-slate-500">No database changes occur during preview. Creating facilities requires clicking the repair button and confirming the browser prompt.</p>
+      </section>
+
+      <section className="rounded-xl border border-sky-200 bg-sky-50/50 p-4 space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Regional Warehouse → Operational Godown Link</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">
+              This checks whether each approved regional warehouse also has its matching Local Godown Operations record. Preview is read-only; repair links an existing manager godown where possible and creates only when none exists.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={godownLinkLoading || godownLinkRunning || godownLinkCandidates.length === 0}
+            onClick={async () => {
+              const confirmed = window.confirm(`Create or link ${godownLinkCandidates.length} operational godown record(s) for the listed regional warehouse facilities? This writes only the missing facility associations.`);
+              if (!confirmed) return;
+              setGodownLinkRunning(true);
+              setGodownLinkError('');
+              setGodownLinkMessage('');
+              try {
+                const result = await agroApi.runGodownLinkRepair();
+                setGodownLinkMessage(`Link repair completed: ${result.created} created, ${result.linked} linked, ${result.skipped} skipped.`);
+                setRefreshVersion(version => version + 1);
+              } catch (runError) {
+                setGodownLinkError(runError instanceof Error ? runError.message : 'Operational godown link repair failed.');
+              } finally {
+                setGodownLinkRunning(false);
+              }
+            }}
+            className="rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {godownLinkRunning ? 'Linking...' : `Repair ${godownLinkCandidates.length} godown link(s)`}
+          </button>
+        </div>
+        {godownLinkLoading && <p className="text-xs text-slate-500">Checking regional godown links...</p>}
+        {!godownLinkLoading && !godownLinkError && <p className="text-xs font-semibold text-slate-700">{godownLinkCandidates.length} regional warehouse facility link(s) need attention.</p>}
+        {godownLinkCandidates.length > 0 && (
+          <div className="overflow-x-auto rounded-lg border border-sky-200 bg-white">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-sky-100/70 text-slate-700"><tr><th className="px-3 py-2">Regional facility</th><th className="px-3 py-2">Manager</th><th className="px-3 py-2">Location</th><th className="px-3 py-2">Existing godown match</th></tr></thead>
+              <tbody>{godownLinkCandidates.map(candidate => (
+                <tr key={candidate.warehouseId} className="border-t border-slate-100">
+                  <td className="px-3 py-2 font-semibold text-slate-900">{candidate.facilityName}<div className="font-normal text-slate-500">{candidate.code}</div></td>
+                  <td className="px-3 py-2">{candidate.managerName}</td>
+                  <td className="px-3 py-2">{[candidate.area, candidate.city].filter(Boolean).join(', ') || 'Not provided'}</td>
+                  <td className="px-3 py-2">{candidate.existingMatches.length ? candidate.existingMatches.map(match => `${match.id}${match.warehouseLinked ? ' (linked)' : ' (manager match)'}`).join(', ') : 'No existing record'}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+        {godownLinkMessage && <p role="status" className="text-xs font-semibold text-emerald-800">{godownLinkMessage}</p>}
+        {godownLinkError && <p role="alert" className="text-xs text-rose-700">{godownLinkError}</p>}
+        <p className="text-[11px] text-slate-500">No database changes occur during preview. Linking or creating records requires clicking Repair and confirming the browser prompt.</p>
       </section>
 
       {loading && (
