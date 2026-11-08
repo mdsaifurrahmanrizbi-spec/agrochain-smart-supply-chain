@@ -83,6 +83,9 @@ export const GodownHub: React.FC = () => {
   const [showExceptionModal, setShowExceptionModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showManualAssignModal, setShowManualAssignModal] = useState(false);
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [recoveryNotes, setRecoveryNotes] = useState('');
+  const [recoveringLoading, setRecoveringLoading] = useState(false);
 
   // Acceptance form state
   const [verifyCondition, setVerifyCondition] = useState(true);
@@ -249,6 +252,27 @@ export const GodownHub: React.FC = () => {
       setTimeout(() => setNotice(null), 3500);
     } catch (err: any) {
       setErrorMsg(err.message || 'Manual assignment failed');
+    }
+  };
+
+  // Confirm physical return and inspection before reopening a failed consignment for assignment.
+  const handleRecoverFailedDelivery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedShipment || recoveryNotes.trim().length < 8) return;
+    setRecoveringLoading(true);
+    setErrorMsg(null);
+    try {
+      await agroApi.recoverFailedDeliveryAtGodown(selectedShipment.id, recoveryNotes);
+      await refreshData();
+      setNotice('Physical return recorded. The consignment is now eligible for a new delivery assignment.');
+      setShowRecoveryModal(false);
+      setSelectedShipment(null);
+      setRecoveryNotes('');
+      setTimeout(() => setNotice(null), 4000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to recover consignment');
+    } finally {
+      setRecoveringLoading(false);
     }
   };
 
@@ -817,7 +841,7 @@ export const GodownHub: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {godownShipments
               .filter((s) =>
-                ['DELIVERY_PARTNER_ASSIGNED', 'DELIVERY_ACCEPTED', 'DELIVERY_ASSIGNMENT_PENDING'].includes(
+                ['DELIVERY_PARTNER_ASSIGNED', 'DELIVERY_ACCEPTED', 'DELIVERY_ASSIGNMENT_PENDING', 'DELIVERY_EXCEPTION'].includes(
                   s.transferStatus
                 )
               )
@@ -837,7 +861,25 @@ export const GodownHub: React.FC = () => {
                   </div>
 
                   <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs">
-                    {s.assignedPartnerName ? (
+                    {s.transferStatus === 'DELIVERY_EXCEPTION' ? (
+                      <div className="space-y-2">
+                        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">
+                          <div className="font-bold">Delivery failed — recovery required</div>
+                          <p className="mt-1">{s.exceptionNotes || 'Physical consignment return has not yet been confirmed.'}</p>
+                          <p className="mt-1 font-semibold">Do not reassign until the goods are physically back at this godown and inspected.</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedShipment(s);
+                            setRecoveryNotes('');
+                            setShowRecoveryModal(true);
+                          }}
+                          className="w-full rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white hover:bg-rose-800"
+                        >
+                          Confirm Return & Inspect Consignment
+                        </button>
+                      </div>
+                    ) : s.assignedPartnerName ? (
                       <div>
                         <span className="text-slate-500 text-[11px] block">Assigned Delivery Partner:</span>
                         <span className="font-bold text-slate-900 text-sm">{s.assignedPartnerName}</span>
@@ -1326,6 +1368,41 @@ export const GodownHub: React.FC = () => {
       {/* ========================================================= */}
       {/* MODAL: MANUAL PARTNER ASSIGNMENT */}
       {/* ========================================================= */}
+      {showRecoveryModal && selectedShipment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="border-b border-rose-100 bg-rose-50 p-5">
+              <h3 className="text-sm font-bold text-rose-950">Failed Consignment — Physical Return Verification</h3>
+              <p className="mt-1 text-xs text-rose-800">Order {selectedShipment.orderNumber} · {selectedShipment.productName}</p>
+            </div>
+            <form onSubmit={handleRecoverFailedDelivery} className="space-y-4 p-5 text-xs">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950">
+                Confirm this only after the failed consignment has physically returned to <strong>{selectedGodown.name}</strong> and you have inspected its quantity and condition. This action reopens partner assignment; it does not confirm customer delivery.
+              </div>
+              <label className="block space-y-1">
+                <span className="font-bold text-slate-700">Return location and inspection notes (required)</span>
+                <textarea
+                  value={recoveryNotes}
+                  onChange={(e) => setRecoveryNotes(e.target.value)}
+                  rows={4}
+                  maxLength={500}
+                  required
+                  minLength={8}
+                  placeholder="Example: Returned to Tejgaon Godown, receiving bay 2; 12 crates counted and packaging inspected..."
+                  className="w-full rounded-lg border border-slate-300 p-3 text-xs outline-none focus:border-emerald-600"
+                />
+              </label>
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+                <button type="button" onClick={() => setShowRecoveryModal(false)} disabled={recoveringLoading} className="rounded-lg border border-slate-300 px-3 py-2 text-slate-700">Cancel</button>
+                <button type="submit" disabled={recoveringLoading || recoveryNotes.trim().length < 8} className="rounded-lg bg-rose-700 px-4 py-2 font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300">
+                  {recoveringLoading ? 'Recording Return…' : 'Confirm Physical Return'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showManualAssignModal && selectedShipment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
