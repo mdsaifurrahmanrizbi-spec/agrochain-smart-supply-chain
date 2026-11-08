@@ -459,7 +459,7 @@ export const DeliveryDashboard: React.FC = () => {
                         <button
                           onClick={async () => {
                             try {
-                              await agroApi.deliveryPartnerConfirmReceipt(ord?.id || job.orderId, partnerId);
+                              await agroApi.updateJobStatus(job.id, 'COLLECTED');
                               setJobs([...store.jobs.filter((j) => j.partnerId === partnerId)]);
                               setNotice('Product collection confirmed from godown!');
                               setTimeout(() => setNotice(null), 3000);
