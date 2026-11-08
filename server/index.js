@@ -1640,7 +1640,15 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
       return res.status(403).json({ message: 'Warehouse intake is currently enabled only for COD orders' });
     }
     const qcResult = await client.query(
-      "SELECT id, data FROM agrochain_records WHERE resource = 'qualityChecks' AND (id = $1 OR data->>'orderId' = $2) ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
+      `SELECT id, data
+       FROM agrochain_records
+       WHERE resource = 'qualityChecks'
+         AND data->>'orderId' = $2
+       ORDER BY
+         CASE WHEN id = $1 AND $1 <> '' THEN 0 ELSE 1 END,
+         created_at DESC
+       LIMIT 1
+       FOR UPDATE`,
       [String(order.qualityCheckId || ''), orderRow.id]
     );
     const qc = qcResult.rows[0]?.data;
