@@ -229,7 +229,8 @@ export interface GodownShipment {
     | 'DELIVERY_PARTNER_COLLECTED'
     | 'OUT_FOR_DELIVERY'
     | 'DELIVERED'
-    | 'ISSUE_REPORTED';
+    | 'ISSUE_REPORTED'
+    | 'DELIVERY_EXCEPTION';
   dispatchDate?: string;
   arrivalDate?: string;
   acceptedDate?: string;
