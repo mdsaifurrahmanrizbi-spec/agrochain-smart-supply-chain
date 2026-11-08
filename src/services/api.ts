@@ -2074,26 +2074,31 @@ return qc;
   // 7. Two-Sided Product Handover: Step 1 (Godown Manager Initiates Handover)
   async godownManagerInitiateHandover(
     shipmentId: string,
-    managerId: string = 'u-godown-1',
-    managerName: string = 'Sabbir Ahmed'
+    _managerId?: string,
+    _managerName?: string
   ): Promise<GodownShipment> {
-    const shipment = store.godownShipments.find((s) => s.id === shipmentId || s.orderId === shipmentId);
+    const shipment = store.godownShipments.find((item) => item.id === shipmentId || item.orderId === shipmentId);
     if (!shipment) throw new Error('Shipment not found');
-
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
-    shipment.handoverInitiatedAt = now;
-    shipment.handoverManagerId = managerId;
-
-    const order = store.orders.find((o) => o.id === shipment.orderId);
-    if (order) {
-      order.handoverInitiatedAt = now;
-    }
-
+    const response = await fetch(`${API_BASE_URL}/godowns/shipments/${encodeURIComponent(shipment.id)}/initiate-handover`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      cache: 'no-store',
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.message || 'Could not initiate destination godown handover');
+    const updatedShipment = result.shipment as GodownShipment;
+    const updatedOrder = result.order as Order;
+    const event = result.event as TrackingEvent;
+    const shipmentIndex = store.godownShipments.findIndex((item) => item.id === updatedShipment.id);
+    if (shipmentIndex >= 0) store.godownShipments[shipmentIndex] = updatedShipment;
+    const orderIndex = store.orders.findIndex((item) => item.id === updatedOrder.id);
+    if (orderIndex >= 0) store.orders[orderIndex] = updatedOrder;
+    store.trackingEvents[updatedOrder.id] = [event, ...(store.trackingEvents[updatedOrder.id] || [])];
     localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
-    await saveBackendRecord('godownShipments', shipment);
-    if (order) await saveBackendRecord('orders', order);
-    return shipment;
+    localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
+    return updatedShipment;
   },
 
   // 8. Two-Sided Product Handover: Step 2 (Delivery Partner Confirms Receipt)
