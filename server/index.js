@@ -2378,7 +2378,7 @@ app.get('/api/delivery/available-jobs', requireAuth, async (req, res) => {
     const partnerRow = partnerResult.rows[0];
     const partner = partnerRow?.data || {};
     if (!partnerRow || String(partner.approvalStatus || '').toUpperCase() !== 'APPROVED' || partner.canDeliver !== true) {
-      return res.status(403).json({ message: 'Approved delivery capability is required to view requests' });
+      return res.json([]);
     }
     const normalize = (value) => String(value || '').normalize('NFC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
     const partnerAreas = [partner.preferredArea, ...(Array.isArray(partner.assignedAreas) ? partner.assignedAreas : []), ...(Array.isArray(partner.serviceAreas) ? partner.serviceAreas : []), ...(Array.isArray(partner.workingAreas) ? partner.workingAreas : [])].map(normalize).filter(Boolean);
