@@ -1982,36 +1982,45 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
     const partnerRows = await client.query(
       "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND upper(coalesce(data->>'approvalStatus','')) = 'APPROVED' AND coalesce((data->>'canDeliver')::boolean, false) = true ORDER BY coalesce((data->>'activeJobsCount')::int,0), id FOR UPDATE"
     );
-    const areaText = String([shipment.customerArea, shipment.customerAddress, order.buyerCity, order.buyerAddress].filter(Boolean).join(' ')).normalize('NFC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
-    const existingJob = await client.query(
-      "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'DELIVERY' LIMIT 1 FOR UPDATE",
-      [orderRow.id]
-    );
-    if (existingJob.rows.length) {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ message: 'A delivery job already exists for this order; review its assignment before godown acceptance' });
-    }
-    const partnerRow = partnerRows.rows.find((row) => {
-      const partner = row.data || {};
-      const areas = Array.isArray(partner.serviceAreas) ? partner.serviceAreas : [];
+    const normalizeArea = (value) => String(value || '').normalize('NFC').toLocaleLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim().replace(/\\s+/g, ' ');
+    const areaText = normalizeArea([shipment.customerArea, shipment.customerAddress, order.buyerCity, order.buyerAddress].filter(Boolean).join(' '));
+    const matchesCustomerArea = (partner) => {
+      const rawAreas = Array.isArray(partner.serviceAreas) ? partner.serviceAreas : [];
+      const areas = rawAreas.flatMap((entry) => {
+        if (typeof entry === 'string') return [entry];
+        if (entry && typeof entry === 'object') return [entry.area, entry.name, entry.city, entry.district].filter(Boolean);
+        return [];
+      });
       return areas.some((area) => {
-        const term = String(area || '').normalize('NFC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
+        const term = normalizeArea(area);
         return term.length >= 2 && areaText.length > 0 && (' ' + areaText + ' ').includes(' ' + term + ' ');
       });
-    });
-    let deliveryJob = null;
+    };
+    const existingJobResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'DELIVERY' ORDER BY created_at ASC LIMIT 1 FOR UPDATE",
+      [orderRow.id]
+    );
+    const existingDeliveryJob = existingJobResult.rows[0] || null;
+    const assignedExistingPartner = existingDeliveryJob
+      ? partnerRows.find((row) => row.id === String(existingDeliveryJob.data?.partnerId || '') && matchesCustomerArea(row.data || {}))
+      : null;
+    const partnerRow = assignedExistingPartner || (!existingDeliveryJob ? partnerRows.find((row) => matchesCustomerArea(row.data || {})) : null);
+    let deliveryJob = existingDeliveryJob?.data || null;
     if (partnerRow) {
       const partner = partnerRow.data || {};
-      deliveryJob = existingJob.rows[0]?.data || {
-        id: 'job_' + randomUUID(),
-        jobCode: 'JOB-DEL-' + Math.floor(100000 + Math.random() * 900000),
-        orderId: orderRow.id,
-        orderNumber: order.orderNumber || shipment.orderNumber || orderRow.id,
-        type: 'DELIVERY',
-        productSummary: shipment.productName || 'Order delivery',
-        assignedDate: now,
-        status: 'ASSIGNED',
-      };
+      const isExistingAssignment = Boolean(existingDeliveryJob && assignedExistingPartner);
+      if (!deliveryJob) {
+        deliveryJob = {
+          id: 'job_' + randomUUID(),
+          jobCode: 'JOB-DEL-' + Math.floor(100000 + Math.random() * 900000),
+          orderId: orderRow.id,
+          orderNumber: order.orderNumber || shipment.orderNumber || orderRow.id,
+          type: 'DELIVERY',
+          productSummary: shipment.productName || 'Order delivery',
+          assignedDate: now,
+          status: 'ASSIGNED',
+        };
+      }
       Object.assign(deliveryJob, {
         partnerId: partnerRow.id,
         partnerName: partner.name || '',
@@ -2023,7 +2032,13 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
         updatedAt: now,
         codAmount: order.paymentMethod === 'COD' ? Number(order.totalAmount || 0) : 0,
       });
-      partner.activeJobsCount = Number(partner.activeJobsCount || 0) + (existingJob.rows.length ? 0 : 1);
+      if (!isExistingAssignment) {
+        partner.activeJobsCount = Number(partner.activeJobsCount || 0) + 1;
+        await client.query(
+          "UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='deliveryPartners' AND id=$1",
+          [partnerRow.id, JSON.stringify(partner)]
+        );
+      }
       shipment.transferStatus = 'DELIVERY_PARTNER_ASSIGNED';
       shipment.assignedPartnerId = partnerRow.id;
       shipment.assignedPartnerName = partner.name || '';
@@ -2032,20 +2047,27 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
       order.deliveryPartnerName = partner.name || '';
       order.deliveryAssignmentStatus = 'ASSIGNED';
       order.orderStatus = 'DELIVERY_PARTNER_ASSIGNED';
-      await client.query(
-        "INSERT INTO agrochain_records (resource,id,data,created_at,updated_at) VALUES ('jobs',$1,$2::jsonb,NOW(),NOW()) ON CONFLICT (resource,id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()",
-        [deliveryJob.id, JSON.stringify(deliveryJob)]
-      );
-      await client.query(
-        "UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='deliveryPartners' AND id=$1",
-        [partnerRow.id, JSON.stringify(partner)]
-      );
+      if (existingDeliveryJob) {
+        await client.query(
+          "UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='jobs' AND id=$1",
+          [existingDeliveryJob.id, JSON.stringify(deliveryJob)]
+        );
+      } else {
+        await client.query(
+          "INSERT INTO agrochain_records (resource,id,data,created_at,updated_at) VALUES ('jobs',$1,$2::jsonb,NOW(),NOW())",
+          [deliveryJob.id, JSON.stringify(deliveryJob)]
+        );
+      }
     } else {
       shipment.transferStatus = 'DELIVERY_ASSIGNMENT_PENDING';
       order.orderStatus = 'DELIVERY_ASSIGNMENT_PENDING';
       order.deliveryAssignmentStatus = 'PENDING';
-      event.title = 'DESTINATION GODOWN RECEIVED — DELIVERY ASSIGNMENT PENDING';
-      event.description = 'The destination godown accepted the consignment. No approved delivery partner matched the customer service area; manual assignment is required.';
+      event.title = existingDeliveryJob
+        ? 'DESTINATION GODOWN RECEIVED — EXISTING DELIVERY JOB NEEDS REVIEW'
+        : 'DESTINATION GODOWN RECEIVED — DELIVERY ASSIGNMENT PENDING';
+      event.description = existingDeliveryJob
+        ? 'The destination godown accepted the consignment, but its existing delivery job is not assigned to an approved partner serving this customer area. Manual assignment review is required; the existing job was preserved.'
+        : 'The destination godown accepted the consignment. No approved delivery partner matched the customer service area; manual assignment is required.';
       event.status = 'IN_PROGRESS';
     }
     await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godownShipments' AND id=$1", [shipmentRow.id, JSON.stringify(shipment)]);
