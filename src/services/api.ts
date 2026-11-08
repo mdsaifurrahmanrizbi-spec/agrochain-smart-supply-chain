@@ -1047,7 +1047,13 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     }
 
     const order = store.orders.find((o) => o.id === job.orderId);
-    const events = store.trackingEvents[job.orderId] || [];
+    const events = (store.trackingEvents[job.orderId] || []).filter((event) => !(
+      String(event.title || '').trim().toUpperCase() === 'RECEIVED AT WAREHOUSE' &&
+      String(event.actorRole || '').trim() === 'Warehouse Officer' &&
+      String(event.actorName || '').trim() === 'Anisul Haque' &&
+      String(event.description || '').includes('Consignment intake completed at warehouse')
+    ));
+    store.trackingEvents[job.orderId] = events;
     const shipment = store.godownShipments.find((s) => s.orderId === job.orderId);
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
@@ -1098,9 +1104,10 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
           status: 'COMPLETED',
         });
       } else if (status === 'WAREHOUSE_HANDOVER') {
-        // This status records the pickup partner's physical handover only.
-        // Warehouse intake and its tracking event are created separately by
-        // the authenticated warehouse manager's transactional intake endpoint.
+        // The pickup partner has handed the consignment to warehouse staff.
+        // Keep the order at PICKED_UP until the warehouse manager verifies and
+        // commits intake through the authenticated transactional endpoint.
+        if (order) order.orderStatus = 'PICKED_UP';
       }
     } else if (job.type === 'DELIVERY') {
       const shipment = store.godownShipments.find((s) => s.orderId === job.orderId);
