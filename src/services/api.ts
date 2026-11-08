@@ -368,6 +368,25 @@ export const agroApi = {
     return data;
   },
 
+  async previewGodownLinkRepair(): Promise<{ candidates: Array<{ warehouseId: string; facilityName: string; code: string; managerId: string; managerName: string; city: string; area: string; existingMatches: Array<{ id: string; warehouseLinked: boolean }> }>; count: number }> {
+    const res = await fetch(`${API_BASE_URL}/admin/godown-link-repair/preview/`, { headers: authHeaders(), cache: 'no-store' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Could not preview godown links (${res.status})`);
+    if (!Array.isArray(data.candidates) || typeof data.count !== 'number') throw new Error('The server returned an invalid godown-link preview');
+    return data;
+  },
+
+  async runGodownLinkRepair(): Promise<{ message: string; created: number; linked: number; skipped: number; repaired: Array<{ warehouseId: string; godownId: string; name: string }> }> {
+    const res = await fetch(`${API_BASE_URL}/admin/godown-link-repair/run/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ confirm: true }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Godown link repair failed (${res.status})`);
+    return data;
+  },
+
   async reviewWarehouseApplication(
     id: string,
     status: 'APPROVED' | 'REJECTED',
@@ -906,6 +925,12 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       const backendEvents = await getBackendRecords<TrackingEvent>('trackingEvents');
       const matching = backendEvents
         .filter((event) => event.orderId === orderId)
+        .filter((event) => !(
+          String(event.title || '').trim().toUpperCase() === 'RECEIVED AT WAREHOUSE' &&
+          String(event.actorRole || '').trim() === 'Warehouse Officer' &&
+          String(event.actorName || '').trim() === 'Anisul Haque' &&
+          String(event.description || '').includes('Consignment intake completed at warehouse')
+        ))
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       if (matching.length > 0) {
         store.trackingEvents[orderId] = matching;
@@ -916,6 +941,12 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       console.warn('Could not load tracking history from backend; using cached events.', error);
     }
     return [...(store.trackingEvents[orderId] || [])]
+      .filter((event) => !(
+        String(event.title || '').trim().toUpperCase() === 'RECEIVED AT WAREHOUSE' &&
+        String(event.actorRole || '').trim() === 'Warehouse Officer' &&
+        String(event.actorName || '').trim() === 'Anisul Haque' &&
+        String(event.description || '').includes('Consignment intake completed at warehouse')
+      ))
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   },
 
@@ -1067,18 +1098,9 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
           status: 'COMPLETED',
         });
       } else if (status === 'WAREHOUSE_HANDOVER') {
-        if (order) order.orderStatus = 'IN_WAREHOUSE';
-        events.unshift({
-          id: `trk-${Date.now()}`,
-          orderId: job.orderId,
-          title: 'RECEIVED AT WAREHOUSE',
-          description: `Consignment intake completed at warehouse. Weight & seals verified.`,
-          location: job.destinationAddress,
-          timestamp: now,
-          actorRole: 'Warehouse Officer',
-          actorName: 'Anisul Haque',
-          status: 'COMPLETED',
-        });
+        // This status records the pickup partner's physical handover only.
+        // Warehouse intake and its tracking event are created separately by
+        // the authenticated warehouse manager's transactional intake endpoint.
       }
     } else if (job.type === 'DELIVERY') {
       const shipment = store.godownShipments.find((s) => s.orderId === job.orderId);
@@ -1858,7 +1880,7 @@ return qc;
   },
 
   // 1. Central Warehouse Receiving & Destination Godown Selection
-  async centralWarehouseReceive(jobIdOrOrderId: string, staffName: string = 'Warehouse Manager'): Promise<{ order: Order; shipment?: GodownShipment }> {
+  async centralWarehouseReceive(jobIdOrOrderId: string): Promise<{ order: Order; shipment?: GodownShipment }> {
     const job = store.jobs.find((candidate) =>
       candidate.id === jobIdOrOrderId ||
       candidate.orderId === jobIdOrOrderId ||
@@ -1875,7 +1897,7 @@ return qc;
           'Content-Type': 'application/json',
           ...authHeaders(),
         },
-        body: JSON.stringify({ staffName }),
+        body: JSON.stringify({}),
       }
     );
     const payload = await response.json().catch(() => ({}));
