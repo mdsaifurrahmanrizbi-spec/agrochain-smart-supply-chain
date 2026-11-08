@@ -74,12 +74,15 @@ export const AdminWarehouses: React.FC = () => {
       if (isInitialLoad) setLoading(true);
       else setRefreshing(true);
       setError('');
+      let warehouseTimeoutId: number | undefined;
       try {
         // Always request authenticated backend records. Never render local
         // demo seed data as if it were the live warehouse network.
         const records = await Promise.race([
           agroApi.getWarehouses({ strict: true }),
-          new Promise<Warehouse[]>((_, reject) => window.setTimeout(() => reject(new Error('Warehouse list did not respond in time. Check the backend connection and use Refresh warehouses to retry.')), 18000)),
+          new Promise<Warehouse[]>((_, reject) => {
+            warehouseTimeoutId = window.setTimeout(() => reject(new Error('Warehouse list did not respond in time. Check the backend connection and use Refresh warehouses to retry.')), 18000);
+          }),
         ]);
         if (active) setWarehouses(records);
       } catch (loadError) {
@@ -90,6 +93,7 @@ export const AdminWarehouses: React.FC = () => {
           setError(loadError instanceof Error ? loadError.message : 'Unable to load warehouse records.');
         }
       } finally {
+        if (warehouseTimeoutId !== undefined) window.clearTimeout(warehouseTimeoutId);
         if (active) {
           hasLoadedRef.current = true;
           setLoading(false);
