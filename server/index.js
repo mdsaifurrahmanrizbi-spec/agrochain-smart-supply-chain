@@ -2002,10 +2002,17 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
       });
     };
     const existingJobResult = await client.query(
-      "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'DELIVERY' ORDER BY created_at ASC LIMIT 1 FOR UPDATE",
+      "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'DELIVERY' ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE",
       [orderRow.id]
     );
-    const existingDeliveryJob = existingJobResult.rows[0] || null;
+    const latestDeliveryJobRow = existingJobResult.rows[0] || null;
+    const latestDeliveryJobStatus = String(latestDeliveryJobRow?.data?.status || '').toUpperCase();
+    const terminalDeliveryJob = ['DECLINED', 'FAILED', 'FAILED_RECOVERED', 'DELIVERED', 'CANCELLED', 'COMPLETED'].includes(latestDeliveryJobStatus);
+    const existingDeliveryJob = latestDeliveryJobRow && !terminalDeliveryJob ? latestDeliveryJobRow : null;
+    if (existingDeliveryJob && ['ASSIGNED', 'ACCEPTED', 'ARRIVED_AT_GODOWN', 'COLLECTED', 'OUT_FOR_DELIVERY'].includes(latestDeliveryJobStatus)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'An active delivery job already exists for this order; resolve it before accepting another consignment' });
+    }
     const assignedExistingPartner = existingDeliveryJob
       ? partnerRows.find((row) => row.id === String(existingDeliveryJob.data?.partnerId || '') && matchesCustomerArea(row.data || {}))
       : null;
