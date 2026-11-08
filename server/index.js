@@ -2094,6 +2094,80 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
 });
 
 // Destination godown manager manually assigns an eligible partner through one transaction.
+// Destination godown manager confirms physical return before a failed consignment can be reassigned.
+app.post('/api/godowns/shipments/:shipmentId/recover-failed-delivery', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'warehouse') return res.status(403).json({ message: 'Only the destination godown manager can recover this consignment' });
+  if (req.body?.confirmReturnedToGodown !== true) return res.status(400).json({ message: 'Confirm that the physical consignment has returned to this godown' });
+  const recoveryNotes = String(req.body?.notes || '').trim().slice(0, 500);
+  if (recoveryNotes.length < 8) return res.status(400).json({ message: 'Add a short note confirming the returned consignment condition and location' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const shipmentResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND id=$1 FOR UPDATE", [req.params.shipmentId]);
+    const shipmentRow = shipmentResult.rows[0];
+    const shipment = shipmentRow?.data || {};
+    if (!shipmentRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Shipment not found' }); }
+    if (String(shipment.transferStatus || '').toUpperCase() !== 'DELIVERY_EXCEPTION') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Only a consignment flagged for delivery exception can be recovered' });
+    }
+    const godownResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godowns' AND id=$1 AND data->>'managerId'=$2 AND upper(coalesce(data->>'status',''))='ACTIVE' FOR UPDATE", [String(shipment.destinationGodownId || ''), String(req.auth.sub)]);
+    const godownRow = godownResult.rows[0];
+    if (!godownRow) { await client.query('ROLLBACK'); return res.status(403).json({ message: 'You are not the active manager of this destination godown' }); }
+    const orderResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='orders' AND id=$1 FOR UPDATE", [String(shipment.orderId || '')]);
+    const orderRow = orderResult.rows[0];
+    if (!orderRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Related order not found' }); }
+    const jobResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='jobs' AND data->>'orderId'=$1 AND data->>'type'='DELIVERY' ORDER BY created_at DESC LIMIT 1 FOR UPDATE", [orderRow.id]);
+    const jobRow = jobResult.rows[0];
+    const job = jobRow?.data || {};
+    if (!jobRow || String(job.status || '').toUpperCase() !== 'FAILED' || orderRow.data?.deliveryAssignmentStatus !== 'FAILED') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'The latest delivery job is not in a recoverable failed state' });
+    }
+    const now = new Date().toISOString();
+    const order = orderRow.data || {};
+    job.status = 'FAILED_RECOVERED';
+    job.recoveredAt = now;
+    job.recoveryConfirmedBy = String(req.auth.sub);
+    job.recoveryGodownId = godownRow.id;
+    job.recoveryNotes = recoveryNotes;
+    shipment.transferStatus = 'DELIVERY_ASSIGNMENT_PENDING';
+    shipment.recoveredAt = now;
+    shipment.recoveryConfirmedBy = String(req.auth.sub);
+    shipment.recoveryGodownId = godownRow.id;
+    shipment.recoveryGodownName = godownRow.data?.name || godownRow.id;
+    shipment.recoveryNotes = recoveryNotes;
+    delete shipment.assignedPartnerId;
+    delete shipment.assignedPartnerName;
+    delete shipment.assignedDate;
+    order.deliveryPartnerId = null;
+    order.deliveryPartnerName = null;
+    order.deliveryAssignmentStatus = 'PENDING';
+    order.orderStatus = 'DELIVERY_ASSIGNMENT_PENDING';
+    order.updatedAt = now;
+    const { randomUUID } = await import('node:crypto');
+    const event = {
+      id: 'trk_' + randomUUID(), orderId: orderRow.id,
+      title: 'FAILED CONSIGNMENT RETURNED TO DESTINATION GODOWN',
+      description: 'The destination godown manager confirmed physical return and inspection. ' + recoveryNotes + ' The consignment is now eligible for a new delivery assignment.',
+      location: godownRow.data?.name || godownRow.id, timestamp: now,
+      actorRole: 'Warehouse Manager',
+      actorName: String(godownRow.data?.managerName || 'Warehouse Manager'),
+      status: 'COMPLETED',
+    };
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='jobs' AND id=$1", [jobRow.id, JSON.stringify(job)]);
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='orders' AND id=$1", [orderRow.id, JSON.stringify(order)]);
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godownShipments' AND id=$1", [shipmentRow.id, JSON.stringify(shipment)]);
+    await client.query("INSERT INTO agrochain_records(resource,id,data,created_at,updated_at) VALUES('trackingEvents',$1,$2::jsonb,NOW(),NOW())", [event.id, JSON.stringify(event)]);
+    await client.query('COMMIT');
+    return res.json({ success: true, shipment, order, job, event });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Failed delivery recovery failed:', error.message);
+    return res.status(500).json({ message: 'Recovery failed; no partial changes were committed' });
+  } finally { client.release(); }
+});
+
 app.post('/api/godowns/shipments/:shipmentId/assign-partner', requireAuth, async (req, res) => {
   if (req.auth.role !== 'warehouse') return res.status(403).json({ message: 'Only the destination godown manager can assign a delivery partner' });
   const partnerId = String(req.body?.partnerId || '').trim();
@@ -2136,7 +2210,7 @@ app.post('/api/godowns/shipments/:shipmentId/assign-partner', requireAuth, async
     const orderRow = orderResult.rows[0];
     if (!orderRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Related order not found' }); }
     const order = orderRow.data || {};
-    const jobResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='jobs' AND data->>'orderId'=$1 AND data->>'type'='DELIVERY' LIMIT 1 FOR UPDATE", [orderRow.id]);
+    const jobResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='jobs' AND data->>'orderId'=$1 AND data->>'type'='DELIVERY' ORDER BY created_at DESC LIMIT 1 FOR UPDATE", [orderRow.id]);
     const existingJobRow = jobResult.rows[0];
     const existingJob = existingJobRow?.data || {};
     if (existingJobRow && ['ASSIGNED','ACCEPTED','ARRIVED_AT_GODOWN','COLLECTED','OUT_FOR_DELIVERY'].includes(String(existingJob.status || '').toUpperCase())) {
@@ -2145,7 +2219,10 @@ app.post('/api/godowns/shipments/:shipmentId/assign-partner', requireAuth, async
     }
     const now = new Date().toISOString();
     const { randomUUID } = await import('node:crypto');
-    const job = existingJobRow ? { ...existingJob, partnerId, partnerName: partner.name || 'Delivery Partner', status: 'ASSIGNED', assignedDate: now, updatedAt: now } : {
+    const previousJobStatus = String(existingJob.status || '').toUpperCase();
+    const previousJobWasTerminal = ['DECLINED', 'FAILED', 'FAILED_RECOVERED', 'DELIVERED', 'CANCELLED', 'COMPLETED'].includes(previousJobStatus);
+    const createNewJob = !existingJobRow || previousJobWasTerminal;
+    const job = !createNewJob ? { ...existingJob, partnerId, partnerName: partner.name || 'Delivery Partner', status: 'ASSIGNED', assignedDate: now, updatedAt: now } : {
       id: 'job_' + randomUUID(), jobCode: 'JOB-DEL-' + randomUUID().slice(0, 8).toUpperCase(),
       orderId: orderRow.id, orderNumber: shipment.orderNumber || order.orderNumber || orderRow.id,
       partnerId, partnerName: partner.name || 'Delivery Partner', type: 'DELIVERY',
@@ -2164,8 +2241,6 @@ app.post('/api/godowns/shipments/:shipmentId/assign-partner', requireAuth, async
     order.deliveryAssignmentStatus = 'ASSIGNED';
     order.orderStatus = 'DELIVERY_PARTNER_ASSIGNED';
     order.updatedAt = now;
-    const previousJobStatus = String(existingJob.status || '').toUpperCase();
-    const previousJobWasTerminal = ['DECLINED', 'FAILED', 'DELIVERED', 'CANCELLED', 'COMPLETED'].includes(previousJobStatus);
     if (existingJobRow && existingJob.partnerId && existingJob.partnerId !== partnerId && !previousJobWasTerminal) {
       const previousPartnerResult = await client.query(
         "SELECT id,data FROM agrochain_records WHERE resource='deliveryPartners' AND id=$1 FOR UPDATE",
