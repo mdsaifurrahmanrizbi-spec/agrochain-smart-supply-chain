@@ -13,6 +13,10 @@ export const AdminWarehouses: React.FC = () => {
   const [repairRunning, setRepairRunning] = useState(false);
   const [repairError, setRepairError] = useState('');
   const [repairMessage, setRepairMessage] = useState('');
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
+  const [locationDraft, setLocationDraft] = useState({ area: '', city: '', address: '' });
+  const [locationSaving, setLocationSaving] = useState(false);
+  const [locationError, setLocationError] = useState('');
 
 
   useEffect(() => {
@@ -59,6 +63,20 @@ export const AdminWarehouses: React.FC = () => {
       active = false;
     };
   }, [refreshVersion]);
+
+  const saveWarehouseLocation = async (warehouseId: string) => {
+    setLocationSaving(true);
+    setLocationError('');
+    try {
+      const updated = await agroApi.updateWarehouseLocation(warehouseId, locationDraft);
+      setWarehouses(current => current.map(item => item.id === warehouseId ? updated : item));
+      setEditingLocationId(null);
+    } catch (saveError) {
+      setLocationError(saveError instanceof Error ? saveError.message : 'Could not save warehouse location.');
+    } finally {
+      setLocationSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -184,6 +202,26 @@ export const AdminWarehouses: React.FC = () => {
                     <MapPin size={13} className="mt-0.5 shrink-0" />
                     {wh.location || 'Location not provided'}
                   </p>
+                  {editingLocationId === wh.id ? (
+                    <div className="mt-3 space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+                      <label className="block text-[11px] font-semibold text-slate-700">Area / Upazila
+                        <input value={locationDraft.area} onChange={event => setLocationDraft(current => ({ ...current, area: event.target.value }))} maxLength={120} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs" placeholder="e.g. Shibganj" />
+                      </label>
+                      <label className="block text-[11px] font-semibold text-slate-700">City / District
+                        <input value={locationDraft.city} onChange={event => setLocationDraft(current => ({ ...current, city: event.target.value }))} maxLength={120} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs" placeholder="e.g. Bogura" />
+                      </label>
+                      <label className="block text-[11px] font-semibold text-slate-700">Full facility address
+                        <input value={locationDraft.address} onChange={event => setLocationDraft(current => ({ ...current, address: event.target.value }))} maxLength={500} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs" placeholder="Full physical address" />
+                      </label>
+                      {locationError && <p role="alert" className="text-[11px] text-rose-700">{locationError}</p>}
+                      <div className="flex gap-2">
+                        <button type="button" disabled={locationSaving} onClick={() => void saveWarehouseLocation(wh.id)} className="rounded-md bg-emerald-700 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">{locationSaving ? 'Saving...' : 'Save location'}</button>
+                        <button type="button" disabled={locationSaving} onClick={() => { setEditingLocationId(null); setLocationError(''); }} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700">Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => { setEditingLocationId(wh.id); setLocationDraft({ area: wh.area || '', city: wh.city || '', address: wh.address || '' }); setLocationError(''); }} className="mt-2 text-[11px] font-semibold text-emerald-800 underline underline-offset-2">Edit facility location</button>
+                  )}
                   <div className="mt-2 text-slate-700">
                     Supervisor: <strong className="text-slate-900">{wh.managerName || 'Not assigned'}</strong>
                   </div>

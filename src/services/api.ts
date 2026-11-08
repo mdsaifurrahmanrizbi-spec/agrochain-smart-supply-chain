@@ -1586,12 +1586,17 @@ return qc;
 
   // Warehouses & Inventory
   async getWarehouses(options: { strict?: boolean } = {}): Promise<Warehouse[]> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
-      const records = await getBackendRecords<Warehouse>('warehouses');
+      const records = await getBackendRecords<Warehouse>('warehouses', controller.signal);
       store.warehouses = records;
       localStorage.setItem('agro_warehouses', JSON.stringify(records));
       return records;
     } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error('Warehouse request timed out after 15 seconds. Check the backend connection and try again.');
+      }
       // Strict callers (such as the Admin network view) must never mistake
       // seeded or cached demo warehouses for live database records.
       if (options.strict) {
@@ -1605,7 +1610,20 @@ return qc;
       }
       console.warn('Could not load warehouses from backend.', error);
       return store.warehouses;
+    } finally {
+      clearTimeout(timeoutId);
     }
+  },
+
+  async updateWarehouseLocation(id: string, input: { area: string; city: string; address: string }): Promise<Warehouse> {
+    const res = await fetch(`${API_BASE_URL}/admin/warehouses/${encodeURIComponent(id)}/location/`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(input),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Could not update warehouse location (${res.status})`);
+    return data.warehouse as Warehouse;
   },
 
   async getInventory(): Promise<WarehouseInventoryItem[]> {
