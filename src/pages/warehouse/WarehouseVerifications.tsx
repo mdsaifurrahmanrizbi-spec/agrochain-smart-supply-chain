@@ -159,7 +159,6 @@ export const WarehouseVerifications: React.FC = () => {
                 <th className="py-2.5 px-3">Customer Destination</th>
                 <th className="py-2.5 px-3">Produce Consignment</th>
                 <th className="py-2.5 px-3">Delivery Partner</th>
-                <th className="py-2.5 px-3">Verified Delivery OTP</th>
                 <th className="py-2.5 px-3">Confirmed At</th>
                 <th className="py-2.5 px-3 text-right">Status</th>
               </tr>
@@ -177,11 +176,6 @@ export const WarehouseVerifications: React.FC = () => {
                   </td>
                   <td className="py-3 px-3 font-medium text-slate-800">
                     {ord.deliveryPartnerName || 'Kamal Hossain'}
-                  </td>
-                  <td className="py-3 px-3 font-mono">
-                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
-                      {ord.deliveryOtp}
-                    </span>
                   </td>
                   <td className="py-3 px-3 font-mono text-slate-500">
                     {ord.deliveryConfirmedAt || ord.updatedAt}
