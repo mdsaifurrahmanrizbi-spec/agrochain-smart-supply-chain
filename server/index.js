@@ -1951,7 +1951,7 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
   try {
     await client.query('BEGIN');
     const shipmentLockLookup = await client.query(
-      "SELECT id, data FROM agrochain_records WHERE resource = 'godownShipments' AND id = $1 LIMIT 1",
+      "SELECT id, data FROM agrochain_records WHERE resource = 'godownShipments' AND (id = $1 OR data->>'orderId' = $1) LIMIT 1",
       [req.params.shipmentId]
     );
     const lockOrderId = String(shipmentLockLookup.rows[0]?.data?.orderId || '');
