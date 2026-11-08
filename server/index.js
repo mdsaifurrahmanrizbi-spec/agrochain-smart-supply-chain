@@ -3215,6 +3215,18 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     const existing = existingResult.rows[0]?.data;
 
+    // Delivery job transitions update the job, order, shipment, tracking event,
+    // and partner workload together. Do not allow the generic record endpoint
+    // to bypass the dedicated transactional delivery workflow.
+    if (resource === 'jobs' && ['delivery', 'warehouse'].includes(role) &&
+        (String(existing?.type || '').toUpperCase() === 'DELIVERY' ||
+         String(data.type || '').toUpperCase() === 'DELIVERY')) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: 'Delivery jobs must be changed through the dedicated transactional delivery workflow',
+      });
+    }
+
     if (role === 'warehouse' && resource === 'orders') {
       const ownedWarehouseRows = await client.query(
         "SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1",
