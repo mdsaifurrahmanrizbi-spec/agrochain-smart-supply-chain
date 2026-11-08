@@ -1764,6 +1764,154 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
   } finally {
     client.release();
   }
+
+
+// Destination godown acceptance is authoritative and atomic. It cannot be
+// performed by the origin warehouse manager or by a manager of another godown.
+app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'warehouse') {
+    return res.status(403).json({ message: 'Only a warehouse manager can accept a destination-godown shipment' });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const shipmentResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'godownShipments' AND (id = $1 OR data->>'orderId' = $1) LIMIT 1 FOR UPDATE",
+      [req.params.shipmentId]
+    );
+    const shipmentRow = shipmentResult.rows[0];
+    const shipment = shipmentRow?.data;
+    if (!shipment) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Shipment not found' });
+    }
+    if (shipment.transferStatus !== 'ARRIVED_LOCAL_GODOWN') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Shipment must be marked arrived before acceptance' });
+    }
+    const godownResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'godowns' AND id = $1 AND data->>'managerId' = $2 AND upper(coalesce(data->>'status','')) = 'ACTIVE' FOR UPDATE",
+      [String(shipment.destinationGodownId || ''), String(req.auth.sub)]
+    );
+    const godownRow = godownResult.rows[0];
+    if (!godownRow) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'Your account is not the active manager of this destination godown' });
+    }
+    const godown = godownRow.data || {};
+    const orderResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+      [String(shipment.orderId || '')]
+    );
+    const orderRow = orderResult.rows[0];
+    if (!orderRow) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Related order not found' });
+    }
+    const order = orderRow.data || {};
+    const now = new Date().toISOString();
+    const managerName = String(godown.managerName || req.body?.managerName || 'Warehouse Manager');
+    shipment.transferStatus = 'GODOWN_RECEIVED';
+    shipment.acceptedDate = now;
+    shipment.acceptedByManagerId = req.auth.sub;
+    shipment.acceptedByManagerName = managerName;
+    godown.itemCount = Number(godown.itemCount || 0) + 1;
+    godown.currentStockMetricTons = Number(((Number(godown.currentStockMetricTons || 0) + Number(shipment.weightKg || 0) / 1000)).toFixed(2));
+    order.orderStatus = 'GODOWN_RECEIVED';
+    order.godownReceivedAt = now;
+    order.godownId = godownRow.id;
+    order.godownName = godown.name || shipment.destinationGodownName || godownRow.id;
+
+    const event = {
+      id: 'trk_' + crypto.randomUUID(),
+      orderId: orderRow.id,
+      title: 'RECEIVED AT DESTINATION GODOWN',
+      description: 'Destination godown verified the consignment quantity, packaging and seals and accepted the shipment.',
+      location: order.godownName,
+      timestamp: now,
+      actorRole: 'Warehouse Manager',
+      actorName: managerName,
+      status: 'COMPLETED',
+    };
+    const partnerRows = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND upper(coalesce(data->>'approvalStatus','')) = 'APPROVED' AND coalesce((data->>'canDeliver')::boolean, false) = true ORDER BY coalesce((data->>'activeJobsCount')::int,0), id FOR UPDATE"
+    );
+    const areaText = String(shipment.customerArea || order.buyerAddress || '').toLowerCase();
+    const partnerRow = partnerRows.rows.find((row) => {
+      const partner = row.data || {};
+      const areas = Array.isArray(partner.serviceAreas) ? partner.serviceAreas : [];
+      return areas.some((area) => areaText.includes(String(area).toLowerCase()) || String(areaText).includes(String(area).toLowerCase()));
+    });
+    let deliveryJob = null;
+    if (partnerRow) {
+      const partner = partnerRow.data || {};
+      const existingJob = await client.query(
+        "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'DELIVERY' LIMIT 1 FOR UPDATE",
+        [orderRow.id]
+      );
+      deliveryJob = existingJob.rows[0]?.data || {
+        id: 'job_' + crypto.randomUUID(),
+        jobCode: 'JOB-DEL-' + Math.floor(100000 + Math.random() * 900000),
+        orderId: orderRow.id,
+        orderNumber: order.orderNumber || shipment.orderNumber || orderRow.id,
+        type: 'DELIVERY',
+        productSummary: shipment.productName || 'Order delivery',
+        assignedDate: now,
+        status: 'ASSIGNED',
+      };
+      Object.assign(deliveryJob, {
+        partnerId: partnerRow.id,
+        partnerName: partner.name || '',
+        originAddress: [godown.name, godown.address].filter(Boolean).join(', '),
+        destinationAddress: shipment.customerAddress || order.buyerAddress || '',
+        godownId: godownRow.id,
+        godownName: godown.name || '',
+        status: 'ASSIGNED',
+        updatedAt: now,
+        codAmount: order.paymentMethod === 'COD' ? Number(order.totalAmount || 0) : 0,
+      });
+      partner.activeJobsCount = Number(partner.activeJobsCount || 0) + (existingJob.rows.length ? 0 : 1);
+      shipment.transferStatus = 'DELIVERY_PARTNER_ASSIGNED';
+      shipment.assignedPartnerId = partnerRow.id;
+      shipment.assignedPartnerName = partner.name || '';
+      shipment.assignedDate = now;
+      order.deliveryPartnerId = partnerRow.id;
+      order.deliveryPartnerName = partner.name || '';
+      order.deliveryAssignmentStatus = 'ASSIGNED';
+      order.orderStatus = 'DELIVERY_PARTNER_ASSIGNED';
+      await client.query(
+        "INSERT INTO agrochain_records (resource,id,data,created_at,updated_at) VALUES ('jobs',$1,$2::jsonb,NOW(),NOW()) ON CONFLICT (resource,id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()",
+        [deliveryJob.id, JSON.stringify(deliveryJob)]
+      );
+      await client.query(
+        "UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='deliveryPartners' AND id=$1",
+        [partnerRow.id, JSON.stringify(partner)]
+      );
+    } else {
+      shipment.transferStatus = 'DELIVERY_ASSIGNMENT_PENDING';
+      order.orderStatus = 'DELIVERY_ASSIGNMENT_PENDING';
+      order.deliveryAssignmentStatus = 'PENDING';
+      event.title = 'DESTINATION GODOWN RECEIVED — DELIVERY ASSIGNMENT PENDING';
+      event.description = 'The destination godown accepted the consignment. No approved delivery partner matched the customer service area; manual assignment is required.';
+      event.status = 'IN_PROGRESS';
+    }
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godownShipments' AND id=$1", [shipmentRow.id, JSON.stringify(shipment)]);
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godowns' AND id=$1", [godownRow.id, JSON.stringify(godown)]);
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='orders' AND id=$1", [orderRow.id, JSON.stringify(order)]);
+    await client.query(
+      "INSERT INTO agrochain_records (resource,id,data,created_at,updated_at) VALUES ('trackingEvents',$1,$2::jsonb,NOW(),NOW())",
+      [event.id, JSON.stringify(event)]
+    );
+    await client.query('COMMIT');
+    return res.status(200).json({ shipment, order, godown, deliveryJob, event, assignmentSuccess: Boolean(partnerRow) });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Destination godown acceptance failed:', error.message);
+    return res.status(500).json({ message: 'Godown acceptance failed; no partial changes were committed' });
+  } finally {
+    client.release();
+  }
+});
 });
 
 // Server-authoritative delivery confirmation. COD customer payment becomes PAID
