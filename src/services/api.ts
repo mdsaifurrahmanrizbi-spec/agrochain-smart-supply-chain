@@ -2224,103 +2224,34 @@ return qc;
   async manualAssignDeliveryPartner(
     shipmentId: string,
     partnerId: string,
-    staffName: string = 'Staff Admin',
-    staffRole: string = 'Godown Manager'
+    _staffName: string = 'Warehouse Manager',
+    _staffRole: string = 'Warehouse Manager'
   ): Promise<GodownShipment> {
-    const shipment = store.godownShipments.find((s) => s.id === shipmentId || s.orderId === shipmentId);
-    if (!shipment) throw new Error('Shipment not found');
-
-    const partner = store.deliveryPartners.find((p) => p.id === partnerId);
-    if (!partner) throw new Error('Partner not found');
-    if (partner.approvalStatus !== 'APPROVED' || !partner.canDeliver) {
-      throw new Error(`Partner is not eligible for delivery assignment (Status: ${partner.approvalStatus}).`);
-    }
-    if (shipment.transferStatus !== 'GODOWN_RECEIVED' && shipment.transferStatus !== 'DELIVERY_ASSIGNMENT_PENDING') {
-      throw new Error('Delivery can only be assigned after the shipment is received at the local godown or placed in the assignment queue.');
-    }
-    const area = (shipment.customerArea || shipment.customerAddress || '').toLowerCase();
-    const partnerAreas = [partner.preferredArea, ...(partner.assignedAreas || [])].filter(Boolean).map((value) => value.toLowerCase());
-    if (!partnerAreas.some((partnerArea) => area.includes(partnerArea) || partnerArea.includes(area))) {
-      throw new Error('This partner is not assigned to the customer service area.');
-    }
-
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
-    const existingJob = store.jobs.find((j) => j.orderId === shipment.orderId && j.type === 'DELIVERY');
-    if (existingJob?.status === 'ASSIGNED' || existingJob?.status === 'ACCEPTED' || existingJob?.status === 'COLLECTED' || existingJob?.status === 'OUT_FOR_DELIVERY') {
-      throw new Error('This shipment already has an active delivery job.');
-    }
-    partner.activeJobsCount = (partner.activeJobsCount || 0) + 1;
-
-    shipment.assignedPartnerId = partner.id;
-    shipment.assignedPartnerName = partner.name;
-    shipment.transferStatus = 'DELIVERY_PARTNER_ASSIGNED';
-    shipment.assignedDate = now;
-
-    const order = store.orders.find((o) => o.id === shipment.orderId);
-    if (order) {
-      order.orderStatus = 'DELIVERY_PARTNER_ASSIGNED';
-      order.deliveryPartnerId = partner.id;
-      order.deliveryPartnerName = partner.name;
-      order.deliveryAssignmentStatus = 'ASSIGNED';
-    }
-
-    let deliveryJob = store.jobs.find((j) => j.orderId === shipment.orderId && j.type === 'DELIVERY');
-    if (!deliveryJob) {
-      deliveryJob = {
-        id: `job-del-${Date.now()}`,
-        jobCode: `JOB-DEL-${Math.floor(1000 + Math.random() * 9000)}`,
-        orderId: shipment.orderId,
-        orderNumber: shipment.orderNumber,
-        partnerId: partner.id,
-        partnerName: partner.name,
-        type: 'DELIVERY',
-        productSummary: shipment.productName,
-        originAddress: `${shipment.destinationGodownName}`,
-        destinationAddress: shipment.customerAddress,
-        godownId: shipment.destinationGodownId,
-        godownName: shipment.destinationGodownName,
-        assignedDate: now,
-        status: 'ASSIGNED',
-        codAmount: order?.paymentMethod === 'COD' ? order.totalAmount : 0,
-        updatedAt: now,
-      };
-      store.jobs.unshift(deliveryJob);
-    } else {
-      deliveryJob.partnerId = partner.id;
-      deliveryJob.partnerName = partner.name;
-      deliveryJob.status = 'ASSIGNED';
-      deliveryJob.updatedAt = now;
-    }
-
-    const events = store.trackingEvents[shipment.orderId] || [];
-    events.unshift({
-      id: `trk-${Date.now()}-man`,
-      orderId: shipment.orderId,
-      title: 'Delivery Partner Assigned (Manual)',
-      description: `Delivery partner ${partner.name} manually assigned by ${staffName} (${staffRole}).`,
-      location: shipment.destinationGodownName,
-      timestamp: now,
-      actorRole: staffRole,
-      actorName: staffName,
-      status: 'COMPLETED',
+    if (!shipmentId || !partnerId) throw new Error('Shipment and delivery partner are required');
+    const response = await fetch(\`${API_BASE_URL}/godowns/shipments/\${encodeURIComponent(shipmentId)}/assign-partner\`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ partnerId }),
+      cache: 'no-store',
     });
-
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.message || 'Could not assign delivery partner');
+    const updatedShipment = result.shipment as GodownShipment;
+    const updatedOrder = result.order as Order;
+    const updatedPartner = result.partner as DeliveryPartner;
+    const updatedJob = result.job as LogisticsJob;
+    const event = result.event as TrackingEvent;
+    store.godownShipments = store.godownShipments.map((item) => item.id === updatedShipment.id ? updatedShipment : item);
+    store.orders = store.orders.map((item) => item.id === updatedOrder.id ? updatedOrder : item);
+    store.deliveryPartners = store.deliveryPartners.map((item) => item.id === updatedPartner.id ? updatedPartner : item);
+    store.jobs = [updatedJob, ...store.jobs.filter((item) => item.id !== updatedJob.id)];
+    store.trackingEvents[updatedOrder.id] = [event, ...(store.trackingEvents[updatedOrder.id] || [])];
     localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
-    localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
     localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
+    localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
-
-    await saveBackendRecord('godownShipments', shipment);
-    if (order) await saveBackendRecord('orders', order);
-    await saveBackendRecord('deliveryPartners', partner);
-    const savedDeliveryJob = store.jobs.find((j) => j.orderId === shipment.orderId && j.type === 'DELIVERY');
-    if (savedDeliveryJob) await saveBackendRecord('jobs', savedDeliveryJob);
-    for (const event of events) {
-      await saveBackendRecord('trackingEvents', event);
-    }
-
-    return shipment;
+    return updatedShipment;
   },
 
   // 11. Report Exception at Godown
