@@ -2303,6 +2303,23 @@ app.post('/api/godowns/shipments/:shipmentId/assign-partner', requireAuth, async
     const existingJobRow = jobResult.rows[0];
     const existingJob = existingJobRow?.data || {};
     if (existingJobRow && ['ASSIGNED','ACCEPTED','ARRIVED_AT_GODOWN','COLLECTED','OUT_FOR_DELIVERY'].includes(String(existingJob.status || '').toUpperCase())) {
+      const sameAssignmentAlreadyCommitted =
+        existingJob.partnerId === partnerId &&
+        shipment.assignedPartnerId === partnerId &&
+        order.deliveryPartnerId === partnerId &&
+        String(order.deliveryAssignmentStatus || '').toUpperCase() === 'ASSIGNED' &&
+        String(shipment.transferStatus || '').toUpperCase() === 'DELIVERY_PARTNER_ASSIGNED';
+      if (sameAssignmentAlreadyCommitted) {
+        await client.query('COMMIT');
+        return res.json({
+          shipment,
+          order,
+          partner,
+          job: existingJob,
+          event: null,
+          idempotent: true,
+        });
+      }
       await client.query('ROLLBACK');
       return res.status(409).json({ message: 'This shipment already has an active delivery job' });
     }
