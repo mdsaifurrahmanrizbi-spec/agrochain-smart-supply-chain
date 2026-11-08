@@ -1441,7 +1441,7 @@ app.post('/api/orders/:orderId/assign-pickup', requireAuth, async (req, res) => 
       : { rows: [] };
     const farm = farmResult.rows[0]?.data || {};
     const originAddress = String(product.farmLocation || product.farmAddress || farm.location || farm.address || firstItem?.farmLocation || '').trim();
-    const normalizeArea = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+    const normalizeArea = (value) => String(value || '').normalize('NFC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
     const origin = normalizeArea(originAddress);
 
     const partnersResult = await client.query(
@@ -1934,7 +1934,7 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
     const partnerRows = await client.query(
       "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND upper(coalesce(data->>'approvalStatus','')) = 'APPROVED' AND coalesce((data->>'canDeliver')::boolean, false) = true ORDER BY coalesce((data->>'activeJobsCount')::int,0), id FOR UPDATE"
     );
-    const areaText = String([shipment.customerArea, shipment.customerAddress, order.buyerCity, order.buyerAddress].filter(Boolean).join(' ')).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+    const areaText = String([shipment.customerArea, shipment.customerAddress, order.buyerCity, order.buyerAddress].filter(Boolean).join(' ')).normalize('NFC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
     const existingJob = await client.query(
       "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'DELIVERY' LIMIT 1 FOR UPDATE",
       [orderRow.id]
@@ -1947,7 +1947,7 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
       const partner = row.data || {};
       const areas = Array.isArray(partner.serviceAreas) ? partner.serviceAreas : [];
       return areas.some((area) => {
-        const term = String(area || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+        const term = String(area || '').normalize('NFC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
         return term.length >= 2 && areaText.length > 0 && (' ' + areaText + ' ').includes(' ' + term + ' ');
       });
     });
