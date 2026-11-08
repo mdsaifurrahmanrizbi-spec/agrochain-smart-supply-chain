@@ -1566,16 +1566,27 @@ return qc;
   },
 
   // Warehouses & Inventory
-  async getWarehouses(): Promise<Warehouse[]> {
+  async getWarehouses(options: { strict?: boolean } = {}): Promise<Warehouse[]> {
     try {
       const records = await getBackendRecords<Warehouse>('warehouses');
       store.warehouses = records;
       localStorage.setItem('agro_warehouses', JSON.stringify(records));
+      return records;
     } catch (error) {
-      if (JSON.parse(localStorage.getItem('agro_active_user') || '{}').role === 'warehouse') store.warehouses = [];
+      // Strict callers (such as the Admin network view) must never mistake
+      // seeded or cached demo warehouses for live database records.
+      if (options.strict) {
+        store.warehouses = [];
+        localStorage.setItem('agro_warehouses', JSON.stringify([]));
+        throw error;
+      }
+
+      if (JSON.parse(localStorage.getItem('agro_active_user') || '{}').role === 'warehouse') {
+        store.warehouses = [];
+      }
       console.warn('Could not load warehouses from backend.', error);
+      return store.warehouses;
     }
-    return store.warehouses;
   },
 
   async getInventory(): Promise<WarehouseInventoryItem[]> {
