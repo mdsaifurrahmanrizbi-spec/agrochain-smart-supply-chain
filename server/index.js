@@ -865,6 +865,137 @@ app.get('/api/admin/warehouse-applications/', requireAuth, async (req, res) => {
   }
 });
 
+// Admin-only, read-only preview of approved and active managers missing a facility.
+app.get('/api/admin/warehouse-facility-repair/preview/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  try {
+    const result = await pool.query(`
+      SELECT a.id AS application_id, a.data AS application,
+             u.id AS manager_id, u.name AS account_name, u.email AS account_email, u.status AS account_status
+      FROM agrochain_records a
+      JOIN auth_users u
+        ON u.id = COALESCE(NULLIF(a.data->>'userId', ''), a.id)
+       AND u.role = 'warehouse' AND UPPER(u.status) = 'ACTIVE'
+      WHERE a.resource = 'warehouseApplications'
+        AND UPPER(COALESCE(a.data->>'status', a.data->>'approvalStatus', '')) = 'APPROVED'
+        AND NOT EXISTS (
+          SELECT 1 FROM agrochain_records w
+          WHERE w.resource = 'warehouses'
+            AND (w.data->>'managerId' = u.id OR w.data->>'applicationId' = a.id)
+        )
+      ORDER BY a.created_at ASC
+    `);
+    return res.set('Cache-Control', 'no-store').json({
+      candidates: result.rows.map(row => ({
+        applicationId: row.application_id,
+        managerId: row.manager_id,
+        managerName: row.application?.managerName || row.account_name,
+        email: row.account_email,
+        facilityName: row.application?.name || 'Warehouse',
+        type: row.application?.type || 'REGIONAL_GODOWN',
+        city: row.application?.city || '',
+        area: row.application?.area || '',
+        status: 'APPROVED',
+        accountStatus: row.account_status,
+      })),
+      count: result.rowCount,
+    });
+  } catch (error) {
+    console.error('Warehouse facility repair preview failed:', error.message);
+    return res.status(500).json({ message: 'Could not preview missing warehouse facilities' });
+  }
+});
+
+// Explicit Admin action. Idempotent and transactional: only approved applications
+// with an ACTIVE warehouse account and no existing linked facility are repaired.
+app.post('/api/admin/warehouse-facility-repair/run/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  if (req.body?.confirm !== true) {
+    return res.status(400).json({ message: 'Explicit confirmation is required to create missing facility records' });
+  }
+  const client = await pool.connect();
+  let created = 0;
+  let skipped = 0;
+  const repaired = [];
+  try {
+    await client.query('BEGIN');
+    const applications = await client.query(
+      `SELECT id, data FROM agrochain_records
+       WHERE resource = 'warehouseApplications'
+         AND UPPER(COALESCE(data->>'status', data->>'approvalStatus', '')) = 'APPROVED'
+       ORDER BY created_at ASC
+       FOR UPDATE`
+    );
+    for (const row of applications.rows) {
+      const application = row.data || {};
+      const managerId = String(application.userId || row.id).trim();
+      if (!managerId) { skipped += 1; continue; }
+      const account = await client.query(
+        "SELECT id, name, status FROM auth_users WHERE id = $1 AND role = 'warehouse' FOR UPDATE",
+        [managerId]
+      );
+      if (!account.rowCount || String(account.rows[0].status).toUpperCase() !== 'ACTIVE') {
+        skipped += 1;
+        continue;
+      }
+      const existing = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND (data->>'managerId' = $1 OR data->>'applicationId' = $2) LIMIT 1 FOR UPDATE",
+        [managerId, row.id]
+      );
+      if (existing.rowCount) {
+        if (application.warehouseId !== existing.rows[0].id) {
+          await client.query(
+            "UPDATE agrochain_records SET data = jsonb_set(data, '{warehouseId}', to_jsonb($2::text), true), updated_at = NOW() WHERE resource = 'warehouseApplications' AND id = $1",
+            [row.id, existing.rows[0].id]
+          );
+        }
+        skipped += 1;
+        continue;
+      }
+      const crypto = await import('node:crypto');
+      const warehouseId = 'wh_' + crypto.randomUUID();
+      const now = new Date().toISOString();
+      const prefix = String(application.city || application.area || 'WH')
+        .replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 5) || 'WH';
+      const facility = {
+        id: warehouseId,
+        applicationId: row.id,
+        name: String(application.name || 'Warehouse').trim(),
+        code: `${prefix}-${warehouseId.slice(-6).toUpperCase()}`,
+        type: application.type === 'CENTRAL' ? 'CENTRAL' : 'REGIONAL_GODOWN',
+        location: [application.area, application.city].filter(Boolean).join(', '),
+        address: application.address || '',
+        city: application.city || '',
+        area: application.area || '',
+        managerName: application.managerName || account.rows[0].name,
+        managerId,
+        capacityMetricTons: Number(application.capacityMetricTons) || 0,
+        currentStockMetricTons: 0,
+        temperatureControlled: Boolean(application.temperatureControlled),
+        createdAt: now,
+      };
+      await client.query(
+        "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('warehouses', $1, $2::jsonb, NOW(), NOW())",
+        [warehouseId, JSON.stringify(facility)]
+      );
+      await client.query(
+        "UPDATE agrochain_records SET data = jsonb_set(data, '{warehouseId}', to_jsonb($2::text), true), updated_at = NOW() WHERE resource = 'warehouseApplications' AND id = $1",
+        [row.id, warehouseId]
+      );
+      created += 1;
+      repaired.push({ applicationId: row.id, warehouseId, name: facility.name, managerName: facility.managerName });
+    }
+    await client.query('COMMIT');
+    return res.json({ message: 'Warehouse facility repair completed', created, skipped, repaired });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Warehouse facility repair failed:', error.message);
+    return res.status(500).json({ message: 'Warehouse facility repair failed; no partial changes were committed' });
+  } finally {
+    client.release();
+  }
+});
+
 app.patch('/api/admin/warehouse-applications/:id/approval/', requireAuth, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
   const applicationId = String(req.params.id || '').trim();
