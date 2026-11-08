@@ -1980,7 +1980,7 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
       status: 'COMPLETED',
     };
     const partnerRows = await client.query(
-      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND upper(coalesce(data->>'approvalStatus','')) = 'APPROVED' AND coalesce((data->>'canDeliver')::boolean, false) = true ORDER BY coalesce((data->>'activeJobsCount')::int,0), id FOR UPDATE"
+      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND upper(coalesce(data->>'approvalStatus','')) = 'APPROVED' AND coalesce((data->>'canDeliver')::boolean, false) = true ORDER BY coalesce((data->>'activeJobsCount')::int,0), id"
     );
     const normalizeArea = (value) => String(value || '').normalize('NFC').toLocaleLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim().replace(/\\s+/g, ' ');
     const areaText = normalizeArea([shipment.customerArea, shipment.customerAddress, order.buyerCity, order.buyerAddress].filter(Boolean).join(' '));
@@ -2016,7 +2016,20 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
     const assignedExistingPartner = existingDeliveryJob
       ? partnerRows.find((row) => row.id === String(existingDeliveryJob.data?.partnerId || '') && matchesCustomerArea(row.data || {}))
       : null;
-    const partnerRow = assignedExistingPartner || (!existingDeliveryJob ? partnerRows.find((row) => matchesCustomerArea(row.data || {})) : null);
+    let partnerRow = assignedExistingPartner || (!existingDeliveryJob ? partnerRows.find((row) => matchesCustomerArea(row.data || {})) : null);
+    if (partnerRow) {
+      const lockedPartnerResult = await client.query(
+        "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND id = $1 FOR UPDATE",
+        [partnerRow.id]
+      );
+      const lockedPartner = lockedPartnerResult.rows[0];
+      if (!lockedPartner || String(lockedPartner.data?.approvalStatus || '').toUpperCase() !== 'APPROVED' ||
+          lockedPartner.data?.canDeliver !== true || !matchesCustomerArea(lockedPartner.data || {})) {
+        partnerRow = null;
+      } else {
+        partnerRow = lockedPartner;
+      }
+    }
     let deliveryJob = existingDeliveryJob?.data || null;
     if (partnerRow) {
       const partner = partnerRow.data || {};
