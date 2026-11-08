@@ -1804,129 +1804,50 @@ return qc;
   },
 
   // 1. Central Warehouse Receiving & Destination Godown Selection
-  async centralWarehouseReceive(jobIdOrOrderId: string, staffName: string = 'Anisul Haque'): Promise<{ order: Order; shipment?: GodownShipment }> {
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
-    const order = store.orders.find((o) => o.id === jobIdOrOrderId || o.orderNumber === jobIdOrOrderId || o.items.some(() => false));
-    const job = store.jobs.find((j) => j.id === jobIdOrOrderId || j.orderId === order?.id);
-    
-    const targetOrder = order || store.orders.find((o) => o.id === job?.orderId);
-    if (!targetOrder) throw new Error('Order consignment not found');
+  async centralWarehouseReceive(jobIdOrOrderId: string, staffName: string = 'Warehouse Manager'): Promise<{ order: Order; shipment?: GodownShipment }> {
+    const job = store.jobs.find((candidate) =>
+      candidate.id === jobIdOrOrderId ||
+      candidate.orderId === jobIdOrOrderId ||
+      candidate.orderNumber === jobIdOrOrderId
+    );
+    if (!job) throw new Error('Pickup job not found. Refresh the incoming shipments list and try again.');
+    if (job.type !== 'PICKUP') throw new Error('Only farm pickup jobs can be received at an origin warehouse.');
 
-    if (job) {
-      job.status = 'WAREHOUSE_HANDOVER';
-      job.updatedAt = now;
+    const response = await fetch(
+      `${API_BASE_URL}/warehouse/intake/${encodeURIComponent(job.id)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
+        body: JSON.stringify({ staffName }),
+      }
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(typeof payload.message === 'string'
+        ? payload.message
+        : `Warehouse intake failed: ${response.status}`);
     }
 
-    // Step 4 & 5: System identifies customer delivery location & selects destination local godown
-    const routing = selectDestinationLocalGodown(targetOrder.buyerAddress, targetOrder.buyerCity, store.godowns);
-    
-const events =
-  store.trackingEvents[targetOrder.id] ??
-  (store.trackingEvents[targetOrder.id] = []);
-
-    let shipment = store.godownShipments.find((s) => s.orderId === targetOrder.id);
-
-    if (routing.requiresManualRouting || !routing.godown) {
-      targetOrder.orderStatus = 'MANUAL_ROUTING_REQUIRED';
-      
-      if (!shipment) {
-        shipment = {
-          id: `shp-${Date.now()}`,
-          orderId: targetOrder.id,
-          orderNumber: targetOrder.orderNumber,
-          productName: targetOrder.items.map((i) => `${i.quantity} ${i.unit} ${i.productName}`).join(', '),
-          quantity: targetOrder.items.reduce((s, i) => s + i.quantity, 0),
-          unit: targetOrder.items[0]?.unit || 'kg',
-          weightKg: targetOrder.totalWeightKg || 25,
-          sourceWarehouseId: targetOrder.warehouseId || 'wh-central',
-          sourceWarehouseName: targetOrder.warehouseName || 'Central Dhaka Agro-Logistics Center, Gazipur',
-          destinationGodownId: routing.godown?.id || 'unassigned',
-          destinationGodownName: routing.godown?.name || 'Unassigned - Manual Review Required',
-          customerArea: targetOrder.buyerCity,
-          customerAddress: targetOrder.buyerAddress,
-          customerName: targetOrder.buyerName,
-          customerPhone: targetOrder.buyerPhone,
-          productCondition: 'EXCELLENT',
-          transferStatus: 'MANUAL_ROUTING_REQUIRED',
-          exceptionNotes: routing.reason || 'No active local godown covers this service area.',
-        };
-        store.godownShipments.unshift(shipment);
-      } else {
-        shipment.transferStatus = 'MANUAL_ROUTING_REQUIRED';
-        shipment.exceptionNotes = routing.reason;
-      }
-
-      events.unshift({
-        id: `trk-${Date.now()}-mr`,
-        orderId: targetOrder.id,
-        title: 'MANUAL ROUTING REQUIRED',
-        description: `Shipment intake completed at Central Warehouse. ${routing.reason}`,
-        location: 'Central Dhaka Agro-Logistics Center, Gazipur',
-        timestamp: now,
-        actorRole: 'Warehouse Officer',
-        actorName: staffName,
-        status: 'IN_PROGRESS',
-      });
-    } else {
-      targetOrder.orderStatus = 'WAREHOUSE_RECEIVED';
-      targetOrder.destinationGodownId = routing.godown.id;
-      targetOrder.destinationGodownName = routing.godown.name;
-
-      if (!shipment) {
-        shipment = {
-          id: `shp-${Date.now()}`,
-          orderId: targetOrder.id,
-          orderNumber: targetOrder.orderNumber,
-          productName: targetOrder.items.map((i) => `${i.quantity} ${i.unit} ${i.productName}`).join(', '),
-          quantity: targetOrder.items.reduce((s, i) => s + i.quantity, 0),
-          unit: targetOrder.items[0]?.unit || 'kg',
-          weightKg: targetOrder.totalWeightKg || 25,
-          sourceWarehouseId: targetOrder.warehouseId || 'wh-central',
-          sourceWarehouseName: targetOrder.warehouseName || 'Central Dhaka Agro-Logistics Center, Gazipur',
-          destinationGodownId: routing.godown.id,
-          destinationGodownName: routing.godown.name,
-          customerArea: routing.godown.serviceAreas[0] || 'Dhaka North',
-          customerAddress: targetOrder.buyerAddress,
-          customerName: targetOrder.buyerName,
-          customerPhone: targetOrder.buyerPhone,
-          productCondition: 'EXCELLENT',
-          transferStatus: 'PENDING_DISPATCH',
-        };
-        store.godownShipments.unshift(shipment);
-      } else {
-        shipment.destinationGodownId = routing.godown.id;
-        shipment.destinationGodownName = routing.godown.name;
-        shipment.transferStatus = 'PENDING_DISPATCH';
-      }
-
-      events.unshift({
-        id: `trk-${Date.now()}-cwh`,
-        orderId: targetOrder.id,
-        title: 'RECEIVED AT CENTRAL WAREHOUSE',
-        description: `Consignment intake completed at Central Warehouse. Weight & seals verified. Destination assigned to ${routing.godown.name}.`,
-        location: 'Central Dhaka Agro-Logistics Center, Gazipur',
-        timestamp: now,
-        actorRole: 'Warehouse Officer',
-        actorName: staffName,
-        status: 'COMPLETED',
-      });
-    }
-
+    const { order, job: receivedJob, shipment, event } = payload as {
+      order: Order;
+      job: LogisticsJob;
+      shipment: GodownShipment;
+      event: TrackingEvent;
+    };
+    store.orders = store.orders.map((item) => item.id === order.id ? order : item);
+    store.jobs = store.jobs.map((item) => item.id === receivedJob.id ? receivedJob : item);
+    store.godownShipments = [shipment, ...store.godownShipments.filter((item) => item.id !== shipment.id)];
+    store.trackingEvents[order.id] = [event, ...(store.trackingEvents[order.id] || [])];
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
     localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
     localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
-
-    await saveBackendRecord('orders', targetOrder);
-    if (shipment) await saveBackendRecord('godownShipments', shipment);
-    for (const event of events) {
-      await saveBackendRecord('trackingEvents', event);
-    }
-
-    return { order: targetOrder, shipment };
+    return { order, shipment };
   },
 
-  
   // 2. Dispatch to Local Godown
   async dispatchToLocalGodown(
     shipmentIdOrOrderId: string,
