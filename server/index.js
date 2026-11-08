@@ -2247,7 +2247,6 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
       );
     }
 
-    const orderId = found.rows[0].id || id;
     let settlement = null;
     const existingSettlement = await client.query(
       "SELECT id, data FROM agrochain_records WHERE resource = 'settlements' AND data->>'orderId' = $1 LIMIT 1 FOR UPDATE",
