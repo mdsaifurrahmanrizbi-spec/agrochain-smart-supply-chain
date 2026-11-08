@@ -206,7 +206,7 @@ app.post('/api/auth/google/complete-profile/', async (req, res) => {
     }
 
     const crypto = await import('node:crypto');
-    const id = 'usr_' + crypto.randomUUID();
+    const id = 'usr_' + randomUUID();
     const created = await pool.query(
       `INSERT INTO auth_users (id, name, email, password_hash, role, status, google_id, auth_provider, avatar)
        VALUES ($1, $2, $3, NULL, $4, 'ACTIVE', $5, 'google', $6)
@@ -406,7 +406,7 @@ app.post('/api/admin/bootstrap/', async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const id = 'usr_' + crypto.randomUUID();
+    const id = 'usr_' + randomUUID();
     const result = await client.query(
       `INSERT INTO auth_users (id, name, email, password_hash, role, status)
        VALUES ($1, $2, $3, $4, 'admin', 'ACTIVE')
@@ -525,7 +525,7 @@ app.post('/api/admin/create-account/', async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const id = 'usr_' + crypto.randomUUID();
+    const id = 'usr_' + randomUUID();
     const result = await pool.query(
       `INSERT INTO auth_users (id, name, email, password_hash, role, status)
        VALUES ($1, $2, $3, $4, 'admin', 'ACTIVE')
@@ -596,7 +596,7 @@ app.post('/api/password-reset/request/', async (req, res) => {
       );
       await pool.query(
         "INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, NOW() + INTERVAL '30 minutes')",
-        [crypto.randomUUID(), account.id, tokenHash]
+        [randomUUID(), account.id, tokenHash]
       );
 
       const frontend = process.env.FRONTEND_URL.replace(/\/$/, '');
@@ -953,7 +953,7 @@ app.post('/api/admin/warehouse-facility-repair/run/', requireAuth, async (req, r
         continue;
       }
       const crypto = await import('node:crypto');
-      const warehouseId = 'wh_' + crypto.randomUUID();
+      const warehouseId = 'wh_' + randomUUID();
       const now = new Date().toISOString();
       const prefix = String(application.city || application.area || 'WH')
         .replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 5) || 'WH';
@@ -1102,7 +1102,7 @@ app.patch('/api/admin/warehouse-applications/:id/approval/', requireAuth, async 
         createdWarehouse = { ...existingWarehouse.rows[0].data, id: existingWarehouse.rows[0].id };
       } else {
         const crypto = await import('node:crypto');
-        const warehouseId = 'wh_' + crypto.randomUUID();
+        const warehouseId = 'wh_' + randomUUID();
         const prefix = String(application.city || application.area || 'WH').replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 5) || 'WH';
         const warehouseData = {
           id: warehouseId, applicationId, name: String(application.name || 'Warehouse').trim(),
@@ -1689,7 +1689,7 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
     const manualRouting = !destination;
     const now = new Date().toISOString();
     const crypto = await import('node:crypto');
-    const shipmentId = 'shp_' + crypto.randomUUID();
+    const shipmentId = 'shp_' + randomUUID();
     const shipment = {
       id: shipmentId,
       orderId: orderRow.id,
@@ -1727,7 +1727,7 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
     }
     order.updatedAt = now;
     const event = {
-      id: 'trk_' + crypto.randomUUID(),
+      id: 'trk_' + randomUUID(),
       orderId: orderRow.id,
       title: manualRouting ? 'RECEIVED AT ORIGIN WAREHOUSE — MANUAL ROUTING REQUIRED' : 'RECEIVED AT ORIGIN WAREHOUSE',
       description: manualRouting
@@ -1770,6 +1770,7 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
 // performed by the origin warehouse manager or by a manager of another godown.
 app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, res) => {
   if (req.auth.role !== 'warehouse') {
+  const { randomUUID } = await import('node:crypto');
     return res.status(403).json({ message: 'Only a warehouse manager can accept a destination-godown shipment' });
   }
   const client = await pool.connect();
@@ -1823,7 +1824,7 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
     order.godownName = godown.name || shipment.destinationGodownName || godownRow.id;
 
     const event = {
-      id: 'trk_' + crypto.randomUUID(),
+      id: 'trk_' + randomUUID(),
       orderId: orderRow.id,
       title: 'RECEIVED AT DESTINATION GODOWN',
       description: 'Destination godown verified the consignment quantity, packaging and seals and accepted the shipment.',
@@ -1850,7 +1851,7 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
         [orderRow.id]
       );
       deliveryJob = existingJob.rows[0]?.data || {
-        id: 'job_' + crypto.randomUUID(),
+        id: 'job_' + randomUUID(),
         jobCode: 'JOB-DEL-' + Math.floor(100000 + Math.random() * 900000),
         orderId: orderRow.id,
         orderNumber: order.orderNumber || shipment.orderNumber || orderRow.id,
