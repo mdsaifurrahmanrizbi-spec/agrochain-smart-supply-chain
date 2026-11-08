@@ -1253,17 +1253,15 @@ export const GodownHub: React.FC = () => {
                   <span>Automatic Area-Based Assignment Trigger:</span>
                 </span>
                 <p className="text-emerald-800 text-[11px] leading-relaxed">
-                  Upon clicking Accept, AgroChain will automatically evaluate approved delivery partners serving{' '}
-                  <strong>{selectedShipment.customerArea}</strong> and assign the nearest available partner with balanced workload.
+                  After receipt is confirmed, AgroChain publishes this delivery request to approved partners serving{' '}
+                  <strong>{selectedShipment.customerArea}</strong>. The first eligible partner to accept gets the job.
                 </p>
               </div>
 
               {lastAssignmentResult && (
                 <div className="p-3 bg-emerald-100/70 border border-emerald-300 rounded-xl text-xs text-emerald-900 space-y-1">
-                  <span className="font-bold">Match Result:</span>
-                  <p>
-                    Assigned Partner: <strong>{lastAssignmentResult.partner?.name}</strong> (Rating: {lastAssignmentResult.partner?.rating}★, Vehicle: {lastAssignmentResult.partner?.vehicleType})
-                  </p>
+                  <span className="font-bold">Delivery Request Published</span>
+                  <p>Eligible approved delivery partners in {selectedShipment.customerArea} can now view and accept this request. The first partner to accept will be assigned.</p>
                 </div>
               )}
 
