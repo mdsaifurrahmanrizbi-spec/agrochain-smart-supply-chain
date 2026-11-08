@@ -2268,7 +2268,11 @@ app.post('/api/godowns/shipments/:shipmentId/assign-partner', requireAuth, async
     const shipmentRow = shipmentResult.rows[0];
     const shipment = shipmentRow?.data || {};
     if (!shipmentRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Shipment not found' }); }
-    if (!['GODOWN_RECEIVED','DELIVERY_ASSIGNMENT_PENDING'].includes(String(shipment.transferStatus || '').toUpperCase())) {
+    const shipmentTransferStatus = String(shipment.transferStatus || '').toUpperCase();
+    const isRetryOfCurrentAssignment =
+      shipmentTransferStatus === 'DELIVERY_PARTNER_ASSIGNED' &&
+      shipment.assignedPartnerId === partnerId;
+    if (!['GODOWN_RECEIVED','DELIVERY_ASSIGNMENT_PENDING'].includes(shipmentTransferStatus) && !isRetryOfCurrentAssignment) {
       await client.query('ROLLBACK');
       return res.status(409).json({ message: 'Partner assignment is allowed only after destination godown receipt or while assignment is pending' });
     }
