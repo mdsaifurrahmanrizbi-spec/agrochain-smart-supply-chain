@@ -185,6 +185,7 @@ export interface Order {
 
 export interface LocalGodown {
   id: string;
+  warehouseId?: string;
   name: string;
   code: string;
   address: string;
