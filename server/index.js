@@ -996,6 +996,64 @@ app.post('/api/admin/warehouse-facility-repair/run/', requireAuth, async (req, r
   }
 });
 
+// Admin-only correction for a warehouse facility's physical location.
+// The linked application is updated in the same transaction to keep both records consistent.
+app.patch('/api/admin/warehouses/:id/location/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+
+  const warehouseId = String(req.params.id || '').trim();
+  const area = typeof req.body?.area === 'string' ? req.body.area.trim() : '';
+  const city = typeof req.body?.city === 'string' ? req.body.city.trim() : '';
+  const address = typeof req.body?.address === 'string' ? req.body.address.trim() : '';
+  if (!warehouseId || !area || !city || !address ||
+      area.length > 120 || city.length > 120 || address.length > 500) {
+    return res.status(400).json({ message: 'Area, city/district, and full address are required and must be within the allowed length.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const found = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'warehouses' AND id = $1 FOR UPDATE",
+      [warehouseId]
+    );
+    if (!found.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Warehouse facility not found' });
+    }
+
+    const current = found.rows[0].data || {};
+    const updated = {
+      ...current,
+      area,
+      city,
+      address,
+      location: [area, city].filter(Boolean).join(', '),
+      updatedAt: new Date().toISOString(),
+    };
+    const saved = await client.query(
+      "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'warehouses' AND id = $1 RETURNING id, data",
+      [warehouseId, JSON.stringify(updated)]
+    );
+
+    if (current.applicationId) {
+      await client.query(
+        "UPDATE agrochain_records SET data = jsonb_set(jsonb_set(jsonb_set(data, '{area}', to_jsonb($2::text), true), '{city}', to_jsonb($3::text), true), '{address}', to_jsonb($4::text), true), updated_at = NOW() WHERE resource = 'warehouseApplications' AND id = $1",
+        [current.applicationId, area, city, address]
+      );
+    }
+
+    await client.query('COMMIT');
+    return res.json({ warehouse: { ...saved.rows[0].data, id: saved.rows[0].id } });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Warehouse location update failed:', error.message);
+    return res.status(500).json({ message: 'Warehouse location could not be updated; no partial changes were committed.' });
+  } finally {
+    client.release();
+  }
+});
+
 app.patch('/api/admin/warehouse-applications/:id/approval/', requireAuth, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
   const applicationId = String(req.params.id || '').trim();
