@@ -1005,6 +1005,79 @@ app.post('/api/admin/warehouse-facility-repair/run/', requireAuth, async (req, r
   }
 });
 
+
+ // Admin-only preview for regional warehouse facilities that are not linked to an operational godown.
+app.get('/api/admin/godown-link-repair/preview/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  try {
+    const result = await pool.query(`
+      SELECT w.id AS warehouse_id, w.data AS warehouse,
+             COALESCE((
+               SELECT json_agg(json_build_object('id', g.id, 'warehouseLinked', g.data->>'warehouseId' = w.id))
+               FROM agrochain_records g
+               WHERE g.resource = 'godowns' AND
+                 (g.data->>'warehouseId' = w.id OR g.data->>'managerId' = w.data->>'managerId')
+             ), '[]'::json) AS matches
+      FROM agrochain_records w
+      WHERE w.resource = 'warehouses'
+        AND UPPER(COALESCE(w.data->>'type', '')) = 'REGIONAL_GODOWN'
+        AND NOT EXISTS (
+          SELECT 1 FROM agrochain_records g
+          WHERE g.resource = 'godowns' AND g.data->>'warehouseId' = w.id
+        )
+      ORDER BY w.created_at ASC
+    `);
+    return res.set('Cache-Control', 'no-store').json({
+      candidates: result.rows.map(row => ({
+        warehouseId: row.warehouse_id,
+        facilityName: row.warehouse?.name || 'Regional Godown',
+        code: row.warehouse?.code || '',
+        managerId: row.warehouse?.managerId || '',
+        managerName: row.warehouse?.managerName || '',
+        city: row.warehouse?.city || '',
+        area: row.warehouse?.area || '',
+        existingMatches: Array.isArray(row.matches) ? row.matches : [],
+      })),
+      count: result.rowCount,
+    });
+  } catch (error) {
+    console.error('Operational godown link preview failed:', error.message);
+    return res.status(500).json({ message: 'Could not preview operational godown links' });
+  }
+});
+
+// Explicit Admin repair. It creates or links the operational godown record in a transaction.
+app.post('/api/admin/godown-link-repair/run/', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  if (req.body?.confirm !== true) return res.status(400).json({ message: 'Explicit confirmation is required' });
+  const client = await pool.connect();
+  let created = 0;
+  let linked = 0;
+  let skipped = 0;
+  const repaired = [];
+  try {
+    await client.query('BEGIN');
+    const warehouses = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'warehouses' AND UPPER(COALESCE(data->>'type','')) = 'REGIONAL_GODOWN' ORDER BY created_at ASC FOR UPDATE"
+    );
+    for (const row of warehouses.rows) {
+      const result = await ensureOperationalGodownForWarehouse(client, row.id, row.data || {});
+      if (result.ambiguous || result.skipped) { skipped += 1; continue; }
+      if (result.created) created += 1;
+      else linked += 1;
+      repaired.push({ warehouseId: row.id, godownId: result.godown?.id || '', name: result.godown?.name || '' });
+    }
+    await client.query('COMMIT');
+    return res.json({ message: 'Operational godown link repair completed', created, linked, skipped, repaired });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Operational godown link repair failed:', error.message);
+    return res.status(500).json({ message: 'Operational godown link repair failed; no partial changes were committed' });
+  } finally {
+    client.release();
+  }
+});
+
 // Admin-only correction for a warehouse facility's physical location.
 // The linked application is updated in the same transaction to keep both records consistent.
 app.patch('/api/admin/warehouses/:id/location/', requireAuth, async (req, res) => {
@@ -1130,6 +1203,9 @@ app.patch('/api/admin/warehouse-applications/:id/approval/', requireAuth, async 
         );
         createdWarehouse = { ...inserted.rows[0].data, id: inserted.rows[0].id };
       }
+    }
+    if (createdWarehouse) {
+      await ensureOperationalGodownForWarehouse(client, createdWarehouse.id, createdWarehouse);
     }
     const reviewedApplication = {
       ...application, status: decision, approvalStatus: decision,
@@ -1594,6 +1670,61 @@ function canReadResource(role, resource) {
 
 function canWriteResource(role, resource) {
   return resourceWriteRoles[resource]?.includes(role) === true;
+}
+
+
+// Keep each approved regional warehouse connected to its operational godown record.
+async function ensureOperationalGodownForWarehouse(client, warehouseId, warehouseData) {
+  if (String(warehouseData?.type || '').toUpperCase() !== 'REGIONAL_GODOWN') {
+    return { godown: null, created: false, skipped: true };
+  }
+  const managerId = String(warehouseData.managerId || '').trim();
+  if (!managerId) return { godown: null, created: false, skipped: true };
+  const matches = await client.query(
+    "SELECT id, data FROM agrochain_records WHERE resource = 'godowns' AND (data->>'warehouseId' = $1 OR data->>'managerId' = $2) ORDER BY CASE WHEN data->>'warehouseId' = $1 THEN 0 ELSE 1 END, created_at ASC LIMIT 2 FOR UPDATE",
+    [String(warehouseId), managerId]
+  );
+  if (matches.rows.length > 1 && matches.rows[0].data?.warehouseId !== String(warehouseId)) {
+    return { godown: null, created: false, skipped: true, ambiguous: true };
+  }
+  const existing = matches.rows[0] || null;
+  const current = existing?.data || {};
+  const serviceAreas = [...new Set([
+    ...(Array.isArray(current.serviceAreas) ? current.serviceAreas : []),
+    warehouseData.area,
+    warehouseData.city,
+  ].map(value => String(value || '').trim()).filter(Boolean))];
+  const godown = {
+    ...current,
+    id: existing?.id || 'gd_' + (await import('node:crypto')).randomUUID(),
+    warehouseId: String(warehouseId),
+    name: String(current.name || warehouseData.name || 'Regional Godown').trim(),
+    code: String(current.code || warehouseData.code || '').trim(),
+    address: String(current.address || warehouseData.address || '').trim(),
+    city: String(current.city || warehouseData.city || '').trim(),
+    serviceAreas,
+    managerId,
+    managerName: String(current.managerName || warehouseData.managerName || 'Warehouse Manager').trim(),
+    managerPhone: String(current.managerPhone || warehouseData.managerPhone || ''),
+    contactNumber: String(current.contactNumber || warehouseData.managerPhone || ''),
+    status: String(current.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+    capacityMetricTons: Number(current.capacityMetricTons ?? warehouseData.capacityMetricTons) || 0,
+    currentStockMetricTons: Number(current.currentStockMetricTons) || 0,
+    itemCount: Number(current.itemCount) || 0,
+    updatedAt: new Date().toISOString(),
+  };
+  if (existing) {
+    await client.query(
+      "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'godowns' AND id = $1",
+      [existing.id, JSON.stringify(godown)]
+    );
+    return { godown: { ...godown, id: existing.id }, created: false, skipped: false };
+  }
+  await client.query(
+    "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('godowns', $1, $2::jsonb, NOW(), NOW())",
+    [godown.id, JSON.stringify(godown)]
+  );
+  return { godown, created: true, skipped: false };
 }
 
 // Warehouse intake is committed as one server-side transaction. The warehouse
@@ -3019,6 +3150,20 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
     );
 
     let rows = result.rows;
+    // Historical client-side pickup code falsely labelled partner handover as a completed
+    // warehouse intake and hardcoded this officer. Hide only that exact legacy event;
+    // the original record remains untouched for audit recovery.
+    if (resource === 'trackingEvents') {
+      rows = rows.filter((row) => {
+        const event = row.data || {};
+        return !(
+          String(event.title || '').trim().toUpperCase() === 'RECEIVED AT WAREHOUSE' &&
+          String(event.actorRole || '').trim() === 'Warehouse Officer' &&
+          String(event.actorName || '').trim() === 'Anisul Haque' &&
+          String(event.description || '').includes('Consignment intake completed at warehouse')
+        );
+      });
+    }
     let deliveryPartnerProfileId = null;
     if (req.auth.role === 'warehouse') {
       const owned = await pool.query("SELECT id, data FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1", [req.auth.sub]);
