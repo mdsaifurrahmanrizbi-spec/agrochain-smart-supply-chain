@@ -2016,6 +2016,8 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
     }
     const now = new Date().toISOString();
     const managerName = String(godown.managerName || req.body?.managerName || 'Warehouse Manager');
+    godown.itemCount = Number(godown.itemCount || 0) + 1;
+    godown.currentStockMetricTons = Number((Number(godown.currentStockMetricTons || 0) + Number(shipment.weightKg || 0) / 1000).toFixed(2));
     shipment.transferStatus = 'DELIVERY_ASSIGNMENT_PENDING';
     shipment.acceptedDate = now;
     shipment.acceptedByManagerId = req.auth.sub;
