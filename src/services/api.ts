@@ -2254,6 +2254,34 @@ return qc;
     return updatedShipment;
   },
 
+  async recoverFailedDeliveryAtGodown(
+    shipmentId: string,
+    notes: string
+  ): Promise<{ shipment: GodownShipment; order: Order; job: LogisticsJob; event: TrackingEvent }> {
+    if (!shipmentId || notes.trim().length < 8) throw new Error('Shipment and recovery inspection notes are required');
+    const response = await fetch(`${API_BASE_URL}/godowns/shipments/${encodeURIComponent(shipmentId)}/recover-failed-delivery`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirmReturnedToGodown: true, notes: notes.trim() }),
+      cache: 'no-store',
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.message || 'Could not recover failed consignment');
+    const shipment = result.shipment as GodownShipment;
+    const order = result.order as Order;
+    const job = result.job as LogisticsJob;
+    const event = result.event as TrackingEvent;
+    store.godownShipments = store.godownShipments.map((item) => item.id === shipment.id ? shipment : item);
+    store.orders = store.orders.map((item) => item.id === order.id ? order : item);
+    store.jobs = [job, ...store.jobs.filter((item) => item.id !== job.id)];
+    store.trackingEvents[order.id] = [event, ...(store.trackingEvents[order.id] || [])];
+    localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
+    localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+    localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
+    localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
+    return { shipment, order, job, event };
+  },
+
   // 11. Report Exception at Godown
   async reportGodownException(
     shipmentId: string,
