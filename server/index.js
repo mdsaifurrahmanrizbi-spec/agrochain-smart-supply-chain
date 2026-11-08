@@ -1326,6 +1326,63 @@ app.get('/api/delivery/me', requireAuth, async (req, res) => {
 // Create the farm pickup assignment as soon as an order is confirmed.
 // QC is intentionally not a prerequisite for assignment: the assigned partner
 // must accept first, travel to the farm, perform QC, and only then collect.
+// Resolve the first-mile receiving facility from the farm origin, never from the buyer's destination.
+async function resolveOriginWarehouseForOrder(db, order) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  if (!items.length) return null;
+
+  const warehousesResult = await db.query(
+    "SELECT id, data FROM agrochain_records WHERE resource = 'warehouses'"
+  );
+  const warehouses = warehousesResult.rows;
+  if (!warehouses.length) return null;
+
+  const normalize = (value) => String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+  const origins = [];
+  for (const item of items) {
+    const productResult = item.productId
+      ? await db.query("SELECT data FROM agrochain_records WHERE resource = 'products' AND id = $1 LIMIT 1", [String(item.productId)])
+      : { rows: [] };
+    const product = productResult.rows[0]?.data || {};
+    const farmResult = item.farmerId
+      ? await db.query("SELECT data FROM agrochain_records WHERE resource = 'farms' AND data->>'farmerId' = $1 ORDER BY created_at ASC LIMIT 1", [String(item.farmerId)])
+      : { rows: [] };
+    const farm = farmResult.rows[0]?.data || {};
+    const origin = normalize(
+      product.farmLocation || product.farmAddress ||
+      farm.location || farm.address ||
+      [farm.area, farm.upazila, farm.city, farm.district].filter(Boolean).join(' ') ||
+      item.farmLocation
+    );
+    if (!origin) return null;
+    origins.push(origin);
+  }
+
+  const matches = warehouses.filter(({ data }) => {
+    const city = normalize(data?.city);
+    const area = normalize(data?.area);
+    const location = normalize(data?.location);
+    const facilityTerms = [city, area].filter(Boolean);
+    if (!facilityTerms.length) return false;
+    // Require the district/city and, when configured, the local area to match.
+    return facilityTerms.every((term) => originContainsTerm(origins, term)) ||
+      (facilityTerms.length === 1 && location && origins.every((origin) => origin.includes(location)));
+  });
+
+  if (matches.length !== 1) return null;
+  return { id: matches[0].id, data: matches[0].data };
+}
+
+function originContainsTerm(origins, term) {
+  return origins.every((origin) => origin.includes(term));
+}
+
 app.post('/api/orders/:orderId/assign-pickup', requireAuth, async (req, res) => {
   if (req.auth.role !== 'buyer') {
     return res.status(403).json({ message: 'Only the customer who placed the order can request its pickup assignment' });
@@ -1345,13 +1402,32 @@ app.post('/api/orders/:orderId/assign-pickup', requireAuth, async (req, res) => 
       return res.status(404).json({ message: 'Order not found for this customer account' });
     }
 
+    const originWarehouse = await resolveOriginWarehouseForOrder(client, order);
+    if (!originWarehouse) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Could not identify one active origin warehouse for all products in this order. Verify each farm origin and its regional warehouse before pickup assignment.' });
+    }
+    order.warehouseId = originWarehouse.id;
+    order.warehouseName = originWarehouse.data.name;
+    order.originWarehouseId = originWarehouse.id;
+    order.originWarehouseName = originWarehouse.data.name;
+
     const existingResult = await client.query(
       "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'PICKUP' LIMIT 1",
       [orderRow.id]
     );
     if (existingResult.rows[0]) {
+      const existingJob = { ...existingResult.rows[0].data, id: existingResult.rows[0].id, destinationAddress: originWarehouse.data.name };
+      await client.query(
+        "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1",
+        [orderRow.id, JSON.stringify(order)]
+      );
+      await client.query(
+        "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'jobs' AND id = $1",
+        [existingJob.id, JSON.stringify(existingJob)]
+      );
       await client.query('COMMIT');
-      return res.json({ job: { ...existingResult.rows[0].data, id: existingResult.rows[0].id } });
+      return res.json({ job: existingJob });
     }
 
     const firstItem = Array.isArray(order.items) ? order.items[0] : null;
@@ -1411,7 +1487,7 @@ app.post('/api/orders/:orderId/assign-pickup', requireAuth, async (req, res) => 
       type: 'PICKUP',
       productSummary: (order.items || []).map((item) => `${item.quantity} ${item.unit} ${item.productName}`).join(', '),
       originAddress: originAddress || 'Farm location pending verification',
-      destinationAddress: order.warehouseName || 'Origin warehouse intake',
+      destinationAddress: originWarehouse.data.name,
       assignedDate: now,
       status: 'ASSIGNED',
       codAmount: 0,
@@ -1773,6 +1849,23 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
     if (req.auth.role === 'warehouse') {
       const owned = await pool.query("SELECT id, data FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1", [req.auth.sub]);
       const warehouseIds = new Set(owned.rows.map((row) => row.id));
+      const orderRowsForRouting = ['orders', 'jobs'].includes(resource)
+        ? await pool.query("SELECT id, data FROM agrochain_records WHERE resource = 'orders'")
+        : { rows: [] };
+      const originWarehouseByOrderId = new Map();
+      for (const orderRow of orderRowsForRouting.rows) {
+        const orderData = orderRow.data || {};
+        let originWarehouseId = String(orderData.warehouseId || orderData.originWarehouseId || '');
+        let originWarehouseName = String(orderData.warehouseName || orderData.originWarehouseName || '');
+        if (!originWarehouseId) {
+          const resolved = await resolveOriginWarehouseForOrder(pool, orderData);
+          if (resolved) {
+            originWarehouseId = resolved.id;
+            originWarehouseName = resolved.data.name || '';
+          }
+        }
+        originWarehouseByOrderId.set(orderRow.id, { id: originWarehouseId, name: originWarehouseName });
+      }
       const godownsResult = await pool.query("SELECT id, data FROM agrochain_records WHERE resource = 'godowns'");
       const godownIds = new Set(godownsResult.rows.filter((row) =>
         row.data?.managerId === req.auth.sub || warehouseIds.has(row.data?.warehouseId)
@@ -1784,11 +1877,15 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
         warehouseIds.has(row.data?.sourceWarehouseId) || godownIds.has(row.data?.destinationGodownId)
       );
       else if (resource === 'orders') {
-        // A manager may see only COD orders assigned to one of their own facilities.
-        rows = rows.filter((row) =>
-          row.data?.paymentMethod === 'COD' &&
-          warehouseIds.has(String(row.data?.warehouseId || ''))
-        );
+        // Warehouse access follows the farm-origin facility. Buyer destination is
+        // a later-mile routing attribute and must not determine first-mile intake.
+        rows = rows
+          .filter((row) => row.data?.paymentMethod === 'COD' &&
+            warehouseIds.has(originWarehouseByOrderId.get(row.id)?.id || String(row.data?.warehouseId || row.data?.originWarehouseId || '')))
+          .map((row) => {
+            const origin = originWarehouseByOrderId.get(row.id);
+            return origin?.id ? { ...row, data: { ...row.data, warehouseId: origin.id, warehouseName: origin.name, originWarehouseId: origin.id, originWarehouseName: origin.name } } : row;
+          });
       }
       else if (resource === 'codRecords') {
         // COD cash custody records are visible only to the manager responsible
@@ -1805,16 +1902,14 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
         // their warehouse, and delivery jobs routed to one of their godowns.
         // Resolve the relationship through persisted order records; LogisticsJob
         // intentionally has no warehouseId field of its own.
-        const orderRows = await pool.query(
-          "SELECT id, data FROM agrochain_records WHERE resource = 'orders'"
-        );
-        const orderById = new Map(orderRows.rows.map((row) => [row.id, row.data]));
+        const orderById = new Map(orderRowsForRouting.rows.map((row) => [row.id, row.data]));
         rows = rows.filter((row) => {
           const job = row.data || {};
           const order = orderById.get(job.orderId);
           if (!order) return false;
           if (job.type === 'PICKUP') {
-            return warehouseIds.has(String(order.warehouseId || ''));
+            const origin = originWarehouseByOrderId.get(job.orderId);
+            return warehouseIds.has(origin?.id || String(order.warehouseId || order.originWarehouseId || ''));
           }
           if (job.type === 'DELIVERY') {
             const destinationGodownId = String(job.godownId || order.destinationGodownId || order.godownId || '');
