@@ -2228,7 +2228,7 @@ return qc;
     _staffRole: string = 'Warehouse Manager'
   ): Promise<GodownShipment> {
     if (!shipmentId || !partnerId) throw new Error('Shipment and delivery partner are required');
-    const response = await fetch(\`${API_BASE_URL}/godowns/shipments/\${encodeURIComponent(shipmentId)}/assign-partner\`, {
+    const response = await fetch(`${API_BASE_URL}/godowns/shipments/${encodeURIComponent(shipmentId)}/assign-partner`, {
       method: 'POST',
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ partnerId }),
