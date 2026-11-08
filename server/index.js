@@ -9,6 +9,15 @@ import { createAuthToken, requireAuth } from './auth.js';
 import rupantorPayRouter from './rupantorpay.js';
 
 const app = express();
+
+const lockDeliveryOrder = async (client, orderId) => {
+  const normalizedOrderId = String(orderId || '').trim();
+  if (!normalizedOrderId) throw new Error('Cannot lock delivery workflow without an order ID');
+  await client.query(
+    'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+    ['agrochain-delivery-order:' + normalizedOrderId]
+  );
+};
 const PORT = Number(process.env.PORT || 8000);
 
 app.use(express.json({ limit: '1mb' }));
@@ -1771,6 +1780,16 @@ app.post('/api/warehouse/shipments/:shipmentId/reroute', requireAuth, async (req
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const shipmentLockLookup = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'godownShipments' AND id = $1 LIMIT 1",
+      [req.params.shipmentId]
+    );
+    const lockOrderId = String(shipmentLockLookup.rows[0]?.data?.orderId || '');
+    if (!shipmentLockLookup.rows[0] || !lockOrderId) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Shipment or related order not found' });
+    }
+    await lockDeliveryOrder(client, lockOrderId);
     const shipmentResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND id=$1 FOR UPDATE", [req.params.shipmentId]);
     const shipmentRow = shipmentResult.rows[0];
     if (!shipmentRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Shipment not found' }); }
@@ -1817,6 +1836,16 @@ app.post('/api/warehouse/shipments/:shipmentId/dispatch', requireAuth, async (re
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const shipmentLockLookup = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'godownShipments' AND id = $1 LIMIT 1",
+      [req.params.shipmentId]
+    );
+    const lockOrderId = String(shipmentLockLookup.rows[0]?.data?.orderId || '');
+    if (!shipmentLockLookup.rows[0] || !lockOrderId) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Shipment or related order not found' });
+    }
+    await lockDeliveryOrder(client, lockOrderId);
     const shipmentResult = await client.query(
       "SELECT id, data FROM agrochain_records WHERE resource='godownShipments' AND id=$1 FOR UPDATE",
       [req.params.shipmentId]
@@ -1921,6 +1950,16 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const shipmentLockLookup = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'godownShipments' AND id = $1 LIMIT 1",
+      [req.params.shipmentId]
+    );
+    const lockOrderId = String(shipmentLockLookup.rows[0]?.data?.orderId || '');
+    if (!shipmentLockLookup.rows[0] || !lockOrderId) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Shipment or related order not found' });
+    }
+    await lockDeliveryOrder(client, lockOrderId);
     const shipmentResult = await client.query(
       "SELECT id, data FROM agrochain_records WHERE resource = 'godownShipments' AND (id = $1 OR data->>'orderId' = $1) LIMIT 1 FOR UPDATE",
       [req.params.shipmentId]
@@ -2123,6 +2162,16 @@ app.post('/api/godowns/shipments/:shipmentId/recover-failed-delivery', requireAu
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const shipmentLockLookup = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'godownShipments' AND id = $1 LIMIT 1",
+      [req.params.shipmentId]
+    );
+    const lockOrderId = String(shipmentLockLookup.rows[0]?.data?.orderId || '');
+    if (!shipmentLockLookup.rows[0] || !lockOrderId) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Shipment or related order not found' });
+    }
+    await lockDeliveryOrder(client, lockOrderId);
     const shipmentResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND id=$1 FOR UPDATE", [req.params.shipmentId]);
     const shipmentRow = shipmentResult.rows[0];
     const shipment = shipmentRow?.data || {};
@@ -2195,6 +2244,16 @@ app.post('/api/godowns/shipments/:shipmentId/assign-partner', requireAuth, async
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const shipmentLockLookup = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'godownShipments' AND id = $1 LIMIT 1",
+      [req.params.shipmentId]
+    );
+    const lockOrderId = String(shipmentLockLookup.rows[0]?.data?.orderId || '');
+    if (!shipmentLockLookup.rows[0] || !lockOrderId) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Shipment or related order not found' });
+    }
+    await lockDeliveryOrder(client, lockOrderId);
     const shipmentResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND id=$1 FOR UPDATE", [req.params.shipmentId]);
     const shipmentRow = shipmentResult.rows[0];
     const shipment = shipmentRow?.data || {};
@@ -2299,6 +2358,16 @@ app.post('/api/godowns/shipments/:shipmentId/initiate-handover', requireAuth, as
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const shipmentLockLookup = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'godownShipments' AND id = $1 LIMIT 1",
+      [req.params.shipmentId]
+    );
+    const lockOrderId = String(shipmentLockLookup.rows[0]?.data?.orderId || '');
+    if (!shipmentLockLookup.rows[0] || !lockOrderId) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Shipment or related order not found' });
+    }
+    await lockDeliveryOrder(client, lockOrderId);
     const shipmentResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND id=$1 FOR UPDATE", [req.params.shipmentId]);
     const shipmentRow = shipmentResult.rows[0];
     const shipment = shipmentRow?.data || {};
@@ -2362,6 +2431,16 @@ app.post('/api/delivery/jobs/:jobId/status', requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const jobLockLookup = await client.query(
+      "SELECT data FROM agrochain_records WHERE resource = 'jobs' AND id = $1 LIMIT 1",
+      [req.params.jobId]
+    );
+    const lockOrderId = String(jobLockLookup.rows[0]?.data?.orderId || '');
+    if (!jobLockLookup.rows[0] || !lockOrderId) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Delivery job or related order not found' });
+    }
+    await lockDeliveryOrder(client, lockOrderId);
     const accountResult = await client.query("SELECT email FROM auth_users WHERE id = $1 AND role = 'delivery' LIMIT 1", [req.auth.sub]);
     const email = String(accountResult.rows[0]?.email || req.auth.email || '').trim().toLowerCase();
     const partnerResult = await client.query(
@@ -2522,6 +2601,16 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const orderLockLookup = await client.query(
+      "SELECT id FROM agrochain_records WHERE resource = 'orders' AND (id = $1 OR data->>'orderNumber' = $1) LIMIT 1",
+      [id]
+    );
+    const lockOrderId = String(orderLockLookup.rows[0]?.id || '');
+    if (!lockOrderId) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    await lockDeliveryOrder(client, lockOrderId);
     const found = await client.query(
       "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND (id = $1 OR data->>'orderNumber' = $1) LIMIT 1 FOR UPDATE",
       [id]
