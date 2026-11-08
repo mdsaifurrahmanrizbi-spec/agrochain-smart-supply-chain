@@ -58,18 +58,6 @@ export const WarehouseTransfers: React.FC = () => {
     }
   };
 
-  const handleLogArrived = async (shipmentId: string) => {
-    setErrorMsg(null);
-    try {
-      await agroApi.markArrivedAtLocalGodown(shipmentId);
-      refreshData();
-      setNotice('Arrival logged at local godown receiving dock!');
-      setTimeout(() => setNotice(null), 3500);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Arrival logging failed');
-    }
-  };
-
   const handleRerouteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reroutingShipment || !targetGodownId) return;
@@ -83,23 +71,8 @@ export const WarehouseTransfers: React.FC = () => {
     }
 
     try {
-      reroutingShipment.destinationGodownId = targetGodown.id;
-      reroutingShipment.destinationGodownName = targetGodown.name;
-      reroutingShipment.transferStatus = 'PENDING_DISPATCH';
-      reroutingShipment.exceptionNotes = undefined;
-      await agroApi.updateGodownShipment(reroutingShipment);
-
-      const order = store.orders.find((o) => o.id === reroutingShipment.orderId);
-      if (order) {
-        order.orderStatus = 'WAREHOUSE_RECEIVED';
-        order.destinationGodownId = targetGodown.id;
-        order.destinationGodownName = targetGodown.name;
-      }
-
-      localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
-      localStorage.setItem('agro_orders', JSON.stringify(store.orders));
-
-      refreshData();
+      await agroApi.updateGodownShipment({ ...reroutingShipment, destinationGodownId: targetGodown.id });
+      await refreshData();
       setNotice(`Consignment re-routed to active facility: ${targetGodown.name}`);
       setReroutingShipment(null);
       setTargetGodownId('');
@@ -116,7 +89,7 @@ export const WarehouseTransfers: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Central Warehouse to Local Godown Transfers</h1>
+          <h1 className="text-xl font-bold text-slate-900">Origin Warehouse to Destination Godown Transfers</h1>
           <p className="text-xs text-slate-500 mt-1">
             Coordinate consignment preparation, automated regional godown routing, and dispatch to urban distribution facilities.
           </p>
@@ -145,7 +118,7 @@ export const WarehouseTransfers: React.FC = () => {
             <h3 className="text-sm font-bold">Manual Routing Required Queue ({manualQueue.length})</h3>
           </div>
           <p className="text-xs text-amber-800 leading-relaxed">
-            These shipments could not be automatically dispatched because the matching local godown is <strong>INACTIVE</strong> or outside predefined standard delivery clusters. Review and re-route to an active godown facility below:
+            These shipments need manual routing because no active destination godown matched the customer address or the available facility is outside its service area. Review and route to an active godown below:
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
@@ -158,7 +131,7 @@ export const WarehouseTransfers: React.FC = () => {
                 <div className="font-bold text-slate-900">{s.productName} ({s.quantity} {s.unit})</div>
                 <div className="text-slate-600">Customer Address: <strong>{s.customerAddress}</strong> ({s.customerArea})</div>
                 <div className="p-2 bg-amber-50 rounded border border-amber-200 text-amber-900 text-[11px]">
-                  <strong>Issue:</strong> {s.exceptionNotes || 'Designated local godown is currently inactive.'}
+                  <strong>Issue:</strong> {s.exceptionNotes || 'No active destination godown matched the customer address.'}
                 </div>
                 <div className="pt-2 flex justify-end">
                   <button
@@ -183,7 +156,7 @@ export const WarehouseTransfers: React.FC = () => {
           <div>
             <h3 className="text-sm font-bold text-slate-900">Active Regional Godown Transfers</h3>
             <p className="text-xs text-slate-500">
-              Produce consignments received at Central Warehouse and routed to customer area godowns.
+              Produce consignments received at the farm-origin warehouse and routed to customer-area godowns.
             </p>
           </div>
         </div>
@@ -195,7 +168,7 @@ export const WarehouseTransfers: React.FC = () => {
                 <th className="py-3 px-4">Shipment ID</th>
                 <th className="py-3 px-4">Consignment</th>
                 <th className="py-3 px-4">Commodity / Produce</th>
-                <th className="py-3 px-4">Origin Central Hub</th>
+                <th className="py-3 px-4">Origin Warehouse</th>
                 <th className="py-3 px-4">Destination Godown</th>
                 <th className="py-3 px-4">Customer Zone</th>
                 <th className="py-3 px-4">Transfer Status</th>
@@ -230,13 +203,7 @@ export const WarehouseTransfers: React.FC = () => {
                     )}
 
                     {s.transferStatus === 'GODOWN_TRANSFER_IN_TRANSIT' && (
-                      <button
-                        onClick={() => handleLogArrived(s.id)}
-                        className="px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200"
-                        title="Simulate arrival at destination godown dock"
-                      >
-                        Simulate Arrival
-                      </button>
+                      <span className="text-[11px] text-blue-700 font-medium">Awaiting destination warehouse arrival confirmation</span>
                     )}
 
                     {['ARRIVED_LOCAL_GODOWN', 'GODOWN_RECEIVED', 'DELIVERY_PARTNER_ASSIGNED', 'DELIVERY_ACCEPTED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(

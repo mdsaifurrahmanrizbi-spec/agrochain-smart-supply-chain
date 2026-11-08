@@ -83,6 +83,9 @@ export const GodownHub: React.FC = () => {
   const [showExceptionModal, setShowExceptionModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showManualAssignModal, setShowManualAssignModal] = useState(false);
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [recoveryNotes, setRecoveryNotes] = useState('');
+  const [recoveringLoading, setRecoveringLoading] = useState(false);
 
   // Acceptance form state
   const [verifyCondition, setVerifyCondition] = useState(true);
@@ -151,7 +154,7 @@ export const GodownHub: React.FC = () => {
     }
   };
 
-  // Action: Accept product at Godown & trigger automatic area-based assignment
+  // Action: Receive product at destination godown and publish an area-matched delivery request
   const handleAcceptProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedShipment) return;
@@ -173,10 +176,10 @@ export const GodownHub: React.FC = () => {
 
       if (res.assignmentSuccess && res.assignedPartner) {
         setNotice(
-          `Product accepted! Delivery partner ${res.assignedPartner.name} was automatically assigned for ${selectedShipment.customerArea}.`
+          `Product received. A delivery request is now available to approved partners serving ${selectedShipment.customerArea}. The first eligible partner to accept gets the job.`
         );
       } else {
-        setNotice('Product accepted into inventory. Delivery assignment placed in pending queue.');
+        setNotice('Product received into destination warehouse. Delivery request sent to approved partners in the customer area.');
       }
 
       setTimeout(() => {
@@ -229,40 +232,6 @@ export const GodownHub: React.FC = () => {
     }
   };
 
-  // Action: Delivery partner confirms receipt (two-sided handover simulation)
-  const handleConfirmPartnerCollection = async (shipment: GodownShipment) => {
-    try {
-      await agroApi.deliveryPartnerConfirmReceipt(
-        shipment.id,
-        shipment.assignedPartnerId || 'dp-1'
-      );
-      refreshData();
-      setNotice(
-        `Two-sided handover completed! Delivery partner ${shipment.assignedPartnerName} confirmed product collection.`
-      );
-      setTimeout(() => setNotice(null), 4000);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Receipt confirmation failed');
-    }
-  };
-
-  // Action: Delivery partner clicks OUT FOR DELIVERY
-  const handleOutForDelivery = async (shipment: GodownShipment) => {
-    try {
-      await agroApi.deliveryPartnerOutForDelivery(
-        shipment.id,
-        shipment.assignedPartnerId || 'dp-1'
-      );
-      refreshData();
-      setNotice(
-        `Shipment status updated to OUT FOR DELIVERY! Customer has been notified.`
-      );
-      setTimeout(() => setNotice(null), 4000);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Out for delivery update failed');
-    }
-  };
-
   // Action: Manual assign delivery partner
   const handleManualAssign = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -283,6 +252,27 @@ export const GodownHub: React.FC = () => {
       setTimeout(() => setNotice(null), 3500);
     } catch (err: any) {
       setErrorMsg(err.message || 'Manual assignment failed');
+    }
+  };
+
+  // Confirm physical return and inspection before reopening a failed consignment for assignment.
+  const handleRecoverFailedDelivery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedShipment || recoveryNotes.trim().length < 8) return;
+    setRecoveringLoading(true);
+    setErrorMsg(null);
+    try {
+      await agroApi.recoverFailedDeliveryAtGodown(selectedShipment.id, recoveryNotes);
+      await refreshData();
+      setNotice('Physical return recorded. The consignment is now eligible for a new delivery assignment.');
+      setShowRecoveryModal(false);
+      setSelectedShipment(null);
+      setRecoveryNotes('');
+      setTimeout(() => setNotice(null), 4000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to recover consignment');
+    } finally {
+      setRecoveringLoading(false);
     }
   };
 
@@ -594,12 +584,7 @@ export const GodownHub: React.FC = () => {
                           )}
 
                           {s.transferStatus === 'DELIVERY_PARTNER_COLLECTED' && (
-                            <button
-                              onClick={() => handleOutForDelivery(s)}
-                              className="px-2.5 py-1 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded shadow-xs"
-                            >
-                              Out For Delivery
-                            </button>
+                            <span className="text-xs font-semibold text-emerald-700">With delivery partner</span>
                           )}
 
                           <button
@@ -856,7 +841,7 @@ export const GodownHub: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {godownShipments
               .filter((s) =>
-                ['DELIVERY_PARTNER_ASSIGNED', 'DELIVERY_ACCEPTED', 'DELIVERY_ASSIGNMENT_PENDING'].includes(
+                ['DELIVERY_PARTNER_ASSIGNED', 'DELIVERY_ACCEPTED', 'DELIVERY_ASSIGNMENT_PENDING', 'DELIVERY_EXCEPTION'].includes(
                   s.transferStatus
                 )
               )
@@ -876,7 +861,25 @@ export const GodownHub: React.FC = () => {
                   </div>
 
                   <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs">
-                    {s.assignedPartnerName ? (
+                    {s.transferStatus === 'DELIVERY_EXCEPTION' ? (
+                      <div className="space-y-2">
+                        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">
+                          <div className="font-bold">Delivery failed — recovery required</div>
+                          <p className="mt-1">{s.exceptionNotes || 'Physical consignment return has not yet been confirmed.'}</p>
+                          <p className="mt-1 font-semibold">Do not reassign until the goods are physically back at this godown and inspected.</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedShipment(s);
+                            setRecoveryNotes('');
+                            setShowRecoveryModal(true);
+                          }}
+                          className="w-full rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white hover:bg-rose-800"
+                        >
+                          Confirm Return & Inspect Consignment
+                        </button>
+                      </div>
+                    ) : s.assignedPartnerName ? (
                       <div>
                         <span className="text-slate-500 text-[11px] block">Assigned Delivery Partner:</span>
                         <span className="font-bold text-slate-900 text-sm">{s.assignedPartnerName}</span>
@@ -994,23 +997,10 @@ export const GodownHub: React.FC = () => {
                         )}
 
                         {isHandoverInitiated && !isHandoverCompleted && (
-                          <button
-                            onClick={() => handleConfirmPartnerCollection(s)}
-                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>CONFIRM PRODUCT RECEIVED</span>
-                          </button>
+                          <span className="text-xs text-amber-700 font-semibold">Awaiting assigned partner collection</span>
                         )}
-
                         {isHandoverCompleted && s.transferStatus === 'DELIVERY_PARTNER_COLLECTED' && (
-                          <button
-                            onClick={() => handleOutForDelivery(s)}
-                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1"
-                          >
-                            <Truck className="w-3.5 h-3.5" />
-                            <span>OUT FOR DELIVERY</span>
-                          </button>
+                          <span className="text-xs text-emerald-700 font-semibold">Collected · Partner will start doorstep delivery</span>
                         )}
                       </div>
                     </div>
@@ -1263,17 +1253,15 @@ export const GodownHub: React.FC = () => {
                   <span>Automatic Area-Based Assignment Trigger:</span>
                 </span>
                 <p className="text-emerald-800 text-[11px] leading-relaxed">
-                  Upon clicking Accept, AgroChain will automatically evaluate approved delivery partners serving{' '}
-                  <strong>{selectedShipment.customerArea}</strong> and assign the nearest available partner with balanced workload.
+                  After receipt is confirmed, AgroChain publishes this delivery request to approved partners serving{' '}
+                  <strong>{selectedShipment.customerArea}</strong>. The first eligible partner to accept gets the job.
                 </p>
               </div>
 
               {lastAssignmentResult && (
                 <div className="p-3 bg-emerald-100/70 border border-emerald-300 rounded-xl text-xs text-emerald-900 space-y-1">
-                  <span className="font-bold">Match Result:</span>
-                  <p>
-                    Assigned Partner: <strong>{lastAssignmentResult.partner?.name}</strong> (Rating: {lastAssignmentResult.partner?.rating}★, Vehicle: {lastAssignmentResult.partner?.vehicleType})
-                  </p>
+                  <span className="font-bold">Delivery Request Published</span>
+                  <p>Eligible approved delivery partners in {selectedShipment.customerArea} can now view and accept this request. The first partner to accept will be assigned.</p>
                 </div>
               )}
 
@@ -1378,6 +1366,41 @@ export const GodownHub: React.FC = () => {
       {/* ========================================================= */}
       {/* MODAL: MANUAL PARTNER ASSIGNMENT */}
       {/* ========================================================= */}
+      {showRecoveryModal && selectedShipment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="border-b border-rose-100 bg-rose-50 p-5">
+              <h3 className="text-sm font-bold text-rose-950">Failed Consignment — Physical Return Verification</h3>
+              <p className="mt-1 text-xs text-rose-800">Order {selectedShipment.orderNumber} · {selectedShipment.productName}</p>
+            </div>
+            <form onSubmit={handleRecoverFailedDelivery} className="space-y-4 p-5 text-xs">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950">
+                Confirm this only after the failed consignment has physically returned to <strong>{selectedGodown.name}</strong> and you have inspected its quantity and condition. This action reopens partner assignment; it does not confirm customer delivery.
+              </div>
+              <label className="block space-y-1">
+                <span className="font-bold text-slate-700">Return location and inspection notes (required)</span>
+                <textarea
+                  value={recoveryNotes}
+                  onChange={(e) => setRecoveryNotes(e.target.value)}
+                  rows={4}
+                  maxLength={500}
+                  required
+                  minLength={8}
+                  placeholder="Example: Returned to Tejgaon Godown, receiving bay 2; 12 crates counted and packaging inspected..."
+                  className="w-full rounded-lg border border-slate-300 p-3 text-xs outline-none focus:border-emerald-600"
+                />
+              </label>
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+                <button type="button" onClick={() => setShowRecoveryModal(false)} disabled={recoveringLoading} className="rounded-lg border border-slate-300 px-3 py-2 text-slate-700">Cancel</button>
+                <button type="submit" disabled={recoveringLoading || recoveryNotes.trim().length < 8} className="rounded-lg bg-rose-700 px-4 py-2 font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300">
+                  {recoveringLoading ? 'Recording Return…' : 'Confirm Physical Return'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showManualAssignModal && selectedShipment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">

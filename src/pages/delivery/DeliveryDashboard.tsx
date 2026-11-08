@@ -459,7 +459,7 @@ export const DeliveryDashboard: React.FC = () => {
                         <button
                           onClick={async () => {
                             try {
-                              await agroApi.deliveryPartnerConfirmReceipt(ord?.id || job.orderId, partnerId);
+                              await agroApi.updateJobStatus(job.id, 'COLLECTED');
                               setJobs([...store.jobs.filter((j) => j.partnerId === partnerId)]);
                               setNotice('Product collection confirmed from godown!');
                               setTimeout(() => setNotice(null), 3000);
@@ -583,16 +583,6 @@ export const DeliveryDashboard: React.FC = () => {
                 <p className="text-[11px] text-slate-400 mt-1 text-center">
                   Ask the customer for the verification code displayed on their live order tracking screen.
                 </p>
-                {/* Demo Helper Hint */}
-                <div className="mt-2 text-center">
-                  <button
-                    type="button"
-                    onClick={() => setOtpInput(selectedOrder.deliveryOtp)}
-                    className="text-[11px] text-emerald-700 hover:text-emerald-800 font-medium underline"
-                  >
-                    Auto-fill customer OTP for testing (Code: {selectedOrder.deliveryOtp})
-                  </button>
-                </div>
               </div>
 
               <div>

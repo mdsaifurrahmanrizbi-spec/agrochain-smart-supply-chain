@@ -46,8 +46,8 @@ export const DeliveryActiveJobs: React.FC = () => {
           return;
         }
         await agroApi.getQualityChecks(); // refresh linked order/QC state before rendering pickup actions
-        const assignedJobs = await agroApi.getLogisticsJobs(partner.id);
-        if (active) setJobs(assignedJobs.filter((job) => job.partnerId === partner.id));
+        const partnerJobs = await agroApi.getLogisticsJobs(partner.id);
+        if (active) setJobs(partnerJobs);
       } catch (error) {
         console.error('Could not load this delivery partner\'s assigned jobs:', error);
         if (active) {
@@ -68,6 +68,20 @@ export const DeliveryActiveJobs: React.FC = () => {
     ? String(currentPartner.approvalStatus || '').trim().toUpperCase()
     : '';
   const isApproved = partnerApprovalStatus === 'APPROVED';
+
+  const handleAcceptRequest = async (jobId: string) => {
+    setErrorMsg(null);
+    try {
+      await agroApi.acceptAvailableDeliveryJob(jobId);
+      const refreshed = await agroApi.getLogisticsJobs(partnerId || undefined);
+      setJobs(refreshed);
+      setNotice('Delivery request accepted. This consignment is now assigned to you.');
+      setTimeout(() => setNotice(null), 3500);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Could not accept delivery request');
+      setTimeout(() => setErrorMsg(null), 4500);
+    }
+  };
 
   const handleUpdate = async (jobId: string, status: any) => {
     setErrorMsg(null);
@@ -206,6 +220,15 @@ export const DeliveryActiveJobs: React.FC = () => {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  {job.status === 'AVAILABLE' && !job.partnerId && (
+                    <button
+                      onClick={() => handleAcceptRequest(job.id)}
+                      disabled={!isApproved}
+                      className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white rounded-lg text-xs font-semibold shadow-xs"
+                    >
+                      Accept Delivery Request
+                    </button>
+                  )}
                   {job.status === 'ASSIGNED' && (
                     <button
                       onClick={() => handleUpdate(job.id, 'ACCEPTED')}
@@ -253,7 +276,7 @@ export const DeliveryActiveJobs: React.FC = () => {
                       onClick={async () => {
                         try {
                           if (!partnerId) throw new Error('Your delivery partner profile could not be verified.');
-                          await agroApi.deliveryPartnerConfirmReceipt(job.orderId, partnerId);
+                          await agroApi.updateJobStatus(job.id, 'COLLECTED');
                           setJobs([...store.jobs.filter((j) => j.partnerId === partnerId)]);
                           setNotice('Produce receipt confirmed from local godown!');
                           setTimeout(() => setNotice(null), 3000);

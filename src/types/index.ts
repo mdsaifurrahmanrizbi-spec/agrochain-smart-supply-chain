@@ -229,7 +229,8 @@ export interface GodownShipment {
     | 'DELIVERY_PARTNER_COLLECTED'
     | 'OUT_FOR_DELIVERY'
     | 'DELIVERED'
-    | 'ISSUE_REPORTED';
+    | 'ISSUE_REPORTED'
+    | 'DELIVERY_EXCEPTION';
   dispatchDate?: string;
   arrivalDate?: string;
   acceptedDate?: string;
@@ -299,10 +300,12 @@ export interface LogisticsJob {
   productSummary: string;
   originAddress: string;
   destinationAddress: string;
+  customerArea?: string;
   godownId?: string;
   godownName?: string;
   assignedDate: string;
   status: 
+    | 'AVAILABLE'
     | 'ASSIGNED'
     | 'ACCEPTED'
     | 'DECLINED'

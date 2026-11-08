@@ -111,7 +111,7 @@ export const DeliveryDeliveries: React.FC = () => {
   const handleConfirmProductReceived = async (job: LogisticsJob) => {
     setErrorMsg(null);
     try {
-      await agroApi.deliveryPartnerConfirmReceipt(job.orderId, partnerId);
+      await agroApi.updateJobStatus(job.id, 'COLLECTED');
       refreshJobs();
       setActionNotice('Product receipt confirmed! Crates collected from godown and ready for delivery.');
       setTimeout(() => setActionNotice(null), 3500);
@@ -125,7 +125,7 @@ export const DeliveryDeliveries: React.FC = () => {
   const handleStartOutForDelivery = async (jobId: string) => {
     setErrorMsg(null);
     try {
-      await agroApi.deliveryPartnerOutForDelivery(jobId, partnerId);
+      await agroApi.updateJobStatus(jobId, 'OUT_FOR_DELIVERY');
       refreshJobs();
       setActionNotice('Produce is now OUT FOR DELIVERY! Customer has received their secret delivery OTP.');
       setTimeout(() => setActionNotice(null), 3500);
@@ -428,22 +428,6 @@ export const DeliveryDeliveries: React.FC = () => {
                 </p>
               </div>
 
-              {/* Demo Mode Helper */}
-              {selectedOrder && (
-                <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-lg text-[11px] text-blue-900 flex items-center justify-between">
-                  <div>
-                    <span className="font-bold block">Demo Mode Simulation:</span>
-                    <span className="text-blue-700">Customer {selectedOrder.buyerName} holds code.</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setOtpInput(selectedOrder.deliveryOtp)}
-                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-bold transition-colors"
-                  >
-                    Simulate Customer Handing Code
-                  </button>
-                </div>
-              )}
 
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
