@@ -71,6 +71,14 @@ type BackendRecord<T> = {
   updated_at: string;
 };
 
+function isWarehouseSession(): boolean {
+  try {
+    return JSON.parse(localStorage.getItem('agro_active_user') || '{}').role === 'warehouse';
+  } catch {
+    return false;
+  }
+}
+
 function authHeaders(): Record<string, string> {
   const token = localStorage.getItem('agro_auth_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -142,8 +150,10 @@ class LocalStore {
     this.crops = this.load('agro_crops', INITIAL_CROPS);
     this.batches = this.load('agro_batches', INITIAL_BATCHES);
     this.products = this.load('agro_products', INITIAL_PRODUCTS);
-    this.warehouses = this.load('agro_warehouses', INITIAL_WAREHOUSES);
-    this.inventory = this.load('agro_inventory', INITIAL_INVENTORY);
+    const activeUser = this.load<User | null>('agro_active_user', null);
+    const warehouseSession = activeUser?.role === 'warehouse' && Boolean(localStorage.getItem('agro_auth_token'));
+    this.warehouses = warehouseSession ? [] : this.load('agro_warehouses', INITIAL_WAREHOUSES);
+    this.inventory = warehouseSession ? [] : this.load('agro_inventory', INITIAL_INVENTORY);
     const savedPartners = this.load<DeliveryPartner[]>(
   'agro_delivery_partners',
   INITIAL_DELIVERY_PARTNERS
@@ -170,8 +180,8 @@ localStorage.setItem(
     this.codRecords = this.load('agro_cod_records', INITIAL_COD_RECORDS);
     this.settlements = this.load('agro_settlements', INITIAL_SETTLEMENTS);
     this.trackingEvents = this.load('agro_tracking_events', INITIAL_TRACKING_EVENTS);
-    this.godowns = this.load('agro_local_godowns', INITIAL_LOCAL_GODOWNS);
-    this.godownShipments = this.load('agro_godown_shipments', INITIAL_GODOWN_SHIPMENTS);
+    this.godowns = warehouseSession ? [] : this.load('agro_local_godowns', INITIAL_LOCAL_GODOWNS);
+    this.godownShipments = warehouseSession ? [] : this.load('agro_godown_shipments', INITIAL_GODOWN_SHIPMENTS);
   }
 
   private load<T>(key: string, fallback: T): T {
@@ -699,7 +709,12 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       store.orders = backendOrders;
       localStorage.setItem('agro_orders', JSON.stringify(backendOrders));
     } catch (error) {
-      console.warn('Could not refresh orders from backend; using cached orders.', error);
+      if (role === 'warehouse' || isWarehouseSession()) {
+        store.orders = [];
+        localStorage.setItem('agro_orders', JSON.stringify([]));
+        throw error;
+      }
+      console.warn('Could not refresh orders from backend; using cached orders for non-warehouse views.', error);
     }
     if (role === 'buyer' && userId) {
       return store.orders.filter((o) => o.buyerId === userId);
@@ -897,9 +912,9 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
         ? backendJobs.filter((job) => job.partnerId === partnerId)
         : backendJobs;
     } catch (error) {
-      // Delivery workspaces must see a real API error rather than fake jobs.
-      if (partnerId) throw error;
-      console.warn('Could not refresh logistics jobs; using cached records for non-partner views.', error);
+      // Warehouse and delivery workspaces must never fall back to demo or stale jobs.
+      if (partnerId || isWarehouseSession()) throw error;
+      console.warn('Could not refresh logistics jobs; using cached records for non-restricted views.', error);
       return store.jobs;
     }
   },
@@ -1552,10 +1567,26 @@ return qc;
 
   // Warehouses & Inventory
   async getWarehouses(): Promise<Warehouse[]> {
+    try {
+      const records = await getBackendRecords<Warehouse>('warehouses');
+      store.warehouses = records;
+      localStorage.setItem('agro_warehouses', JSON.stringify(records));
+    } catch (error) {
+      if (JSON.parse(localStorage.getItem('agro_active_user') || '{}').role === 'warehouse') store.warehouses = [];
+      console.warn('Could not load warehouses from backend.', error);
+    }
     return store.warehouses;
   },
 
   async getInventory(): Promise<WarehouseInventoryItem[]> {
+    try {
+      const records = await getBackendRecords<WarehouseInventoryItem>('inventory');
+      store.inventory = records;
+      localStorage.setItem('agro_inventory', JSON.stringify(records));
+    } catch (error) {
+      if (JSON.parse(localStorage.getItem('agro_active_user') || '{}').role === 'warehouse') store.inventory = [];
+      console.warn('Could not load warehouse inventory from backend.', error);
+    }
     return store.inventory;
   },
 
@@ -1647,6 +1678,14 @@ return qc;
   // ==========================================
 
   async getGodowns(): Promise<LocalGodown[]> {
+    try {
+      const records = await getBackendRecords<LocalGodown>('godowns');
+      store.godowns = records;
+      localStorage.setItem('agro_local_godowns', JSON.stringify(records));
+    } catch (error) {
+      if (JSON.parse(localStorage.getItem('agro_active_user') || '{}').role === 'warehouse') store.godowns = [];
+      console.warn('Could not load godowns from backend.', error);
+    }
     return store.godowns;
   },
 
@@ -1664,16 +1703,16 @@ return qc;
 
   async getGodownShipments(godownId?: string, status?: string): Promise<GodownShipment[]> {
     let list = store.godownShipments;
+    const warehouseSession = JSON.parse(localStorage.getItem('agro_active_user') || '{}').role === 'warehouse';
 
     try {
       const backendList = await getBackendRecords<GodownShipment>('godownShipments');
-      if (backendList.length > 0) {
-        store.godownShipments = backendList;
-        localStorage.setItem('agro_godown_shipments', JSON.stringify(backendList));
-        list = backendList;
-      }
+      store.godownShipments = backendList;
+      localStorage.setItem('agro_godown_shipments', JSON.stringify(backendList));
+      list = backendList;
     } catch (error) {
-      console.warn('Could not load godown shipments from backend; using local data.', error);
+      if (warehouseSession) list = [];
+      console.warn('Could not load godown shipments from backend.', error);
     }
 
     if (godownId) {
@@ -1685,15 +1724,30 @@ return qc;
     return list;
   },
 
+  async updateGodownShipment(shipment: GodownShipment): Promise<GodownShipment> {
+    if (!shipment?.id) throw new Error('A shipment ID is required');
+    await saveBackendRecord('godownShipments', shipment);
+    const index = store.godownShipments.findIndex((item) => item.id === shipment.id);
+    if (index >= 0) store.godownShipments[index] = shipment;
+    else store.godownShipments.unshift(shipment);
+    localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
+    return shipment;
+  },
+
   async getGodownShipment(id: string): Promise<GodownShipment | undefined> {
     try {
+      // Replace the cache even when the server returns an empty list. An empty
+      // authoritative response must not resurrect a shipment from demo/local data.
       const backendList = await getBackendRecords<GodownShipment>('godownShipments');
-      if (backendList.length > 0) {
-        store.godownShipments = backendList;
-        localStorage.setItem('agro_godown_shipments', JSON.stringify(backendList));
-      }
+      store.godownShipments = backendList;
+      localStorage.setItem('agro_godown_shipments', JSON.stringify(backendList));
     } catch (error) {
-      console.warn('Could not load shipment from backend; using local data.', error);
+      if (isWarehouseSession()) {
+        store.godownShipments = [];
+        localStorage.setItem('agro_godown_shipments', JSON.stringify([]));
+        throw error;
+      }
+      console.warn('Could not load shipment from backend; using local data for non-warehouse views.', error);
     }
 
     return store.godownShipments.find(
