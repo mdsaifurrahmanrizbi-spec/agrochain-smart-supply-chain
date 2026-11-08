@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { RefreshCw, Warehouse as WarehouseIcon, MapPin, Scale, Thermometer, AlertCircle } from 'lucide-react';
 import { agroApi } from '../../services/api';
 import type { Warehouse } from '../../types';
@@ -6,6 +6,8 @@ import type { Warehouse } from '../../types';
 export const AdminWarehouses: React.FC = () => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedRef = useRef(false);
   const [error, setError] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [repairCandidates, setRepairCandidates] = useState<Array<{ applicationId: string; managerId: string; managerName: string; email: string; facilityName: string; type: string; city: string; area: string; status: string; accountStatus: string }>>([]);
@@ -41,20 +43,28 @@ export const AdminWarehouses: React.FC = () => {
     let active = true;
 
     const loadWarehouses = async () => {
-      setLoading(true);
+      const isInitialLoad = !hasLoadedRef.current;
+      if (isInitialLoad) setLoading(true);
+      else setRefreshing(true);
       setError('');
       try {
-        // Always request the authenticated backend records. Never render the
-        // local demo seed as if it were the live warehouse network.
+        // Always request authenticated backend records. Never render local
+        // demo seed data as if it were the live warehouse network.
         const records = await agroApi.getWarehouses({ strict: true });
         if (active) setWarehouses(records);
       } catch (loadError) {
         if (active) {
-          setWarehouses([]);
+          // Keep the last successful live list visible during a failed manual
+          // refresh; only an initial-load failure should leave the list empty.
+          if (isInitialLoad) setWarehouses([]);
           setError(loadError instanceof Error ? loadError.message : 'Unable to load warehouse records.');
         }
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          hasLoadedRef.current = true;
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     };
 
@@ -90,11 +100,11 @@ export const AdminWarehouses: React.FC = () => {
         <button
           type="button"
           onClick={() => setRefreshVersion((version) => version + 1)}
-          disabled={loading}
+          disabled={loading || refreshing}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          {loading ? 'Refreshing...' : 'Refresh warehouses'}
+          <RefreshCw size={14} className={loading || refreshing ? 'animate-spin' : ''} />
+          {loading ? 'Loading...' : refreshing ? 'Refreshing...' : 'Refresh warehouses'}
         </button>
       </div>
 
@@ -162,9 +172,9 @@ export const AdminWarehouses: React.FC = () => {
         <div role="alert" className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
           <AlertCircle size={18} className="mt-0.5 shrink-0" />
           <div>
-            <p className="font-semibold">Could not load live warehouse records</p>
+            <p className="font-semibold">{warehouses.length > 0 ? 'Could not refresh warehouse records' : 'Could not load live warehouse records'}</p>
             <p className="mt-1">{error}</p>
-            <p className="mt-2 text-xs">No demo or cached warehouse data is being displayed. Refresh after checking the backend connection and Admin session.</p>
+            <p className="mt-2 text-xs">{warehouses.length > 0 ? 'The last successfully loaded live warehouse list is still displayed below.' : 'No demo or cached warehouse data is being displayed. Refresh after checking the backend connection and Admin session.'}</p>
           </div>
         </div>
       )}
@@ -179,7 +189,7 @@ export const AdminWarehouses: React.FC = () => {
         </div>
       )}
 
-      {!loading && !error && warehouses.length > 0 && (
+      {!loading && warehouses.length > 0 && (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {warehouses.map((wh) => {
             const capacity = Number(wh.capacityMetricTons) || 0;
