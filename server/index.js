@@ -2164,7 +2164,19 @@ app.post('/api/godowns/shipments/:shipmentId/assign-partner', requireAuth, async
     order.deliveryAssignmentStatus = 'ASSIGNED';
     order.orderStatus = 'DELIVERY_PARTNER_ASSIGNED';
     order.updatedAt = now;
-    partner.activeJobsCount = Math.max(0, Number(partner.activeJobsCount || 0)) + (existingJobRow ? 0 : 1);
+    if (existingJobRow && existingJob.partnerId && existingJob.partnerId !== partnerId) {
+      const previousPartnerResult = await client.query(
+        "SELECT id,data FROM agrochain_records WHERE resource='deliveryPartners' AND id=$1 FOR UPDATE",
+        [String(existingJob.partnerId)]
+      );
+      const previousPartnerRow = previousPartnerResult.rows[0];
+      if (previousPartnerRow) {
+        const previousPartner = previousPartnerRow.data || {};
+        previousPartner.activeJobsCount = Math.max(0, Number(previousPartner.activeJobsCount || 0) - 1);
+        await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='deliveryPartners' AND id=$1", [previousPartnerRow.id, JSON.stringify(previousPartner)]);
+      }
+    }
+    partner.activeJobsCount = Math.max(0, Number(partner.activeJobsCount || 0)) + 1;
     const event = { id:'trk_'+randomUUID(), orderId:orderRow.id, title:'DELIVERY PARTNER ASSIGNED', description:'Destination godown manager assigned '+job.partnerName+' for customer doorstep delivery.', location:job.godownName, timestamp:now, actorRole:'Warehouse Manager', actorName:String(godownRow.data?.managerName || 'Warehouse Manager'), status:'COMPLETED' };
     const upsert = async (resource,id,data) => client.query(
       "INSERT INTO agrochain_records(resource,id,data,created_at,updated_at) VALUES($1,$2,$3::jsonb,NOW(),NOW()) ON CONFLICT(resource,id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()",
