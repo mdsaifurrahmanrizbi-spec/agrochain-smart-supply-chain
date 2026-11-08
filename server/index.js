@@ -1587,6 +1587,177 @@ function canWriteResource(role, resource) {
   return resourceWriteRoles[resource]?.includes(role) === true;
 }
 
+// Warehouse intake is committed as one server-side transaction. The warehouse
+// manager can receive only a handed-over pickup assigned to their own origin facility.
+app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'warehouse') {
+    return res.status(403).json({ message: 'Only the assigned origin warehouse manager can receive this pickup' });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const owned = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1 FOR UPDATE",
+      [String(req.auth.sub)]
+    );
+    if (owned.rowCount !== 1) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'Your account must be linked to exactly one warehouse facility before intake' });
+    }
+    const warehouseRow = owned.rows[0];
+    const warehouse = warehouseRow.data || {};
+    const jobResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND id = $1 FOR UPDATE",
+      [req.params.jobId]
+    );
+    const jobRow = jobResult.rows[0];
+    const job = jobRow?.data || {};
+    if (!jobRow || job.type !== 'PICKUP') {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Pickup job not found' });
+    }
+    if (String(job.status || '').toUpperCase() === 'WAREHOUSE_HANDOVER') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'This pickup has already been received by a warehouse' });
+    }
+    if (String(job.status || '').toUpperCase() !== 'PICKED_UP') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Partner must complete farm pickup and handover before warehouse intake' });
+    }
+    const orderResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+      [String(job.orderId || '')]
+    );
+    const orderRow = orderResult.rows[0];
+    const order = orderRow?.data || {};
+    const assignedWarehouseId = String(order.originWarehouseId || order.warehouseId || '');
+    if (!orderRow || assignedWarehouseId !== String(warehouseRow.id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'This consignment is not assigned to your origin warehouse' });
+    }
+    if (order.paymentMethod !== 'COD') {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'Warehouse intake is currently enabled only for COD orders' });
+    }
+    const qcResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'qualityChecks' AND (id = $1 OR data->>'orderId' = $2) ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
+      [String(order.qualityCheckId || ''), orderRow.id]
+    );
+    const qc = qcResult.rows[0]?.data;
+    if (!qc || String(qc.status || '').toUpperCase() !== 'APPROVED' ||
+        String(order.qualityStatus || '').toUpperCase() !== 'APPROVED') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Warehouse intake is blocked until farm-gate QC is approved' });
+    }
+    const existingShipment = await client.query(
+      "SELECT id FROM agrochain_records WHERE resource = 'godownShipments' AND data->>'orderId' = $1 LIMIT 1 FOR UPDATE",
+      [orderRow.id]
+    );
+    if (existingShipment.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'A warehouse transfer record already exists for this order' });
+    }
+
+    const normalizeArea = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
+    const customerAddress = String(order.buyerAddress || '');
+    const customerCity = String(order.buyerCity || '');
+    const addressText = normalizeArea([customerAddress, customerCity].join(' '));
+    const godownRows = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'godowns' ORDER BY created_at ASC"
+    );
+    let destination = null;
+    for (const row of godownRows.rows) {
+      const data = row.data || {};
+      const areas = Array.isArray(data.serviceAreas) ? data.serviceAreas : [];
+      if (String(data.status || '').toUpperCase() !== 'ACTIVE') continue;
+      if (areas.some((area) => {
+        const term = normalizeArea(area);
+        return term && (' ' + addressText + ' ').includes(' ' + term + ' ');
+      })) {
+        destination = { id: row.id, data };
+        break;
+      }
+    }
+    const manualRouting = !destination;
+    const now = new Date().toISOString();
+    const crypto = await import('node:crypto');
+    const shipmentId = 'shp_' + crypto.randomUUID();
+    const shipment = {
+      id: shipmentId,
+      orderId: orderRow.id,
+      orderNumber: order.orderNumber || orderRow.id,
+      productName: (Array.isArray(order.items) ? order.items : []).map((item) => String(item.quantity || 0) + ' ' + String(item.unit || 'kg') + ' ' + String(item.productName || 'Product')).join(', '),
+      quantity: (Array.isArray(order.items) ? order.items : []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0),
+      unit: order.items?.[0]?.unit || 'kg',
+      weightKg: Number(order.totalWeightKg) || (Array.isArray(order.items) ? order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) : 0),
+      sourceWarehouseId: warehouseRow.id,
+      sourceWarehouseName: warehouse.name || warehouseRow.id,
+      destinationGodownId: destination?.id || 'unassigned',
+      destinationGodownName: destination?.data?.name || 'Unassigned - Manual Routing Required',
+      customerArea: customerCity || customerAddress,
+      customerAddress,
+      customerName: order.buyerName || '',
+      customerPhone: order.buyerPhone || '',
+      productCondition: 'EXCELLENT',
+      transferStatus: manualRouting ? 'MANUAL_ROUTING_REQUIRED' : 'PENDING_DISPATCH',
+      ...(manualRouting ? { exceptionNotes: 'No active destination godown service area matched the customer address. Manual routing review required.' } : {}),
+    };
+    job.status = 'WAREHOUSE_HANDOVER';
+    job.handoverConfirmed = true;
+    job.handoverManagerId = req.auth.sub;
+    job.handoverConfirmedAt = now;
+    job.updatedAt = now;
+    order.orderStatus = manualRouting ? 'MANUAL_ROUTING_REQUIRED' : 'WAREHOUSE_RECEIVED';
+    order.warehouseId = warehouseRow.id;
+    order.warehouseName = warehouse.name || warehouseRow.id;
+    order.originWarehouseId = warehouseRow.id;
+    order.originWarehouseName = warehouse.name || warehouseRow.id;
+    order.godownReceivedAt = now;
+    if (destination) {
+      order.destinationGodownId = destination.id;
+      order.destinationGodownName = destination.data.name;
+    }
+    order.updatedAt = now;
+    const event = {
+      id: 'trk_' + crypto.randomUUID(),
+      orderId: orderRow.id,
+      title: manualRouting ? 'RECEIVED AT ORIGIN WAREHOUSE — MANUAL ROUTING REQUIRED' : 'RECEIVED AT ORIGIN WAREHOUSE',
+      description: manualRouting
+        ? 'Origin warehouse verified the consignment. No active destination godown matched the customer address; shipment is held for manual routing.'
+        : 'Origin warehouse verified the consignment and assigned the active destination godown ' + destination.data.name + '.',
+      location: warehouse.name || warehouse.location || warehouseRow.id,
+      timestamp: now,
+      actorRole: 'Warehouse Manager',
+      actorName: String(req.body?.staffName || warehouse.managerName || 'Warehouse Manager'),
+      status: manualRouting ? 'IN_PROGRESS' : 'COMPLETED',
+    };
+    await client.query(
+      "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'jobs' AND id = $1",
+      [jobRow.id, JSON.stringify(job)]
+    );
+    await client.query(
+      "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1",
+      [orderRow.id, JSON.stringify(order)]
+    );
+    await client.query(
+      "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('godownShipments', $1, $2::jsonb, NOW(), NOW())",
+      [shipmentId, JSON.stringify(shipment)]
+    );
+    await client.query(
+      "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('trackingEvents', $1, $2::jsonb, NOW(), NOW())",
+      [event.id, JSON.stringify(event)]
+    );
+    await client.query('COMMIT');
+    return res.status(200).json({ order, job, shipment, event });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Warehouse intake transaction failed:', error.message);
+    return res.status(500).json({ message: 'Warehouse intake failed; no partial changes were committed' });
+  } finally {
+    client.release();
+  }
+});
+
 // Server-authoritative delivery confirmation. COD customer payment becomes PAID
 // at the exact moment the assigned delivery partner verifies the customer's OTP.
 app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
