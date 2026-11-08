@@ -1134,6 +1134,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ otp: otpInput.trim(), notes }),
+      cache: 'no-store',
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -1144,75 +1145,39 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       throw new Error(data.message || 'Could not confirm delivery');
     }
 
-    const now = data.order?.deliveryConfirmedAt || new Date().toISOString().replace('T', ' ').substring(0, 16);
     Object.assign(order, data.order);
+    if (data.job) {
+      const jobIndex = store.jobs.findIndex((job) => job.id === data.job.id);
+      if (jobIndex >= 0) store.jobs[jobIndex] = data.job;
+      else store.jobs.unshift(data.job);
+    }
+    if (data.shipment) {
+      const shipmentIndex = store.godownShipments.findIndex((item) => item.id === data.shipment.id);
+      if (shipmentIndex >= 0) store.godownShipments[shipmentIndex] = data.shipment;
+    }
     if (data.codRecord) {
       const index = store.codRecords.findIndex((item) => item.id === data.codRecord.id);
       if (index >= 0) store.codRecords[index] = data.codRecord;
       else store.codRecords.unshift(data.codRecord);
-      localStorage.setItem('agro_cod_records', JSON.stringify(store.codRecords));
     }
     if (data.settlement) {
       const index = store.settlements.findIndex((item) => item.id === data.settlement.id);
       if (index >= 0) store.settlements[index] = data.settlement;
       else store.settlements.unshift(data.settlement);
-      localStorage.setItem('agro_settlements', JSON.stringify(store.settlements));
     }
 
-    const deliveryJob = store.jobs.find((job) => job.orderId === order.id && job.type === 'DELIVERY');
-    if (deliveryJob) {
-      deliveryJob.status = 'DELIVERED';
-      deliveryJob.deliveryOtpSubmitted = otpInput.trim();
-      deliveryJob.proofNotes = notes || 'Handed directly to recipient after OTP match.';
-      deliveryJob.updatedAt = now;
-      await saveBackendRecord('jobs', deliveryJob);
-    }
-
-    const events = store.trackingEvents[order.id] || [];
-    events.unshift(
-      {
-        id: `trk-${Date.now()}-del`,
-        orderId: order.id,
-        title: 'DELIVERED SUCCESSFULLY',
-        description: 'Product handed over to customer. Delivery automatically confirmed via recipient OTP verification.',
-        location: order.buyerAddress,
-        timestamp: now,
-        actorRole: 'Delivery Partner',
-        actorName: order.deliveryPartnerName || 'Delivery Partner',
-        status: 'COMPLETED',
-      },
-      {
-        id: `trk-${Date.now()}-otp`,
-        orderId: order.id,
-        title: 'CUSTOMER OTP VERIFIED',
-        description: 'Customer delivery OTP was verified by the server.',
-        location: order.buyerCity,
-        timestamp: now,
-        actorRole: 'Automated Security System',
-        actorName: 'AgroChain Core Engine',
-        status: 'COMPLETED',
-      }
-    );
-    if (order.paymentMethod === 'COD') {
-      events.unshift({
-        id: `trk-${Date.now()}-codpaid`,
-        orderId: order.id,
-        title: 'COD CUSTOMER PAYMENT CONFIRMED',
-        description: 'Cash was collected from the customer at delivery; customer payment is now PAID. Farmer payout remains pending.',
-        location: order.buyerCity,
-        timestamp: now,
-        actorRole: 'Automated Payment System',
-        actorName: 'AgroChain Core Engine',
-        status: 'COMPLETED',
-      });
-    }
-    store.trackingEvents[order.id] = events;
-    for (const event of events.slice(0, order.paymentMethod === 'COD' ? 3 : 2)) {
-      await saveBackendRecord('trackingEvents', event);
-    }
-
+    const serverEvents = Array.isArray(data.events) ? data.events as TrackingEvent[] : [];
+    store.trackingEvents[order.id] = [
+      ...serverEvents,
+      ...(store.trackingEvents[order.id] || []).filter((event) =>
+        !serverEvents.some((created) => created.id === event.id)
+      ),
+    ];
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
     localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
+    localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
+    localStorage.setItem('agro_cod_records', JSON.stringify(store.codRecords));
+    localStorage.setItem('agro_settlements', JSON.stringify(store.settlements));
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
     return {
       success: true,
