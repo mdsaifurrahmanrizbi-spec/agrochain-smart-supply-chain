@@ -1616,11 +1616,8 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Pickup job not found' });
     }
-    if (String(job.status || '').toUpperCase() === 'WAREHOUSE_HANDOVER') {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ message: 'This pickup has already been received by a warehouse' });
-    }
-    if (String(job.status || '').toUpperCase() !== 'PICKED_UP') {
+    const pickupStatus = String(job.status || '').toUpperCase();
+    if (!['PICKED_UP', 'WAREHOUSE_HANDOVER'].includes(pickupStatus)) {
       await client.query('ROLLBACK');
       return res.status(409).json({ message: 'Partner must complete farm pickup and handover before warehouse intake' });
     }
