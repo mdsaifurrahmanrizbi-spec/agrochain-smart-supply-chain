@@ -229,40 +229,6 @@ export const GodownHub: React.FC = () => {
     }
   };
 
-  // Action: Delivery partner confirms receipt (two-sided handover simulation)
-  const handleConfirmPartnerCollection = async (shipment: GodownShipment) => {
-    try {
-      await agroApi.deliveryPartnerConfirmReceipt(
-        shipment.id,
-        shipment.assignedPartnerId || 'dp-1'
-      );
-      refreshData();
-      setNotice(
-        `Two-sided handover completed! Delivery partner ${shipment.assignedPartnerName} confirmed product collection.`
-      );
-      setTimeout(() => setNotice(null), 4000);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Receipt confirmation failed');
-    }
-  };
-
-  // Action: Delivery partner clicks OUT FOR DELIVERY
-  const handleOutForDelivery = async (shipment: GodownShipment) => {
-    try {
-      await agroApi.deliveryPartnerOutForDelivery(
-        shipment.id,
-        shipment.assignedPartnerId || 'dp-1'
-      );
-      refreshData();
-      setNotice(
-        `Shipment status updated to OUT FOR DELIVERY! Customer has been notified.`
-      );
-      setTimeout(() => setNotice(null), 4000);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Out for delivery update failed');
-    }
-  };
-
   // Action: Manual assign delivery partner
   const handleManualAssign = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -594,12 +560,7 @@ export const GodownHub: React.FC = () => {
                           )}
 
                           {s.transferStatus === 'DELIVERY_PARTNER_COLLECTED' && (
-                            <button
-                              onClick={() => handleOutForDelivery(s)}
-                              className="px-2.5 py-1 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded shadow-xs"
-                            >
-                              Out For Delivery
-                            </button>
+                            <span className="text-xs font-semibold text-emerald-700">With delivery partner</span>
                           )}
 
                           <button
@@ -994,23 +955,10 @@ export const GodownHub: React.FC = () => {
                         )}
 
                         {isHandoverInitiated && !isHandoverCompleted && (
-                          <button
-                            onClick={() => handleConfirmPartnerCollection(s)}
-                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>CONFIRM PRODUCT RECEIVED</span>
-                          </button>
+                          <span className="text-xs text-amber-700 font-semibold">Awaiting assigned partner collection</span>
                         )}
-
                         {isHandoverCompleted && s.transferStatus === 'DELIVERY_PARTNER_COLLECTED' && (
-                          <button
-                            onClick={() => handleOutForDelivery(s)}
-                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1"
-                          >
-                            <Truck className="w-3.5 h-3.5" />
-                            <span>OUT FOR DELIVERY</span>
-                          </button>
+                          <span className="text-xs text-emerald-700 font-semibold">Collected · Partner will start doorstep delivery</span>
                         )}
                       </div>
                     </div>
