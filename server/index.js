@@ -1342,7 +1342,7 @@ async function resolveOriginWarehouseForOrder(db, order) {
     .normalize('NFKD')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
-    .replace(/\\s+/g, ' ');
+    .replace(/\s+/g, ' ');
 
   const origins = [];
   for (const item of items) {
