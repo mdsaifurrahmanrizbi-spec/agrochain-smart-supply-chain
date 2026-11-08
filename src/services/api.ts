@@ -1851,190 +1851,51 @@ return qc;
   // 2. Dispatch to Local Godown
   async dispatchToLocalGodown(
     shipmentIdOrOrderId: string,
-    carrier: string = 'AgroChain Carrier Truck #14'
+    carrier: string = 'AgroChain Carrier'
   ): Promise<GodownShipment> {
-    const shipment = store.godownShipments.find(
-      (s) =>
-        s.id === shipmentIdOrOrderId ||
-        s.orderId === shipmentIdOrOrderId
-    );
-
-    if (!shipment) {
-      throw new Error('Shipment not found');
-    }
-
-    // Block manual-routing cases and unresolved receiving issues.
-    if (
-      shipment.transferStatus === 'MANUAL_ROUTING_REQUIRED' ||
-      shipment.transferStatus === 'ISSUE_REPORTED'
-    ) {
-      throw new Error(
-        'Dispatch blocked. Resolve the routing or receiving issue first.'
-      );
-    }
-
-    // A valid destination is mandatory.
-    if (
-      !shipment.destinationGodownId ||
-      shipment.destinationGodownId === 'unassigned'
-    ) {
-      throw new Error(
-        'Dispatch blocked. No destination godown has been assigned.'
-      );
-    }
-
-    // Match using either godown ID or code.
-    const destinationGodown = store.godowns.find(
-      (g) =>
-        g.id === shipment.destinationGodownId ||
-        g.code === shipment.destinationGodownId
-    );
-
-    if (!destinationGodown) {
-      throw new Error(
-        'Dispatch blocked. Destination godown does not exist.'
-      );
-    }
-
-    if (destinationGodown.status !== 'ACTIVE') {
-      throw new Error(
-        `Dispatch blocked. Godown "${destinationGodown.name}" is inactive.`
-      );
-    }
-
-    // Prevent duplicate dispatch.
-    if (
-      shipment.transferStatus === 'GODOWN_TRANSFER_IN_TRANSIT' ||
-      shipment.transferStatus === 'ARRIVED_LOCAL_GODOWN'
-    ) {
-      throw new Error(
-        'Shipment has already been dispatched or has arrived at the local godown.'
-      );
-    }
-
-    const order = store.orders.find(
-      (o) => o.id === shipment.orderId
-    );
-
-    const now = new Date()
-      .toISOString()
-      .replace('T', ' ')
-      .substring(0, 16);
-
-    shipment.transferStatus = 'GODOWN_TRANSFER_IN_TRANSIT';
-    shipment.dispatchDate = now;
-    shipment.transferCarrier = carrier;
-
-    if (order) {
-      order.orderStatus = 'GODOWN_TRANSFER_IN_TRANSIT';
-      order.destinationGodownId = destinationGodown.id;
-      order.destinationGodownName = destinationGodown.name;
-    }
-
-    const events =
-      store.trackingEvents[shipment.orderId] || [];
-
-    events.unshift(
-      {
-        id: `trk-${Date.now()}-dsp`,
-        orderId: shipment.orderId,
-        title: 'DISPATCHED TO LOCAL GODOWN',
-        description:
-          `Produce dispatched to ${destinationGodown.name} via ${carrier}.`,
-        location:
-          shipment.sourceWarehouseName ||
-          'Central Dhaka Agro-Logistics Center, Gazipur',
-        timestamp: now,
-        actorRole: 'Warehouse Logistics',
-        actorName: 'Anisul Haque',
-        status: 'COMPLETED',
-      },
-      {
-        id: `trk-${Date.now()}-trf`,
-        orderId: shipment.orderId,
-        title: 'IN TRANSIT TO LOCAL GODOWN',
-        description:
-          `Shipment is travelling to ${destinationGodown.name}.`,
-        location: 'Gazipur to Local Godown',
-        timestamp: now,
-        actorRole: 'Fleet Carrier',
-        actorName: carrier,
-        status: 'IN_PROGRESS',
-      }
-    );
-
-    store.trackingEvents[shipment.orderId] = events;
-
-    localStorage.setItem(
-      'agro_orders',
-      JSON.stringify(store.orders)
-    );
-    localStorage.setItem(
-      'agro_godown_shipments',
-      JSON.stringify(store.godownShipments)
-    );
-    localStorage.setItem(
-      'agro_tracking_events',
-      JSON.stringify(store.trackingEvents)
-    );
-
-    await saveBackendRecord('godownShipments', shipment);
-    if (order) await saveBackendRecord('orders', order);
-    for (const event of events) {
-      await saveBackendRecord('trackingEvents', event);
-    }
-
-    return shipment;
-  },
-
-  // 3. Mark Arrived at Local Godown
-  async markArrivedAtLocalGodown(shipmentId: string): Promise<GodownShipment> {
-    const shipment = store.godownShipments.find((s) => s.id === shipmentId || s.orderId === shipmentId);
+    const shipment = store.godownShipments.find((item) => item.id === shipmentIdOrOrderId || item.orderId === shipmentIdOrOrderId);
     if (!shipment) throw new Error('Shipment not found');
-    if (shipment.transferStatus !== 'GODOWN_TRANSFER_IN_TRANSIT') {
-      throw new Error('A shipment must be dispatched and in transit before it can be marked arrived.');
-    }
-    const destinationGodown = store.godowns.find(
-      (g) => g.id === shipment.destinationGodownId || g.code === shipment.destinationGodownId
-    );
-    if (!destinationGodown || destinationGodown.status !== 'ACTIVE') {
-      throw new Error('Arrival cannot be recorded because the destination godown is missing or inactive.');
-    }
-
-    const order = store.orders.find((o) => o.id === shipment.orderId);
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
-
-    shipment.transferStatus = 'ARRIVED_LOCAL_GODOWN';
-    shipment.arrivalDate = now;
-
-    if (order) {
-      order.orderStatus = 'ARRIVED_LOCAL_GODOWN';
-    }
-
-    const events = store.trackingEvents[shipment.orderId] || [];
-    events.unshift({
-      id: `trk-${Date.now()}-arr`,
-      orderId: shipment.orderId,
-      title: 'ARRIVED AT LOCAL GODOWN',
-      description: `Transport vehicle arrived at ${shipment.destinationGodownName} unloading dock. Awaiting physical acceptance by Godown Manager.`,
-      location: shipment.destinationGodownName,
-      timestamp: now,
-      actorRole: 'Logistics Fleet',
-      actorName: shipment.transferCarrier || 'AgroChain Carrier',
-      status: 'COMPLETED',
+    const response = await fetch(`${API_BASE_URL}/warehouse/shipments/${encodeURIComponent(shipment.id)}/dispatch`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ carrier }),
+      cache: 'no-store',
     });
-
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.message || 'Could not dispatch shipment');
+    const updatedShipment = result.shipment as GodownShipment;
+    const updatedOrder = result.order as Order;
+    store.godownShipments = store.godownShipments.map((item) => item.id === updatedShipment.id ? updatedShipment : item);
+    store.orders = store.orders.map((item) => item.id === updatedOrder.id ? updatedOrder : item);
+    store.trackingEvents[updatedOrder.id] = [...(result.events as TrackingEvent[]), ...(store.trackingEvents[updatedOrder.id] || [])];
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
     localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
+    return updatedShipment;
+  },
 
-    await saveBackendRecord('godownShipments', shipment);
-    if (order) await saveBackendRecord('orders', order);
-    for (const event of events) {
-      await saveBackendRecord('trackingEvents', event);
-    }
-
-    return shipment;
+  // 3. Mark Arrived at Destination Godown
+  async markArrivedAtLocalGodown(shipmentId: string): Promise<GodownShipment> {
+    const shipment = store.godownShipments.find((item) => item.id === shipmentId || item.orderId === shipmentId);
+    if (!shipment) throw new Error('Shipment not found');
+    const response = await fetch(`${API_BASE_URL}/godowns/shipments/${encodeURIComponent(shipment.id)}/arrive`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      cache: 'no-store',
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.message || 'Could not record destination arrival');
+    const updatedShipment = result.shipment as GodownShipment;
+    const updatedOrder = result.order as Order;
+    const event = result.event as TrackingEvent;
+    store.godownShipments = store.godownShipments.map((item) => item.id === updatedShipment.id ? updatedShipment : item);
+    store.orders = store.orders.map((item) => item.id === updatedOrder.id ? updatedOrder : item);
+    store.trackingEvents[updatedOrder.id] = [event, ...(store.trackingEvents[updatedOrder.id] || [])];
+    localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+    localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
+    localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
+    return updatedShipment;
   },
 
   // 4. Local Godown Manager Accepts Product & Triggers Automatic Delivery Partner Assignment
