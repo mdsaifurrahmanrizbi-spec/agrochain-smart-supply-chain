@@ -1666,7 +1666,7 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
       return res.status(409).json({ message: 'A warehouse transfer record already exists for this order' });
     }
 
-    const normalizeArea = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
+    const normalizeArea = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
     const customerAddress = String(order.buyerAddress || '');
     const customerCity = String(order.buyerCity || '');
     const addressText = normalizeArea([customerAddress, customerCity].join(' '));
