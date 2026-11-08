@@ -1766,6 +1766,106 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
   }
 });
 
+// Dispatch a received consignment from its origin warehouse in one transaction.
+app.post('/api/warehouse/shipments/:shipmentId/dispatch', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'warehouse') return res.status(403).json({ message: 'Only the origin warehouse manager can dispatch this consignment' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const shipmentResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource='godownShipments' AND id=$1 FOR UPDATE",
+      [req.params.shipmentId]
+    );
+    const shipmentRow = shipmentResult.rows[0];
+    const shipment = shipmentRow?.data || {};
+    if (!shipmentRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Shipment not found' }); }
+    if (shipment.transferStatus !== 'PENDING_DISPATCH') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Only a shipment pending dispatch can be dispatched' });
+    }
+    const warehouseResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource='warehouses' AND id=$1 AND data->>'managerId'=$2 FOR UPDATE",
+      [String(shipment.sourceWarehouseId || ''), String(req.auth.sub)]
+    );
+    if (!warehouseResult.rows[0]) { await client.query('ROLLBACK'); return res.status(403).json({ message: 'You are not the manager of this origin warehouse' }); }
+    const destinationResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource='godowns' AND id=$1 AND upper(coalesce(data->>'status',''))='ACTIVE'",
+      [String(shipment.destinationGodownId || '')]
+    );
+    const destination = destinationResult.rows[0];
+    if (!destination) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Destination godown is missing or inactive' }); }
+    const orderResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource='orders' AND id=$1 FOR UPDATE",
+      [String(shipment.orderId || '')]
+    );
+    const orderRow = orderResult.rows[0];
+    if (!orderRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Related order not found' }); }
+    const now = new Date().toISOString();
+    const carrier = String(req.body?.carrier || '').trim().slice(0,120) || 'AgroChain Carrier';
+    const sourceName = String(shipment.sourceWarehouseName || '').trim();
+    if (!sourceName) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Origin warehouse name is missing; dispatch blocked to prevent an incorrect route record' }); }
+    shipment.transferStatus = 'GODOWN_TRANSFER_IN_TRANSIT';
+    shipment.dispatchDate = now;
+    shipment.transferCarrier = carrier;
+    const order = orderRow.data || {};
+    order.orderStatus = 'GODOWN_TRANSFER_IN_TRANSIT';
+    order.destinationGodownId = destination.id;
+    order.destinationGodownName = destination.data?.name || destination.id;
+    order.updatedAt = now;
+    const { randomUUID } = await import('node:crypto');
+    const events = [
+      { id:'trk_'+randomUUID(), orderId:orderRow.id, title:'DISPATCHED TO DESTINATION GODOWN', description:'Consignment dispatched from '+sourceName+' via '+carrier+'.', location:sourceName, timestamp:now, actorRole:'Warehouse Manager', actorName:String(warehouseResult.rows[0].data?.managerName || 'Warehouse Manager'), status:'COMPLETED' },
+      { id:'trk_'+randomUUID(), orderId:orderRow.id, title:'IN TRANSIT TO DESTINATION GODOWN', description:'Shipment is travelling to '+(destination.data?.name || destination.id)+'.', location:sourceName+' to '+(destination.data?.name || destination.id), timestamp:now, actorRole:'Fleet Carrier', actorName:carrier, status:'IN_PROGRESS' }
+    ];
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godownShipments' AND id=$1",[shipmentRow.id,JSON.stringify(shipment)]);
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='orders' AND id=$1",[orderRow.id,JSON.stringify(order)]);
+    for (const event of events) await client.query("INSERT INTO agrochain_records(resource,id,data,created_at,updated_at) VALUES('trackingEvents',$1,$2::jsonb,NOW(),NOW())",[event.id,JSON.stringify(event)]);
+    await client.query('COMMIT');
+    return res.json({shipment,order,events});
+  } catch(error) {
+    await client.query('ROLLBACK').catch(()=>{});
+    console.error('Warehouse dispatch failed:',error.message);
+    return res.status(500).json({message:'Dispatch failed; no partial changes were committed'});
+  } finally { client.release(); }
+});
+
+// Record arrival only by the manager of the assigned active destination godown.
+app.post('/api/godowns/shipments/:shipmentId/arrive', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'warehouse') return res.status(403).json({message:'Only a destination warehouse manager can record arrival'});
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const shipmentResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND id=$1 FOR UPDATE",[req.params.shipmentId]);
+    const shipmentRow=shipmentResult.rows[0];
+    const shipment=shipmentRow?.data || {};
+    if(!shipmentRow){await client.query('ROLLBACK');return res.status(404).json({message:'Shipment not found'});}
+    if(shipment.transferStatus!=='GODOWN_TRANSFER_IN_TRANSIT'){await client.query('ROLLBACK');return res.status(409).json({message:'Only an in-transit shipment can be marked arrived'});}
+    const godownResult=await client.query("SELECT id,data FROM agrochain_records WHERE resource='godowns' AND id=$1 AND data->>'managerId'=$2 AND upper(coalesce(data->>'status',''))='ACTIVE' FOR UPDATE",[String(shipment.destinationGodownId||''),String(req.auth.sub)]);
+    if(!godownResult.rows[0]){await client.query('ROLLBACK');return res.status(403).json({message:'You are not the active manager of this destination godown'});}
+    const orderResult=await client.query("SELECT id,data FROM agrochain_records WHERE resource='orders' AND id=$1 FOR UPDATE",[String(shipment.orderId||'')]);
+    const orderRow=orderResult.rows[0];
+    if(!orderRow){await client.query('ROLLBACK');return res.status(404).json({message:'Related order not found'});}
+    const now=new Date().toISOString();
+    const godown=godownResult.rows[0].data||{};
+    shipment.transferStatus='ARRIVED_LOCAL_GODOWN';
+    shipment.arrivalDate=now;
+    const order=orderRow.data||{};
+    order.orderStatus='ARRIVED_LOCAL_GODOWN';
+    order.updatedAt=now;
+    const {randomUUID}=await import('node:crypto');
+    const event={id:'trk_'+randomUUID(),orderId:orderRow.id,title:'ARRIVED AT DESTINATION GODOWN',description:'Transport vehicle arrived at '+(godown.name||shipment.destinationGodownName||'destination godown')+'. Awaiting physical acceptance by its manager.',location:godown.name||shipment.destinationGodownName||godown.address||'Destination godown',timestamp:now,actorRole:'Logistics Fleet',actorName:String(shipment.transferCarrier||'AgroChain Carrier'),status:'COMPLETED'};
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godownShipments' AND id=$1",[shipmentRow.id,JSON.stringify(shipment)]);
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='orders' AND id=$1",[orderRow.id,JSON.stringify(order)]);
+    await client.query("INSERT INTO agrochain_records(resource,id,data,created_at,updated_at) VALUES('trackingEvents',$1,$2::jsonb,NOW(),NOW())",[event.id,JSON.stringify(event)]);
+    await client.query('COMMIT');
+    return res.json({shipment,order,event});
+  } catch(error) {
+    await client.query('ROLLBACK').catch(()=>{});
+    console.error('Destination arrival failed:',error.message);
+    return res.status(500).json({message:'Arrival update failed; no partial changes were committed'});
+  } finally {client.release();}
+});
+
 // Destination godown acceptance is authoritative and atomic. It cannot be
 // performed by the origin warehouse manager or by a manager of another godown.
 app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, res) => {
