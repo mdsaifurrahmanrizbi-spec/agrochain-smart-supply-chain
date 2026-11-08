@@ -8,6 +8,30 @@ export const AdminWarehouses: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [repairCandidates, setRepairCandidates] = useState<Array<{ applicationId: string; managerId: string; managerName: string; email: string; facilityName: string; type: string; city: string; area: string; status: string; accountStatus: string }>>([]);
+  const [repairLoading, setRepairLoading] = useState(false);
+  const [repairRunning, setRepairRunning] = useState(false);
+  const [repairError, setRepairError] = useState('');
+  const [repairMessage, setRepairMessage] = useState('');
+
+
+  useEffect(() => {
+    let active = true;
+    const loadRepairPreview = async () => {
+      setRepairLoading(true);
+      setRepairError('');
+      try {
+        const result = await agroApi.previewWarehouseFacilityRepair();
+        if (active) setRepairCandidates(result.candidates);
+      } catch (loadError) {
+        if (active) setRepairError(loadError instanceof Error ? loadError.message : 'Could not load repair preview.');
+      } finally {
+        if (active) setRepairLoading(false);
+      }
+    };
+    void loadRepairPreview();
+    return () => { active = false; };
+  }, [refreshVersion]);
 
   useEffect(() => {
     let active = true;
@@ -55,6 +79,60 @@ export const AdminWarehouses: React.FC = () => {
           {loading ? 'Refreshing...' : 'Refresh warehouses'}
         </button>
       </div>
+
+      <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Missing Warehouse Facility Repair</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">
+              Preview finds APPROVED applications linked to ACTIVE Warehouse Manager accounts that do not yet have a facility record. Existing facilities are never duplicated.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={repairLoading || repairRunning || repairCandidates.length === 0}
+            onClick={async () => {
+              const confirmed = window.confirm(`Create ${repairCandidates.length} missing warehouse facility record(s) in the production database? This will write facility records and link them to their approved applications.`);
+              if (!confirmed) return;
+              setRepairRunning(true);
+              setRepairError('');
+              setRepairMessage('');
+              try {
+                const result = await agroApi.runWarehouseFacilityRepair();
+                setRepairMessage(`Repair completed: ${result.created} facility record(s) created; ${result.skipped} already-existing or ineligible application(s) skipped.`);
+                setRefreshVersion(version => version + 1);
+              } catch (runError) {
+                setRepairError(runError instanceof Error ? runError.message : 'Facility repair failed.');
+              } finally {
+                setRepairRunning(false);
+              }
+            }}
+            className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {repairRunning ? 'Repairing...' : `Repair ${repairCandidates.length} missing facility(s)`}
+          </button>
+        </div>
+        {repairLoading && <p className="text-xs text-slate-500">Checking approved applications...</p>}
+        {!repairLoading && !repairError && <p className="text-xs font-semibold text-slate-700">{repairCandidates.length} eligible missing facility record(s) found.</p>}
+        {repairCandidates.length > 0 && (
+          <div className="overflow-x-auto rounded-lg border border-amber-200 bg-white">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-amber-100/70 text-slate-700"><tr><th className="px-3 py-2">Facility</th><th className="px-3 py-2">Manager</th><th className="px-3 py-2">Location</th><th className="px-3 py-2">Account</th></tr></thead>
+              <tbody>{repairCandidates.map(candidate => (
+                <tr key={candidate.applicationId} className="border-t border-slate-100">
+                  <td className="px-3 py-2 font-semibold text-slate-900">{candidate.facilityName}<div className="font-normal text-slate-500">{candidate.type.replaceAll('_', ' ')}</div></td>
+                  <td className="px-3 py-2">{candidate.managerName}<div className="text-slate-500">{candidate.email}</div></td>
+                  <td className="px-3 py-2">{[candidate.area, candidate.city].filter(Boolean).join(', ') || 'Not provided'}</td>
+                  <td className="px-3 py-2"><span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">{candidate.accountStatus}</span></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+        {repairMessage && <p role="status" className="text-xs font-semibold text-emerald-800">{repairMessage}</p>}
+        {repairError && <p role="alert" className="text-xs text-rose-700">{repairError}</p>}
+        <p className="text-[11px] text-slate-500">No database changes occur during preview. Creating facilities requires clicking the repair button and confirming the browser prompt.</p>
+      </section>
 
       {loading && (
         <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
