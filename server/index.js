@@ -877,7 +877,7 @@ app.get('/api/admin/warehouse-facility-repair/preview/', requireAuth, async (req
         ON u.id = COALESCE(NULLIF(a.data->>'userId', ''), a.id)
        AND u.role = 'warehouse' AND UPPER(u.status) = 'ACTIVE'
       WHERE a.resource = 'warehouseApplications'
-        AND UPPER(COALESCE(a.data->>'status', a.data->>'approvalStatus', '')) = 'APPROVED'
+        AND UPPER(COALESCE(NULLIF(a.data->>'status', ''), a.data->>'approvalStatus', '')) = 'APPROVED'
         AND NOT EXISTS (
           SELECT 1 FROM agrochain_records w
           WHERE w.resource = 'warehouses'
@@ -922,7 +922,7 @@ app.post('/api/admin/warehouse-facility-repair/run/', requireAuth, async (req, r
     const applications = await client.query(
       `SELECT id, data FROM agrochain_records
        WHERE resource = 'warehouseApplications'
-         AND UPPER(COALESCE(data->>'status', data->>'approvalStatus', '')) = 'APPROVED'
+         AND UPPER(COALESCE(NULLIF(data->>'status', ''), data->>'approvalStatus', '')) = 'APPROVED'
        ORDER BY created_at ASC
        FOR UPDATE`
     );
