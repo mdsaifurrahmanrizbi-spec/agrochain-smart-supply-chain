@@ -1873,7 +1873,7 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
       location: warehouse.name || warehouse.location || warehouseRow.id,
       timestamp: now,
       actorRole: 'Warehouse Manager',
-      actorName: String(req.body?.staffName || warehouse.managerName || 'Warehouse Manager'),
+      actorName: String(warehouse.managerName || 'Warehouse Manager'),
       status: manualRouting ? 'IN_PROGRESS' : 'COMPLETED',
     };
     await client.query(
