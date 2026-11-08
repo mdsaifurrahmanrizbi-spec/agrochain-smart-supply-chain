@@ -2043,7 +2043,36 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       ).map((row) => row.id));
       if (resource === 'warehouses') rows = owned.rows;
       else if (resource === 'inventory') rows = rows.filter((row) => warehouseIds.has(row.data?.warehouseId));
-      else if (resource === 'godowns') rows = godownsResult.rows.filter((row) => godownIds.has(row.id));
+      else if (resource === 'godowns') {
+        // Origin warehouse staff need destination-facility routing metadata to
+        // dispatch consignments. Expose only active routing fields, not manager
+        // contact details or operational capacity for unrelated godowns.
+        rows = godownsResult.rows
+          .filter((row) => godownIds.has(row.id) || String(row.data?.status || '').toUpperCase() === 'ACTIVE')
+          .map((row) => {
+            if (godownIds.has(row.id)) return row;
+            const data = row.data || {};
+            return {
+              ...row,
+              data: {
+                id: row.id,
+                name: data.name || '',
+                code: data.code || '',
+                address: data.address || '',
+                city: data.city || '',
+                serviceAreas: Array.isArray(data.serviceAreas) ? data.serviceAreas : [],
+                status: data.status || 'ACTIVE',
+                managerId: '',
+                managerName: '',
+                managerPhone: '',
+                contactNumber: '',
+                capacityMetricTons: 0,
+                currentStockMetricTons: 0,
+                itemCount: 0,
+              },
+            };
+          });
+      }
       else if (resource === 'godownShipments') rows = rows.filter((row) =>
         warehouseIds.has(row.data?.sourceWarehouseId) || godownIds.has(row.data?.destinationGodownId)
       );
