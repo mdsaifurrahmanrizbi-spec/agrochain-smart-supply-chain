@@ -2310,7 +2310,7 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
     const accountResult = await client.query("SELECT email FROM auth_users WHERE id = $1", [req.auth.sub]);
     const accountEmail = accountResult.rows[0]?.email;
     const partnerResult = await client.query(
-      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (id = $1 OR lower(data->>'email') = lower($2)) LIMIT 1",
+      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (data->>'userId' = $1 OR id = $1 OR lower(data->>'email') = lower($2)) ORDER BY CASE WHEN data->>'userId' = $1 THEN 0 WHEN id = $1 THEN 1 ELSE 2 END LIMIT 1",
       [req.auth.sub, accountEmail || '']
     );
     const partnerRecord = partnerResult.rows[0];
@@ -2318,7 +2318,12 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Order not found' });
     }
-    const authorizedPartnerId = partnerRecord?.id || req.auth.sub;
+    const authorizedPartnerId = partnerRecord?.id;
+    if (!partnerRecord || String(partnerRecord.data?.approvalStatus || '').toUpperCase() !== 'APPROVED' ||
+        partnerRecord.data?.canDeliver !== true) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'Your delivery-partner profile must be approved and enabled for doorstep delivery' });
+    }
     if (order.deliveryPartnerId !== authorizedPartnerId) {
       await client.query('ROLLBACK');
       return res.status(403).json({ message: 'This order is not assigned to your delivery account' });
@@ -2326,6 +2331,10 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
     if (order.isDeliveryVerified || order.orderStatus === 'DELIVERED') {
       await client.query('ROLLBACK');
       return res.status(409).json({ message: 'Delivery has already been confirmed' });
+    }
+    if (order.otpExpiresAt && Number.isFinite(Date.parse(order.otpExpiresAt)) && Date.parse(order.otpExpiresAt) < Date.now()) {
+      await client.query('ROLLBACK');
+      return res.status(410).json({ message: 'Customer delivery OTP has expired; request a new code from the customer order screen' });
     }
     if ((Number(order.otpAttemptsRemaining) || 0) <= 0) {
       await client.query('ROLLBACK');
