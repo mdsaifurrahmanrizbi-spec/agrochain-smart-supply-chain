@@ -927,15 +927,57 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       const backendJobs = await getBackendRecords<LogisticsJob>('jobs');
       store.jobs = backendJobs;
       localStorage.setItem('agro_jobs', JSON.stringify(backendJobs));
-      return partnerId
-        ? backendJobs.filter((job) => job.partnerId === partnerId)
-        : backendJobs;
+      if (!partnerId) return backendJobs;
+      const assignedJobs = backendJobs.filter((job) => job.partnerId === partnerId);
+      const response = await fetch(`${API_BASE_URL}/delivery/available-jobs`, {
+        headers: authHeaders(),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => []);
+      if (!response.ok) throw new Error(result.message || 'Could not load area-matched delivery requests');
+      const availableJobs = (Array.isArray(result) ? result : []) as LogisticsJob[];
+      const availableIds = new Set(availableJobs.map((job) => job.id));
+      store.jobs = [...backendJobs.filter((job) => !availableIds.has(job.id)), ...availableJobs];
+      localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
+      return [...assignedJobs, ...availableJobs];
     } catch (error) {
       // Warehouse and delivery workspaces must never fall back to demo or stale jobs.
       if (partnerId || isWarehouseSession()) throw error;
       console.warn('Could not refresh logistics jobs; using cached records for non-restricted views.', error);
       return store.jobs;
     }
+  },
+
+  async acceptAvailableDeliveryJob(jobId: string): Promise<LogisticsJob> {
+    const response = await fetch(`${API_BASE_URL}/delivery/jobs/${encodeURIComponent(jobId)}/accept-request`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      cache: 'no-store',
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.message || 'Could not accept delivery request');
+    const job = result.job as LogisticsJob;
+    const order = result.order as Order;
+    const shipment = result.shipment as GodownShipment;
+    const partner = result.partner as DeliveryPartner;
+    const event = result.event as TrackingEvent;
+    store.jobs = [job, ...store.jobs.filter((item) => item.id !== job.id)];
+    const orderIndex = store.orders.findIndex((item) => item.id === order.id);
+    if (orderIndex >= 0) store.orders[orderIndex] = order;
+    else store.orders.unshift(order);
+    const shipmentIndex = store.godownShipments.findIndex((item) => item.id === shipment.id);
+    if (shipmentIndex >= 0) store.godownShipments[shipmentIndex] = shipment;
+    else store.godownShipments.unshift(shipment);
+    const partnerIndex = store.deliveryPartners.findIndex((item) => item.id === partner.id);
+    if (partnerIndex >= 0) store.deliveryPartners[partnerIndex] = partner;
+    store.trackingEvents[order.id] = [event, ...(store.trackingEvents[order.id] || [])];
+    localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
+    localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+    localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
+    localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
+    localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
+    return job;
   },
 
   async updateJobStatus(jobId: string, status: LogisticsJob['status'], notes?: string): Promise<LogisticsJob> {
