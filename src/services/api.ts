@@ -1774,12 +1774,26 @@ return qc;
 
   async updateGodownShipment(shipment: GodownShipment): Promise<GodownShipment> {
     if (!shipment?.id) throw new Error('A shipment ID is required');
-    await saveBackendRecord('godownShipments', shipment);
-    const index = store.godownShipments.findIndex((item) => item.id === shipment.id);
-    if (index >= 0) store.godownShipments[index] = shipment;
-    else store.godownShipments.unshift(shipment);
+    const response = await fetch(`${API_BASE_URL}/warehouse/shipments/${encodeURIComponent(shipment.id)}/reroute`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destinationGodownId: shipment.destinationGodownId }),
+      cache: 'no-store',
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.message || 'Could not reroute shipment');
+    const updated = result.shipment as GodownShipment;
+    const updatedOrder = result.order as Order;
+    const event = result.event as TrackingEvent;
+    const index = store.godownShipments.findIndex((item) => item.id === updated.id);
+    if (index >= 0) store.godownShipments[index] = updated;
+    else store.godownShipments.unshift(updated);
+    store.orders = store.orders.map((item) => item.id === updatedOrder.id ? updatedOrder : item);
+    store.trackingEvents[updatedOrder.id] = [event, ...(store.trackingEvents[updatedOrder.id] || [])];
     localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
-    return shipment;
+    localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+    localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
+    return updated;
   },
 
   async getGodownShipment(id: string): Promise<GodownShipment | undefined> {
