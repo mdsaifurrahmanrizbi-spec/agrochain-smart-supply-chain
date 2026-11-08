@@ -1594,6 +1594,13 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       else if (resource === 'godownShipments') rows = rows.filter((row) =>
         warehouseIds.has(row.data?.sourceWarehouseId) || godownIds.has(row.data?.destinationGodownId)
       );
+      else if (resource === 'orders') {
+        // A manager may see only COD orders assigned to one of their own facilities.
+        rows = rows.filter((row) =>
+          row.data?.paymentMethod === 'COD' &&
+          warehouseIds.has(String(row.data?.warehouseId || ''))
+        );
+      }
       else if (resource === 'jobs') {
         // A warehouse manager may only see pickup jobs for orders assigned to
         // their warehouse, and delivery jobs routed to one of their godowns.
@@ -1623,11 +1630,17 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       if (role === 'farmer') {
         rows = rows.filter((row) => row.data?.farmerId === req.auth.sub);
       } else if (role === 'warehouse') {
-        const codOrders = await pool.query(
-          "SELECT id FROM agrochain_records WHERE resource = 'orders' AND data->>'paymentMethod' = 'COD'"
+        const ownedWarehouseRows = await pool.query(
+          "SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1",
+          [req.auth.sub]
         );
-        const codOrderIds = new Set(codOrders.rows.map((row) => row.id));
-        rows = rows.filter((row) => codOrderIds.has(row.data?.orderId));
+        const ownedWarehouseIds = new Set(ownedWarehouseRows.rows.map((row) => row.id));
+        const ownedCodOrders = await pool.query(
+          "SELECT id FROM agrochain_records WHERE resource = 'orders' AND data->>'paymentMethod' = 'COD' AND data->>'warehouseId' = ANY($1::text[])",
+          [[...ownedWarehouseIds]]
+        );
+        const ownedCodOrderIds = new Set(ownedCodOrders.rows.map((row) => row.id));
+        rows = rows.filter((row) => ownedCodOrderIds.has(String(row.data?.orderId || '')));
       }
     }
 
@@ -1749,6 +1762,53 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     );
 
     const existing = existingResult.rows[0]?.data;
+
+    if (role === 'warehouse' && resource === 'orders') {
+      const ownedWarehouseRows = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1",
+        [req.auth.sub]
+      );
+      const ownedWarehouseIds = new Set(ownedWarehouseRows.rows.map((row) => row.id));
+      const existingWarehouseId = String(existing?.warehouseId || '');
+      const incomingWarehouseId = String(data.warehouseId || '');
+      if (!existing ||
+          existing.paymentMethod !== 'COD' ||
+          data.paymentMethod !== 'COD' ||
+          !existingWarehouseId ||
+          !ownedWarehouseIds.has(existingWarehouseId) ||
+          incomingWarehouseId !== existingWarehouseId) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          message: 'You can only process existing COD orders assigned to your own warehouse',
+        });
+      }
+    }
+
+    if (role === 'warehouse' && resource === 'settlements') {
+      const ownedWarehouseRows = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1",
+        [req.auth.sub]
+      );
+      const ownedWarehouseIds = new Set(ownedWarehouseRows.rows.map((row) => row.id));
+      const settlementOrderId = String(data.orderId || '');
+      const existingOrderId = String(existing?.orderId || '');
+      const relatedOrderResult = settlementOrderId
+        ? await client.query(
+            "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
+            [settlementOrderId]
+          )
+        : { rows: [] };
+      const relatedOrder = relatedOrderResult.rows[0]?.data;
+      if (!relatedOrder ||
+          relatedOrder.paymentMethod !== 'COD' ||
+          !ownedWarehouseIds.has(String(relatedOrder.warehouseId || '')) ||
+          (existing && existingOrderId !== settlementOrderId)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          message: 'You can only process COD farmer payouts for orders assigned to your own warehouse',
+        });
+      }
+    }
 
     if (role === 'warehouse' && resource === 'jobs') {
       const ownedWarehouseRows = await client.query(
@@ -2124,18 +2184,6 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     }
 
     // Warehouse may only complete COD farmer payouts. Online payouts remain admin-only.
-    if (resource === 'settlements' && role === 'warehouse') {
-      const relatedId = typeof data.orderId === 'string' ? data.orderId : '';
-      const related = relatedId ? await client.query(
-        "SELECT data FROM agrochain_records WHERE resource = 'orders' AND id = $1 FOR UPDATE",
-        [relatedId]
-      ) : { rows: [] };
-      if (!related.rows[0]?.data || related.rows[0].data.paymentMethod !== 'COD') {
-        await client.query('ROLLBACK');
-        return res.status(403).json({ message: 'Warehouse managers may only process COD farmer payouts' });
-      }
-    }
-
     // Farmer payout completion is a financial transition, so enforce its
     // prerequisites on the server rather than trusting the admin UI.
     if (resource === 'settlements') {
