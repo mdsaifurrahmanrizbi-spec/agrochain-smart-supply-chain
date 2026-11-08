@@ -1985,7 +1985,12 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
     const normalizeArea = (value) => String(value || '').normalize('NFC').toLocaleLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim().replace(/\\s+/g, ' ');
     const areaText = normalizeArea([shipment.customerArea, shipment.customerAddress, order.buyerCity, order.buyerAddress].filter(Boolean).join(' '));
     const matchesCustomerArea = (partner) => {
-      const rawAreas = Array.isArray(partner.serviceAreas) ? partner.serviceAreas : [];
+      const rawAreas = [
+        partner.serviceAreas,
+        partner.assignedAreas,
+        partner.workingAreas,
+        partner.serviceDistricts,
+      ].flatMap((candidate) => Array.isArray(candidate) ? candidate : []);
       const areas = rawAreas.flatMap((entry) => {
         if (typeof entry === 'string') return [entry];
         if (entry && typeof entry === 'object') return [entry.area, entry.name, entry.city, entry.district].filter(Boolean);
