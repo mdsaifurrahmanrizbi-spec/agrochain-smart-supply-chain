@@ -154,7 +154,7 @@ export const GodownHub: React.FC = () => {
     }
   };
 
-  // Action: Accept product at Godown & trigger automatic area-based assignment
+  // Action: Receive product at destination godown and publish an area-matched delivery request
   const handleAcceptProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedShipment) return;
@@ -176,10 +176,10 @@ export const GodownHub: React.FC = () => {
 
       if (res.assignmentSuccess && res.assignedPartner) {
         setNotice(
-          `Product accepted! Delivery partner ${res.assignedPartner.name} was automatically assigned for ${selectedShipment.customerArea}.`
+          `Product received. A delivery request is now available to approved partners serving ${selectedShipment.customerArea}. The first eligible partner to accept gets the job.`
         );
       } else {
-        setNotice('Product accepted into inventory. Delivery assignment placed in pending queue.');
+        setNotice('Product received into destination warehouse. Delivery request sent to approved partners in the customer area.');
       }
 
       setTimeout(() => {
