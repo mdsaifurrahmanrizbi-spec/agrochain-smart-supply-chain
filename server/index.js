@@ -1601,6 +1601,16 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
           warehouseIds.has(String(row.data?.warehouseId || ''))
         );
       }
+      else if (resource === 'codRecords') {
+        // COD cash custody records are visible only to the manager responsible
+        // for the warehouse assigned to the related COD order.
+        const ownedCodOrders = await pool.query(
+          "SELECT id FROM agrochain_records WHERE resource = 'orders' AND data->>'paymentMethod' = 'COD' AND data->>'warehouseId' = ANY($1::text[])",
+          [[...warehouseIds]]
+        );
+        const ownedCodOrderIds = new Set(ownedCodOrders.rows.map((row) => row.id));
+        rows = rows.filter((row) => ownedCodOrderIds.has(String(row.data?.orderId || '')));
+      }
       else if (resource === 'jobs') {
         // A warehouse manager may only see pickup jobs for orders assigned to
         // their warehouse, and delivery jobs routed to one of their godowns.
@@ -2271,6 +2281,20 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         [existing.orderId]
       );
       const relatedOrder = orderResult.rows[0]?.data;
+      if (role === 'warehouse') {
+        const ownedWarehouse = relatedOrder?.warehouseId
+          ? await client.query(
+              "SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND id = $1 AND data->>'managerId' = $2 LIMIT 1",
+              [String(relatedOrder.warehouseId), req.auth.sub]
+            )
+          : { rows: [] };
+        if (!ownedWarehouse.rows[0]) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({
+            message: 'You can only verify COD deposits for orders assigned to your own warehouse',
+          });
+        }
+      }
       if (!relatedOrder || relatedOrder.paymentMethod !== 'COD' ||
           relatedOrder.orderStatus !== 'DELIVERED' || relatedOrder.isDeliveryVerified !== true ||
           Number(existing.amount) !== Number(relatedOrder.totalAmount)) {
