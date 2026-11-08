@@ -1689,6 +1689,9 @@ async function ensureOperationalGodownForWarehouse(client, warehouseId, warehous
   }
   const existing = matches.rows[0] || null;
   const current = existing?.data || {};
+  if (existing?.data?.warehouseId && String(existing.data.warehouseId) !== String(warehouseId)) {
+    return { godown: null, created: false, skipped: true, ambiguous: true };
+  }
   const serviceAreas = [...new Set([
     ...(Array.isArray(current.serviceAreas) ? current.serviceAreas : []),
     warehouseData.area,
