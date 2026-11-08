@@ -349,6 +349,25 @@ export const agroApi = {
     return data as WarehouseApplication[];
   },
 
+  async previewWarehouseFacilityRepair(): Promise<{ candidates: Array<{ applicationId: string; managerId: string; managerName: string; email: string; facilityName: string; type: string; city: string; area: string; status: string; accountStatus: string }>; count: number }> {
+    const res = await fetch(`${API_BASE_URL}/admin/warehouse-facility-repair/preview/`, { headers: authHeaders(), cache: 'no-store' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Could not preview facility repair (${res.status})`);
+    if (!Array.isArray(data.candidates) || typeof data.count !== 'number') throw new Error('The server returned an invalid repair preview');
+    return data;
+  },
+
+  async runWarehouseFacilityRepair(): Promise<{ message: string; created: number; skipped: number; repaired: Array<{ applicationId: string; warehouseId: string; name: string; managerName: string }> }> {
+    const res = await fetch(`${API_BASE_URL}/admin/warehouse-facility-repair/run/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ confirm: true }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Facility repair failed (${res.status})`);
+    return data;
+  },
+
   async reviewWarehouseApplication(
     id: string,
     status: 'APPROVED' | 'REJECTED',
