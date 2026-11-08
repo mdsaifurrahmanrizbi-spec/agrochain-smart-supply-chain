@@ -942,6 +942,37 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     const job = store.jobs.find((j) => j.id === jobId);
     if (!job) throw new Error('Job not found');
 
+    if (job.type === 'DELIVERY') {
+      const response = await fetch(`${API_BASE_URL}/delivery/jobs/${encodeURIComponent(job.id)}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ status, notes }),
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || 'Could not update delivery job');
+      const updatedJob = result.job as LogisticsJob;
+      const updatedOrder = result.order as Order;
+      const updatedShipment = result.shipment as GodownShipment;
+      const event = result.event as TrackingEvent;
+      const jobIndex = store.jobs.findIndex((item) => item.id === updatedJob.id);
+      if (jobIndex >= 0) store.jobs[jobIndex] = updatedJob;
+      else store.jobs.unshift(updatedJob);
+      const orderIndex = store.orders.findIndex((item) => item.id === updatedOrder.id);
+      if (orderIndex >= 0) store.orders[orderIndex] = updatedOrder;
+      const shipmentIndex = store.godownShipments.findIndex((item) => item.id === updatedShipment.id);
+      if (shipmentIndex >= 0) store.godownShipments[shipmentIndex] = updatedShipment;
+      store.trackingEvents[updatedOrder.id] = [
+        event,
+        ...(store.trackingEvents[updatedOrder.id] || []).filter((item) => item.id !== event.id),
+      ];
+      localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
+      localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+      localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
+      localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
+      return updatedJob;
+    }
+
     const order = store.orders.find((o) => o.id === job.orderId);
     const events = store.trackingEvents[job.orderId] || [];
     const shipment = store.godownShipments.find((s) => s.orderId === job.orderId);
