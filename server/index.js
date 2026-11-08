@@ -2093,6 +2093,66 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
   }
 });
 
+// Destination godown manager starts the two-party handover after partner arrival.
+app.post('/api/godowns/shipments/:shipmentId/initiate-handover', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'warehouse') return res.status(403).json({ message: 'Only the destination godown manager can initiate handover' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const shipmentResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND id=$1 FOR UPDATE", [req.params.shipmentId]);
+    const shipmentRow = shipmentResult.rows[0];
+    const shipment = shipmentRow?.data || {};
+    if (!shipmentRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Shipment not found' }); }
+    const godownResult = await client.query(
+      "SELECT id,data FROM agrochain_records WHERE resource='godowns' AND id=$1 AND data->>'managerId'=$2 AND upper(coalesce(data->>'status',''))='ACTIVE' FOR UPDATE",
+      [String(shipment.destinationGodownId || ''), String(req.auth.sub)]
+    );
+    const godownRow = godownResult.rows[0];
+    if (!godownRow) { await client.query('ROLLBACK'); return res.status(403).json({ message: 'You are not the active manager of this destination godown' }); }
+    if (shipment.transferStatus !== 'DELIVERY_ACCEPTED' || shipment.handoverInitiatedAt) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Handover can start only once after the assigned delivery partner accepts the consignment' });
+    }
+    const jobResult = await client.query(
+      "SELECT id,data FROM agrochain_records WHERE resource='jobs' AND data->>'orderId'=$1 AND data->>'type'='DELIVERY' LIMIT 1 FOR UPDATE",
+      [String(shipment.orderId || '')]
+    );
+    const jobRow = jobResult.rows[0];
+    const job = jobRow?.data || {};
+    if (!jobRow || job.partnerId !== shipment.assignedPartnerId || String(job.status || '').toUpperCase() !== 'ARRIVED_AT_GODOWN') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'The assigned delivery partner must arrive at this godown before handover can be initiated' });
+    }
+    const orderResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='orders' AND id=$1 FOR UPDATE", [String(shipment.orderId || '')]);
+    const orderRow = orderResult.rows[0];
+    if (!orderRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Related order not found' }); }
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    shipment.handoverInitiatedAt = now;
+    shipment.handoverManagerId = req.auth.sub;
+    shipment.handoverManagerName = godownRow.data?.managerName || 'Warehouse Manager';
+    const order = orderRow.data || {};
+    order.handoverInitiatedAt = now;
+    order.handoverInitiatedBy = req.auth.sub;
+    const { randomUUID } = await import('node:crypto');
+    const event = {
+      id: 'trk_' + randomUUID(), orderId: orderRow.id, title: 'DESTINATION GODOWN INITIATED DELIVERY HANDOVER',
+      description: 'Destination godown manager initiated two-party handover for the assigned delivery partner.',
+      location: godownRow.data?.name || shipment.destinationGodownName || '',
+      timestamp: now, actorRole: 'Warehouse Manager',
+      actorName: godownRow.data?.managerName || 'Warehouse Manager', status: 'COMPLETED',
+    };
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godownShipments' AND id=$1", [shipmentRow.id, JSON.stringify(shipment)]);
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='orders' AND id=$1", [orderRow.id, JSON.stringify(order)]);
+    await client.query("INSERT INTO agrochain_records(resource,id,data,created_at,updated_at) VALUES('trackingEvents',$1,$2::jsonb,NOW(),NOW())", [event.id, JSON.stringify(event)]);
+    await client.query('COMMIT');
+    return res.json({ success: true, shipment, order, event });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Destination godown handover initiation failed:', error.message);
+    return res.status(500).json({ message: 'Could not initiate handover; no partial changes were committed' });
+  } finally { client.release(); }
+});
+
 // Last-mile delivery job progression is server-authoritative and transactional.
 app.post('/api/delivery/jobs/:jobId/status', requireAuth, async (req, res) => {
   if (req.auth.role !== 'delivery') return res.status(403).json({ message: 'Only the assigned delivery partner can advance this delivery job' });
