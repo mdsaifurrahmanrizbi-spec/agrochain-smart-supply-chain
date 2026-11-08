@@ -2946,6 +2946,42 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         return res.status(403).json({ message: 'You may only update your own approved partner job' });
       }
 
+      if (existing.type === 'DELIVERY') {
+        if (partner?.canDeliver !== true) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'Your approved partner profile is not enabled for customer doorstep delivery' });
+        }
+        const currentStatus = String(existing.status || '').toUpperCase();
+        const nextStatus = String(data.status || '').toUpperCase();
+        const transitions = {
+          ASSIGNED: ['ACCEPTED', 'DECLINED'],
+          ACCEPTED: ['ARRIVED_AT_GODOWN', 'FAILED'],
+          ARRIVED_AT_GODOWN: ['COLLECTED', 'FAILED'],
+          COLLECTED: ['OUT_FOR_DELIVERY', 'FAILED'],
+          OUT_FOR_DELIVERY: ['FAILED'],
+        };
+        if (nextStatus !== currentStatus && !(transitions[currentStatus] || []).includes(nextStatus)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'Delivery must follow: Assigned → Accepted → Arrived at destination godown → Collected → Out for Delivery → Customer OTP confirmation' });
+        }
+        if (['ARRIVED_AT_GODOWN', 'COLLECTED', 'OUT_FOR_DELIVERY'].includes(nextStatus)) {
+          const shipmentResult = await client.query(
+            "SELECT data FROM agrochain_records WHERE resource = 'godownShipments' AND data->>'orderId' = $1 LIMIT 1 FOR UPDATE",
+            [String(existing.orderId || '')]
+          );
+          const shipment = shipmentResult.rows[0]?.data;
+          const expectedShipmentStates = {
+            ARRIVED_AT_GODOWN: ['DELIVERY_ACCEPTED'],
+            COLLECTED: ['DELIVERY_ACCEPTED'],
+            OUT_FOR_DELIVERY: ['DELIVERY_PARTNER_COLLECTED'],
+          };
+          if (!shipment || !expectedShipmentStates[nextStatus].includes(String(shipment.transferStatus || '').toUpperCase())) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ message: 'The destination godown handover must be recorded before this delivery step' });
+          }
+        }
+      }
+
       // Enforce the pickup sequence on the server: accept first, QC while
       // accepted, then confirm physical pickup, then warehouse handover.
       if (existing.type === 'PICKUP') {
