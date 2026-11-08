@@ -2164,7 +2164,9 @@ app.post('/api/godowns/shipments/:shipmentId/assign-partner', requireAuth, async
     order.deliveryAssignmentStatus = 'ASSIGNED';
     order.orderStatus = 'DELIVERY_PARTNER_ASSIGNED';
     order.updatedAt = now;
-    if (existingJobRow && existingJob.partnerId && existingJob.partnerId !== partnerId) {
+    const previousJobStatus = String(existingJob.status || '').toUpperCase();
+    const previousJobWasTerminal = ['DECLINED', 'FAILED', 'DELIVERED', 'CANCELLED', 'COMPLETED'].includes(previousJobStatus);
+    if (existingJobRow && existingJob.partnerId && existingJob.partnerId !== partnerId && !previousJobWasTerminal) {
       const previousPartnerResult = await client.query(
         "SELECT id,data FROM agrochain_records WHERE resource='deliveryPartners' AND id=$1 FOR UPDATE",
         [String(existingJob.partnerId)]
@@ -2364,6 +2366,18 @@ app.post('/api/delivery/jobs/:jobId/status', requireAuth, async (req, res) => {
       description = 'Delivery partner left the destination godown and is travelling to the customer address.';
       location = job.destinationAddress || order.buyerAddress || '';
       eventStatus = 'IN_PROGRESS';
+    } else if (nextStatus === 'DECLINED') {
+      shipment.transferStatus = 'DELIVERY_ASSIGNMENT_PENDING';
+      delete shipment.assignedPartnerId;
+      delete shipment.assignedPartnerName;
+      delete shipment.assignedDate;
+      order.deliveryPartnerId = null;
+      order.deliveryPartnerName = null;
+      order.deliveryAssignmentStatus = 'PENDING';
+      order.orderStatus = 'DELIVERY_ASSIGNMENT_PENDING';
+      title = 'DELIVERY ASSIGNMENT DECLINED';
+      description = String(req.body?.notes || 'Assigned delivery partner declined the job. Reassignment is required.');
+      location = shipment.destinationGodownName || job.godownName || '';
     } else {
       job.failureReason = String(req.body?.notes || 'Delivery could not be completed').slice(0, 500);
       order.orderStatus = 'DELIVERY_FAILED';
@@ -2382,6 +2396,10 @@ app.post('/api/delivery/jobs/:jobId/status', requireAuth, async (req, res) => {
       status: eventStatus,
     };
     await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='jobs' AND id=$1", [jobRow.id, JSON.stringify(job)]);
+    if (['DECLINED', 'FAILED'].includes(nextStatus)) {
+      partner.activeJobsCount = Math.max(0, Number(partner.activeJobsCount || 0) - 1);
+      await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='deliveryPartners' AND id=$1", [partnerRow.id, JSON.stringify(partner)]);
+    }
     await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='orders' AND id=$1", [orderRow.id, JSON.stringify(order)]);
     await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godownShipments' AND id=$1", [shipmentRow.id, JSON.stringify(shipment)]);
     await client.query("INSERT INTO agrochain_records(resource,id,data,created_at,updated_at) VALUES('trackingEvents',$1,$2::jsonb,NOW(),NOW())", [event.id, JSON.stringify(event)]);
@@ -2413,7 +2431,7 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
     const accountResult = await client.query("SELECT email FROM auth_users WHERE id = $1", [req.auth.sub]);
     const accountEmail = accountResult.rows[0]?.email;
     const partnerResult = await client.query(
-      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (data->>'userId' = $1 OR id = $1 OR lower(data->>'email') = lower($2)) ORDER BY CASE WHEN data->>'userId' = $1 THEN 0 WHEN id = $1 THEN 1 ELSE 2 END LIMIT 1",
+      "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND (data->>'userId' = $1 OR id = $1 OR lower(data->>'email') = lower($2)) ORDER BY CASE WHEN data->>'userId' = $1 THEN 0 WHEN id = $1 THEN 1 ELSE 2 END LIMIT 1 FOR UPDATE",
       [req.auth.sub, accountEmail || '']
     );
     const partnerRecord = partnerResult.rows[0];
@@ -2519,6 +2537,12 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
     await client.query(
       "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'jobs' AND id = $1",
       [deliveryJobRow.id, JSON.stringify(deliveryJob)]
+    );
+    const partnerData = partnerRecord.data || {};
+    partnerData.activeJobsCount = Math.max(0, Number(partnerData.activeJobsCount || 0) - 1);
+    await client.query(
+      "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'deliveryPartners' AND id = $1",
+      [partnerRecord.id, JSON.stringify(partnerData)]
     );
     if (shipmentRow && shipment) {
       shipment.transferStatus = 'DELIVERED';
