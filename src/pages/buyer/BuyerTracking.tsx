@@ -87,12 +87,9 @@ export const BuyerTracking: React.FC = () => {
 
               {order.isDeliveryVerified ? (
                 <div className="space-y-1">
-                  <div className="font-mono text-2xl font-black text-emerald-300 tracking-widest">
-                    {order.deliveryOtp}
-                  </div>
-                  <div className="inline-flex items-center gap-1 text-[11px] text-emerald-200 font-bold">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
-                    <span>Delivered & Verified</span>
+                  <div className="inline-flex items-center gap-1 text-sm text-emerald-200 font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                    <span>Delivered & OTP Verified</span>
                   </div>
                 </div>
               ) : (
