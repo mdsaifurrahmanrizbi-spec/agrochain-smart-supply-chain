@@ -2380,9 +2380,13 @@ app.post('/api/delivery/jobs/:jobId/status', requireAuth, async (req, res) => {
       location = shipment.destinationGodownName || job.godownName || '';
     } else {
       job.failureReason = String(req.body?.notes || 'Delivery could not be completed').slice(0, 500);
+      shipment.transferStatus = 'DELIVERY_EXCEPTION';
+      shipment.deliveryFailedAt = now;
+      shipment.exceptionNotes = job.failureReason;
       order.orderStatus = 'DELIVERY_FAILED';
-      title = 'DELIVERY ATTEMPT FAILED';
-      description = job.failureReason;
+      order.deliveryAssignmentStatus = 'FAILED';
+      title = 'DELIVERY ATTEMPT FAILED — MANUAL RECOVERY REQUIRED';
+      description = job.failureReason + ' The consignment is flagged for warehouse/admin recovery; it cannot be automatically reassigned while physical custody is unresolved.';
       location = job.destinationAddress || order.buyerAddress || '';
       eventStatus = 'IN_PROGRESS';
     }
