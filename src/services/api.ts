@@ -369,11 +369,26 @@ export const agroApi = {
   },
 
   async previewGodownLinkRepair(): Promise<{ candidates: Array<{ warehouseId: string; facilityName: string; code: string; managerId: string; managerName: string; city: string; area: string; existingMatches: Array<{ id: string; warehouseLinked: boolean }> }>; count: number }> {
-    const res = await fetch(`${API_BASE_URL}/admin/godown-link-repair/preview/`, { headers: authHeaders(), cache: 'no-store' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.message || `Could not preview godown links (${res.status})`);
-    if (!Array.isArray(data.candidates) || typeof data.count !== 'number') throw new Error('The server returned an invalid godown-link preview');
-    return data;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/godown-link-repair/preview/`, {
+        headers: authHeaders(),
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || `Could not preview godown links (${res.status})`);
+      if (!Array.isArray(data.candidates) || typeof data.count !== 'number' || data.count !== data.candidates.length) {
+        throw new Error('The server returned an inconsistent godown-link preview. Refresh and try again.');
+      }
+      return data;
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('Godown-link preview timed out after 15 seconds. Check the backend connection and retry.');
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
   },
 
   async runGodownLinkRepair(): Promise<{ message: string; created: number; linked: number; skipped: number; repaired: Array<{ warehouseId: string; godownId: string; name: string }> }> {
