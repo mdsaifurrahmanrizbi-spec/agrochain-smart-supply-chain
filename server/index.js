@@ -2138,6 +2138,24 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
       return res.status(400).json({ message: 'Invalid customer delivery OTP', attemptsRemaining: order.otpAttemptsRemaining });
     }
 
+    const orderId = found.rows[0].id;
+    const deliveryJobResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'DELIVERY' LIMIT 1 FOR UPDATE",
+      [orderId]
+    );
+    const deliveryJobRow = deliveryJobResult.rows[0];
+    const deliveryJob = deliveryJobRow?.data;
+    if (!deliveryJob || deliveryJob.partnerId !== authorizedPartnerId ||
+        String(deliveryJob.status || '').toUpperCase() !== 'OUT_FOR_DELIVERY') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'The assigned delivery job must be marked Out for Delivery before customer OTP confirmation' });
+    }
+    const shipmentResult = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'godownShipments' AND data->>'orderId' = $1 LIMIT 1 FOR UPDATE",
+      [orderId]
+    );
+    const shipmentRow = shipmentResult.rows[0] || null;
+    const shipment = shipmentRow?.data || null;
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
     order.orderStatus = 'DELIVERED';
     order.isDeliveryVerified = true;
@@ -2174,6 +2192,59 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
           [codRecord.id, JSON.stringify(codRecord)]
         );
       }
+    }
+
+    const eventTime = now;
+    deliveryJob.status = 'DELIVERED';
+    deliveryJob.deliveryOtpSubmittedAt = eventTime;
+    deliveryJob.proofNotes = typeof req.body?.notes === 'string' && req.body.notes.trim()
+      ? req.body.notes.trim().slice(0, 500)
+      : 'Customer handover confirmed by valid OTP.';
+    deliveryJob.updatedAt = eventTime;
+    await client.query(
+      "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'jobs' AND id = $1",
+      [deliveryJobRow.id, JSON.stringify(deliveryJob)]
+    );
+    if (shipmentRow && shipment) {
+      shipment.transferStatus = 'DELIVERED';
+      shipment.deliveredAt = eventTime;
+      await client.query(
+        "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'godownShipments' AND id = $1",
+        [shipmentRow.id, JSON.stringify(shipment)]
+      );
+    }
+    const { randomUUID } = await import('node:crypto');
+    const events = [
+      {
+        id: 'trk_' + randomUUID(), orderId, title: 'DELIVERED SUCCESSFULLY',
+        description: 'Product handed over to the customer after server-side OTP verification.',
+        location: order.buyerAddress || order.buyerCity || '',
+        timestamp: eventTime, actorRole: 'Delivery Partner',
+        actorName: partnerRecord?.data?.name || order.deliveryPartnerName || 'Delivery Partner',
+        status: 'COMPLETED',
+      },
+      {
+        id: 'trk_' + randomUUID(), orderId, title: 'CUSTOMER OTP VERIFIED',
+        description: 'Customer delivery OTP was verified by the server.',
+        location: order.buyerCity || order.buyerAddress || '',
+        timestamp: eventTime, actorRole: 'Automated Security System',
+        actorName: 'AgroChain Core Engine', status: 'COMPLETED',
+      },
+    ];
+    if (order.paymentMethod === 'COD') {
+      events.push({
+        id: 'trk_' + randomUUID(), orderId, title: 'COD CUSTOMER PAYMENT CONFIRMED',
+        description: 'Cash was collected from the customer at delivery; customer payment is now PAID. Farmer payout remains pending.',
+        location: order.buyerCity || order.buyerAddress || '',
+        timestamp: eventTime, actorRole: 'Automated Payment System',
+        actorName: 'AgroChain Core Engine', status: 'COMPLETED',
+      });
+    }
+    for (const event of events) {
+      await client.query(
+        "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('trackingEvents', $1, $2::jsonb, NOW(), NOW())",
+        [event.id, JSON.stringify(event)]
+      );
     }
 
     const orderId = found.rows[0].id || id;
@@ -2216,7 +2287,7 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
     }
 
     await client.query('COMMIT');
-    return res.json({ success: true, order, codRecord, settlement, message: 'Delivery confirmed successfully' });
+    return res.json({ success: true, order, job: deliveryJob, shipment, events, codRecord, settlement, message: 'Delivery confirmed successfully' });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Delivery confirmation failed:', error.message);
