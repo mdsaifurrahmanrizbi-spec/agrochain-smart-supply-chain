@@ -2040,159 +2040,46 @@ return qc;
   // 4. Local Godown Manager Accepts Product & Triggers Automatic Delivery Partner Assignment
   async godownManagerAcceptProduct(
     shipmentId: string,
-    managerId: string = 'u-godown-1',
-    managerName: string = 'Sabbir Ahmed'
+    managerId?: string,
+    managerName?: string
   ): Promise<{ shipment: GodownShipment; assignedPartner?: DeliveryPartner; assignmentSuccess: boolean }> {
-    const shipment = store.godownShipments.find((s) => s.id === shipmentId || s.orderId === shipmentId);
-    if (!shipment) throw new Error('Shipment not found');
-    if (shipment.transferStatus !== 'ARRIVED_LOCAL_GODOWN') {
-      throw new Error('The godown manager can accept a shipment only after its arrival has been recorded.');
-    }
-
-    const order = store.orders.find((o) => o.id === shipment.orderId);
-    const godown = store.godowns.find((g) => g.id === shipment.destinationGodownId || g.code === shipment.destinationGodownId);
-    if (!godown || godown.status !== 'ACTIVE') {
-      throw new Error('Cannot accept shipment because the destination godown is missing or inactive.');
-    }
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
-
-    // Update shipment acceptance
-    shipment.transferStatus = 'GODOWN_RECEIVED';
-    shipment.acceptedDate = now;
-    shipment.acceptedByManagerId = managerId;
-    shipment.acceptedByManagerName = managerName;
-
-    // Update godown inventory after the one-time arrival acceptance check above.
-    godown.itemCount = (godown.itemCount || 0) + 1;
-    godown.currentStockMetricTons = Number(((godown.currentStockMetricTons || 0) + (shipment.weightKg / 1000)).toFixed(2));
-    localStorage.setItem('agro_local_godowns', JSON.stringify(store.godowns));
-
-    if (order) {
-      order.orderStatus = 'GODOWN_RECEIVED';
-      order.godownReceivedAt = now;
-      order.godownId = shipment.destinationGodownId;
-      order.godownName = shipment.destinationGodownName;
-    }
-
-    const events = store.trackingEvents[shipment.orderId] || [];
-    events.unshift({
-      id: `trk-${Date.now()}-gac`,
-      orderId: shipment.orderId,
-      title: 'Received at Local Godown',
-      description: `Your product has been received and accepted at the local distribution godown (${shipment.destinationGodownName}) by Godown Manager ${managerName}. Physical condition, quantity, and seals verified.`,
-      location: shipment.destinationGodownName,
-      timestamp: now,
-      actorRole: 'Godown Manager',
-      actorName: managerName,
-      status: 'COMPLETED',
+    const response = await fetch(`${API_BASE_URL}/godowns/shipments/${encodeURIComponent(shipmentId)}/accept`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ managerId, managerName }),
+      cache: 'no-store',
     });
-
-    // CRITICAL STEP: Automatic Area-Based Delivery Partner Assignment
-    const areaQuery = shipment.customerArea || (order?.buyerAddress || '');
-    const assignResult = autoAssignDeliveryPartner(areaQuery, shipment.customerAddress, store.deliveryPartners);
-
-    let assignedPartner: DeliveryPartner | undefined = undefined;
-
-    if (assignResult.isSuccess && assignResult.partner) {
-      assignedPartner = assignResult.partner;
-      assignedPartner.activeJobsCount = (assignedPartner.activeJobsCount || 0) + 1;
-
-      shipment.transferStatus = 'DELIVERY_PARTNER_ASSIGNED';
-      shipment.assignedPartnerId = assignedPartner.id;
-      shipment.assignedPartnerName = assignedPartner.name;
-      shipment.assignedDate = now;
-
-      if (order) {
-        order.orderStatus = 'DELIVERY_PARTNER_ASSIGNED';
-        order.deliveryPartnerId = assignedPartner.id;
-        order.deliveryPartnerName = assignedPartner.name;
-        order.deliveryAssignmentStatus = 'ASSIGNED';
-      }
-
-      // Create / activate delivery job for the delivery partner
-      let deliveryJob = store.jobs.find((j) => j.orderId === shipment.orderId && j.type === 'DELIVERY');
-      if (!deliveryJob) {
-        deliveryJob = {
-          id: `job-del-${Date.now()}`,
-          jobCode: `JOB-DEL-${Math.floor(1000 + Math.random() * 9000)}`,
-          orderId: shipment.orderId,
-          orderNumber: shipment.orderNumber,
-          partnerId: assignedPartner.id,
-          partnerName: assignedPartner.name,
-          type: 'DELIVERY',
-          productSummary: shipment.productName,
-          originAddress: `${shipment.destinationGodownName}, ${godown?.address || 'Local Hub'}`,
-          destinationAddress: shipment.customerAddress,
-          godownId: shipment.destinationGodownId,
-          godownName: shipment.destinationGodownName,
-          assignedDate: now,
-          status: 'ASSIGNED',
-          codAmount: order?.paymentMethod === 'COD' ? order.totalAmount : 0,
-          updatedAt: now,
-        };
-        store.jobs.unshift(deliveryJob);
-      } else {
-        deliveryJob.partnerId = assignedPartner.id;
-        deliveryJob.partnerName = assignedPartner.name;
-        deliveryJob.godownId = shipment.destinationGodownId;
-        deliveryJob.godownName = shipment.destinationGodownName;
-        deliveryJob.status = 'ASSIGNED';
-        deliveryJob.updatedAt = now;
-      }
-
-      events.unshift({
-        id: `trk-${Date.now()}-dpa`,
-        orderId: shipment.orderId,
-        title: 'Delivery Partner Assigned',
-        description: `A delivery partner (${assignedPartner.name}) has been automatically assigned for your local delivery based on service area proximity.`,
-        location: shipment.destinationGodownName,
-        timestamp: now,
-        actorRole: 'Automated Dispatcher',
-        actorName: 'AgroChain Area-Matching Engine',
-        status: 'COMPLETED',
-      });
-    } else {
-      // No partner found -> place in assignment pending queue
-      shipment.transferStatus = 'DELIVERY_ASSIGNMENT_PENDING';
-      if (order) {
-        order.orderStatus = 'DELIVERY_ASSIGNMENT_PENDING';
-        order.deliveryAssignmentStatus = 'PENDING';
-      }
-
-      events.unshift({
-        id: `trk-${Date.now()}-dpp`,
-        orderId: shipment.orderId,
-        title: 'Delivery Assignment Pending',
-        description: `Shipment accepted at ${shipment.destinationGodownName}. Area delivery partner dispatch queue is pending manual allocation.`,
-        location: shipment.destinationGodownName,
-        timestamp: now,
-        actorRole: 'System Dispatcher',
-        actorName: 'AgroChain Logistics Queue',
-        status: 'IN_PROGRESS',
-      });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.message || 'Could not accept shipment at destination godown');
     }
-
+    const shipment = result.shipment as GodownShipment;
+    const order = result.order as Order;
+    const godown = result.godown as LocalGodown;
+    const job = result.deliveryJob as LogisticsJob | null;
+    const event = result.event as TrackingEvent;
+    const shipmentIndex = store.godownShipments.findIndex((item) => item.id === shipment.id);
+    if (shipmentIndex >= 0) store.godownShipments[shipmentIndex] = shipment;
+    else store.godownShipments.unshift(shipment);
+    const orderIndex = store.orders.findIndex((item) => item.id === order.id);
+    if (orderIndex >= 0) store.orders[orderIndex] = order;
+    const godownIndex = store.godowns.findIndex((item) => item.id === godown.id);
+    if (godownIndex >= 0) store.godowns[godownIndex] = godown;
+    if (job) {
+      const jobIndex = store.jobs.findIndex((item) => item.id === job.id);
+      if (jobIndex >= 0) store.jobs[jobIndex] = job;
+      else store.jobs.unshift(job);
+    }
+    store.trackingEvents[order.id] = [event, ...(store.trackingEvents[order.id] || [])];
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
     localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
+    localStorage.setItem('agro_local_godowns', JSON.stringify(store.godowns));
     localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
-    localStorage.setItem('agro_delivery_partners', JSON.stringify(store.deliveryPartners));
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
-
-    await saveBackendRecord('godownShipments', shipment);
-    if (order) await saveBackendRecord('orders', order);
-    if (godown) await saveBackendRecord('godowns', godown);
-    if (assignedPartner) await saveBackendRecord('deliveryPartners', assignedPartner);
-    const deliveryJob = store.jobs.find((j) => j.orderId === shipment.orderId && j.type === 'DELIVERY');
-    if (deliveryJob) await saveBackendRecord('jobs', deliveryJob);
-    for (const event of events) {
-      await saveBackendRecord('trackingEvents', event);
-    }
-
-    return {
-      shipment,
-      assignedPartner,
-      assignmentSuccess: assignResult.isSuccess,
-    };
+    const assignedPartner = job
+      ? store.deliveryPartners.find((partner) => partner.id === job.partnerId)
+      : undefined;
+    return { shipment, assignedPartner, assignmentSuccess: Boolean(result.assignmentSuccess) };
   },
 
   // 5. Delivery Partner Accepts Delivery Job
