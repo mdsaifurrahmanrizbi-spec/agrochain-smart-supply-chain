@@ -1663,7 +1663,7 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
       return res.status(409).json({ message: 'A warehouse transfer record already exists for this order' });
     }
 
-    const normalizeArea = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+    const normalizeArea = (value) => String(value || '').normalize('NFC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
     const customerAddress = String(order.buyerAddress || '');
     const customerCity = String(order.buyerCity || '');
     const addressText = normalizeArea([customerAddress, customerCity].join(' '));
@@ -1761,6 +1761,54 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// Origin warehouse manager explicitly selects an active destination for an exception shipment.
+app.post('/api/warehouse/shipments/:shipmentId/reroute', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'warehouse') return res.status(403).json({ message: 'Only the origin warehouse manager can reroute this consignment' });
+  const destinationId = String(req.body?.destinationGodownId || '').trim();
+  if (!destinationId || destinationId === 'unassigned') return res.status(400).json({ message: 'Select an active destination godown' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const shipmentResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND id=$1 FOR UPDATE", [req.params.shipmentId]);
+    const shipmentRow = shipmentResult.rows[0];
+    if (!shipmentRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Shipment not found' }); }
+    const shipment = shipmentRow.data || {};
+    if (shipment.transferStatus !== 'MANUAL_ROUTING_REQUIRED') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Only shipments awaiting manual routing can be rerouted' });
+    }
+    const sourceResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='warehouses' AND id=$1 AND data->>'managerId'=$2 FOR UPDATE", [String(shipment.sourceWarehouseId || ''), String(req.auth.sub)]);
+    if (!sourceResult.rows[0]) { await client.query('ROLLBACK'); return res.status(403).json({ message: 'You are not the manager of this origin warehouse' }); }
+    const destinationResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godowns' AND id=$1 AND upper(coalesce(data->>'status',''))='ACTIVE'", [destinationId]);
+    const destination = destinationResult.rows[0];
+    if (!destination) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Selected destination godown is missing or inactive' }); }
+    const orderResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='orders' AND id=$1 FOR UPDATE", [String(shipment.orderId || '')]);
+    const orderRow = orderResult.rows[0];
+    if (!orderRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Related order not found' }); }
+    const now = new Date().toISOString();
+    shipment.destinationGodownId = destination.id;
+    shipment.destinationGodownName = destination.data?.name || destination.id;
+    shipment.transferStatus = 'PENDING_DISPATCH';
+    delete shipment.exceptionNotes;
+    const order = orderRow.data || {};
+    order.destinationGodownId = destination.id;
+    order.destinationGodownName = destination.data?.name || destination.id;
+    order.orderStatus = 'WAREHOUSE_RECEIVED';
+    order.updatedAt = now;
+    const { randomUUID } = await import('node:crypto');
+    const event = { id:'trk_'+randomUUID(), orderId:orderRow.id, title:'MANUAL DESTINATION ROUTING CONFIRMED', description:'Origin warehouse manager routed the consignment to '+(destination.data?.name || destination.id)+'.', location:sourceResult.rows[0].data?.name || shipment.sourceWarehouseName, timestamp:now, actorRole:'Warehouse Manager', actorName:String(sourceResult.rows[0].data?.managerName || 'Warehouse Manager'), status:'COMPLETED' };
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godownShipments' AND id=$1", [shipmentRow.id, JSON.stringify(shipment)]);
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='orders' AND id=$1", [orderRow.id, JSON.stringify(order)]);
+    await client.query("INSERT INTO agrochain_records(resource,id,data,created_at,updated_at) VALUES('trackingEvents',$1,$2::jsonb,NOW(),NOW())", [event.id, JSON.stringify(event)]);
+    await client.query('COMMIT');
+    return res.json({ shipment, order, event });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Manual warehouse reroute failed:', error.message);
+    return res.status(500).json({ message: 'Rerouting failed; no partial changes were committed' });
+  } finally { client.release(); }
 });
 
 // Dispatch a received consignment from its origin warehouse in one transaction.
