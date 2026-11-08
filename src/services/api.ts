@@ -1785,7 +1785,9 @@ return qc;
     if (index >= 0) store.godownShipments[index] = updated;
     else store.godownShipments.unshift(updated);
     store.orders = store.orders.map((item) => item.id === updatedOrder.id ? updatedOrder : item);
-    store.trackingEvents[updatedOrder.id] = [event, ...(store.trackingEvents[updatedOrder.id] || [])];
+    if (event) {
+      store.trackingEvents[updatedOrder.id] = [event, ...(store.trackingEvents[updatedOrder.id] || [])];
+    }
     localStorage.setItem('agro_godown_shipments', JSON.stringify(store.godownShipments));
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
     localStorage.setItem('agro_tracking_events', JSON.stringify(store.trackingEvents));
@@ -1898,7 +1900,7 @@ return qc;
     if (!response.ok) throw new Error(result.message || 'Could not record destination arrival');
     const updatedShipment = result.shipment as GodownShipment;
     const updatedOrder = result.order as Order;
-    const event = result.event as TrackingEvent;
+    const event = result.event as TrackingEvent | null;
     store.godownShipments = store.godownShipments.map((item) => item.id === updatedShipment.id ? updatedShipment : item);
     store.orders = store.orders.map((item) => item.id === updatedOrder.id ? updatedOrder : item);
     store.trackingEvents[updatedOrder.id] = [event, ...(store.trackingEvents[updatedOrder.id] || [])];
