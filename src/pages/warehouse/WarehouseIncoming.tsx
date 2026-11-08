@@ -106,7 +106,7 @@ export const WarehouseIncoming: React.FC = () => {
 
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 text-slate-700 space-y-1">
                   <div><strong>Farm Origin:</strong> {job.originAddress}</div>
-                  <div><strong>Receiving Warehouse:</strong> {job.destinationAddress || job.warehouseName || job.originWarehouseName || 'Origin warehouse not assigned'}</div>
+                  <div><strong>Receiving Warehouse:</strong> {job.destinationAddress || 'Origin warehouse not assigned'}</div>
                 </div>
               </div>
 
