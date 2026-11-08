@@ -2480,7 +2480,7 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
         productSummary: (order.items || []).map((item) => `${item.quantity} ${item.unit} ${item.productName}`).join(', '),
         deliveryDate: now,
         deliveryConfirmedAt: now,
-        paymentMethod: 'bKash',
+        paymentMethod: order.paymentMethod || 'ONLINE',
         settlementStatus: 'PENDING',
       };
       await client.query(
