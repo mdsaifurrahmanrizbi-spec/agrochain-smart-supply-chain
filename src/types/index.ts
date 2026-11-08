@@ -304,6 +304,7 @@ export interface LogisticsJob {
   godownName?: string;
   assignedDate: string;
   status: 
+    | 'AVAILABLE'
     | 'ASSIGNED'
     | 'ACCEPTED'
     | 'DECLINED'
