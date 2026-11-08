@@ -303,7 +303,7 @@ app.post('/api/register/', async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const id = 'usr_' + (await import('node:crypto')).crypto.randomUUID();
+    const id = 'usr_' + (await import('node:crypto')).randomUUID();
 
     const result = await pool.query(
       `INSERT INTO auth_users (id, name, email, password_hash, role, status)
@@ -760,7 +760,7 @@ app.post('/api/admin/users/', requireAuth, async (req, res) => {
   if (password.length < 12 || password.length > 128) return res.status(400).json({ message: 'Password must be 12 to 128 characters long' });
   if (!['warehouse', 'inspector'].includes(role)) return res.status(400).json({ message: 'Only Warehouse and Inspector staff can be created here' });
   try {
-    const id = 'usr_' + (await import('node:crypto')).crypto.randomUUID();
+    const id = 'usr_' + (await import('node:crypto')).randomUUID();
     const passwordHash = await bcrypt.hash(password, 12);
     const result = await pool.query(
       `INSERT INTO auth_users (id, name, email, password_hash, role, status)
@@ -1770,9 +1770,9 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
 // performed by the origin warehouse manager or by a manager of another godown.
 app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, res) => {
   if (req.auth.role !== 'warehouse') {
-  const { randomUUID } = await import('node:crypto');
     return res.status(403).json({ message: 'Only a warehouse manager can accept a destination-godown shipment' });
   }
+  const { randomUUID } = await import('node:crypto');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
