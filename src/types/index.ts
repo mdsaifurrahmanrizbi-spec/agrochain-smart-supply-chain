@@ -300,6 +300,7 @@ export interface LogisticsJob {
   productSummary: string;
   originAddress: string;
   destinationAddress: string;
+  customerArea?: string;
   godownId?: string;
   godownName?: string;
   assignedDate: string;
