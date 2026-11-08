@@ -1909,6 +1909,16 @@ app.post('/api/godowns/shipments/:shipmentId/arrive', requireAuth, async (req, r
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const shipmentLockLookup = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'godownShipments' AND id = $1 LIMIT 1",
+      [req.params.shipmentId]
+    );
+    const lockOrderId = String(shipmentLockLookup.rows[0]?.data?.orderId || '');
+    if (!shipmentLockLookup.rows[0] || !lockOrderId) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({message:'Shipment or related order not found'});
+    }
+    await lockDeliveryOrder(client, lockOrderId);
     const shipmentResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND id=$1 FOR UPDATE",[req.params.shipmentId]);
     const shipmentRow=shipmentResult.rows[0];
     const shipment=shipmentRow?.data || {};
@@ -2186,7 +2196,7 @@ app.post('/api/godowns/shipments/:shipmentId/recover-failed-delivery', requireAu
     const orderResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='orders' AND id=$1 FOR UPDATE", [String(shipment.orderId || '')]);
     const orderRow = orderResult.rows[0];
     if (!orderRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Related order not found' }); }
-    const jobResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='jobs' AND data->>'orderId'=$1 AND data->>'type'='DELIVERY' ORDER BY created_at DESC LIMIT 1 FOR UPDATE", [orderRow.id]);
+    const jobResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='jobs' AND data->>'orderId'=$1 AND data->>'type'='DELIVERY' ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE", [orderRow.id]);
     const jobRow = jobResult.rows[0];
     const job = jobRow?.data || {};
     if (!jobRow || String(job.status || '').toUpperCase() !== 'FAILED' || orderRow.data?.deliveryAssignmentStatus !== 'FAILED') {
@@ -2289,7 +2299,7 @@ app.post('/api/godowns/shipments/:shipmentId/assign-partner', requireAuth, async
     const orderRow = orderResult.rows[0];
     if (!orderRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Related order not found' }); }
     const order = orderRow.data || {};
-    const jobResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='jobs' AND data->>'orderId'=$1 AND data->>'type'='DELIVERY' ORDER BY created_at DESC LIMIT 1 FOR UPDATE", [orderRow.id]);
+    const jobResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='jobs' AND data->>'orderId'=$1 AND data->>'type'='DELIVERY' ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE", [orderRow.id]);
     const existingJobRow = jobResult.rows[0];
     const existingJob = existingJobRow?.data || {};
     if (existingJobRow && ['ASSIGNED','ACCEPTED','ARRIVED_AT_GODOWN','COLLECTED','OUT_FOR_DELIVERY'].includes(String(existingJob.status || '').toUpperCase())) {
@@ -2383,7 +2393,7 @@ app.post('/api/godowns/shipments/:shipmentId/initiate-handover', requireAuth, as
       return res.status(409).json({ message: 'Handover can start only once after the assigned delivery partner accepts the consignment' });
     }
     const jobResult = await client.query(
-      "SELECT id,data FROM agrochain_records WHERE resource='jobs' AND data->>'orderId'=$1 AND data->>'type'='DELIVERY' LIMIT 1 FOR UPDATE",
+      "SELECT id,data FROM agrochain_records WHERE resource='jobs' AND data->>'orderId'=$1 AND data->>'type'='DELIVERY' ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE",
       [String(shipment.orderId || '')]
     );
     const jobRow = jobResult.rows[0];
@@ -2661,7 +2671,7 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
 
     const orderId = found.rows[0].id;
     const deliveryJobResult = await client.query(
-      "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'DELIVERY' LIMIT 1 FOR UPDATE",
+      "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'DELIVERY' ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE",
       [orderId]
     );
     const deliveryJobRow = deliveryJobResult.rows[0];
@@ -2830,6 +2840,16 @@ app.post('/api/orders/:id/cancel', requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const orderLockLookup = await client.query(
+      "SELECT id FROM agrochain_records WHERE resource = 'orders' AND (id = $1 OR data->>'orderNumber' = $1) LIMIT 1",
+      [id]
+    );
+    const lockOrderId = String(orderLockLookup.rows[0]?.id || '');
+    if (!lockOrderId) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    await lockDeliveryOrder(client, lockOrderId);
     const found = await client.query("SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND (id = $1 OR data->>'orderNumber' = $1) LIMIT 1 FOR UPDATE", [id]);
     const row = found.rows[0];
     const order = row?.data;
