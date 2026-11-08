@@ -1937,19 +1937,26 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
     const partnerRows = await client.query(
       "SELECT id, data FROM agrochain_records WHERE resource = 'deliveryPartners' AND upper(coalesce(data->>'approvalStatus','')) = 'APPROVED' AND coalesce((data->>'canDeliver')::boolean, false) = true ORDER BY coalesce((data->>'activeJobsCount')::int,0), id FOR UPDATE"
     );
-    const areaText = String(shipment.customerArea || order.buyerAddress || '').toLowerCase();
+    const areaText = String([shipment.customerArea, shipment.customerAddress, order.buyerCity, order.buyerAddress].filter(Boolean).join(' ')).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+    const existingJob = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'DELIVERY' LIMIT 1 FOR UPDATE",
+      [orderRow.id]
+    );
+    if (existingJob.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'A delivery job already exists for this order; review its assignment before godown acceptance' });
+    }
     const partnerRow = partnerRows.rows.find((row) => {
       const partner = row.data || {};
       const areas = Array.isArray(partner.serviceAreas) ? partner.serviceAreas : [];
-      return areas.some((area) => areaText.includes(String(area).toLowerCase()) || String(areaText).includes(String(area).toLowerCase()));
+      return areas.some((area) => {
+        const term = String(area || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+        return term.length >= 2 && areaText.length > 0 && (' ' + areaText + ' ').includes(' ' + term + ' ');
+      });
     });
     let deliveryJob = null;
     if (partnerRow) {
       const partner = partnerRow.data || {};
-      const existingJob = await client.query(
-        "SELECT id, data FROM agrochain_records WHERE resource = 'jobs' AND data->>'orderId' = $1 AND data->>'type' = 'DELIVERY' LIMIT 1 FOR UPDATE",
-        [orderRow.id]
-      );
       deliveryJob = existingJob.rows[0]?.data || {
         id: 'job_' + randomUUID(),
         jobCode: 'JOB-DEL-' + Math.floor(100000 + Math.random() * 900000),
