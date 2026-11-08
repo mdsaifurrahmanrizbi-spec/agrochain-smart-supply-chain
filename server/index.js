@@ -2093,6 +2093,97 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
   }
 });
 
+// Destination godown manager manually assigns an eligible partner through one transaction.
+app.post('/api/godowns/shipments/:shipmentId/assign-partner', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'warehouse') return res.status(403).json({ message: 'Only the destination godown manager can assign a delivery partner' });
+  const partnerId = String(req.body?.partnerId || '').trim();
+  if (!partnerId) return res.status(400).json({ message: 'Select a delivery partner' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const shipmentResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND id=$1 FOR UPDATE", [req.params.shipmentId]);
+    const shipmentRow = shipmentResult.rows[0];
+    const shipment = shipmentRow?.data || {};
+    if (!shipmentRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Shipment not found' }); }
+    if (!['GODOWN_RECEIVED','DELIVERY_ASSIGNMENT_PENDING'].includes(String(shipment.transferStatus || '').toUpperCase())) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Partner assignment is allowed only after destination godown receipt or while assignment is pending' });
+    }
+    const godownResult = await client.query(
+      "SELECT id,data FROM agrochain_records WHERE resource='godowns' AND id=$1 AND data->>'managerId'=$2 AND upper(coalesce(data->>'status',''))='ACTIVE' FOR UPDATE",
+      [String(shipment.destinationGodownId || ''), String(req.auth.sub)]
+    );
+    const godownRow = godownResult.rows[0];
+    if (!godownRow) { await client.query('ROLLBACK'); return res.status(403).json({ message: 'You are not the active manager of this destination godown' }); }
+    const partnerResult = await client.query(
+      "SELECT id,data FROM agrochain_records WHERE resource='deliveryPartners' AND id=$1 FOR UPDATE",
+      [partnerId]
+    );
+    const partnerRow = partnerResult.rows[0];
+    const partner = partnerRow?.data || {};
+    if (!partnerRow || String(partner.approvalStatus || '').toUpperCase() !== 'APPROVED' || partner.canDeliver !== true) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Only approved partners enabled for doorstep delivery can be assigned' });
+    }
+    const normalize = (value) => String(value || '').normalize('NFC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
+    const customerArea = normalize([shipment.customerArea, shipment.customerAddress].filter(Boolean).join(' '));
+    const partnerAreas = [partner.preferredArea, ...(Array.isArray(partner.assignedAreas) ? partner.assignedAreas : []), ...(Array.isArray(partner.serviceAreas) ? partner.serviceAreas : []), ...(Array.isArray(partner.workingAreas) ? partner.workingAreas : [])].map(normalize).filter(Boolean);
+    if (!customerArea || !partnerAreas.some((area) => customerArea.includes(area) || area.includes(customerArea))) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'This partner is not configured for the customer delivery area' });
+    }
+    const orderResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='orders' AND id=$1 FOR UPDATE", [String(shipment.orderId || '')]);
+    const orderRow = orderResult.rows[0];
+    if (!orderRow) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Related order not found' }); }
+    const order = orderRow.data || {};
+    const jobResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='jobs' AND data->>'orderId'=$1 AND data->>'type'='DELIVERY' LIMIT 1 FOR UPDATE", [orderRow.id]);
+    const existingJobRow = jobResult.rows[0];
+    const existingJob = existingJobRow?.data || {};
+    if (existingJobRow && ['ASSIGNED','ACCEPTED','ARRIVED_AT_GODOWN','COLLECTED','OUT_FOR_DELIVERY'].includes(String(existingJob.status || '').toUpperCase())) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'This shipment already has an active delivery job' });
+    }
+    const now = new Date().toISOString();
+    const { randomUUID } = await import('node:crypto');
+    const job = existingJobRow ? { ...existingJob, partnerId, partnerName: partner.name || 'Delivery Partner', status: 'ASSIGNED', assignedDate: now, updatedAt: now } : {
+      id: 'job_' + randomUUID(), jobCode: 'JOB-DEL-' + randomUUID().slice(0, 8).toUpperCase(),
+      orderId: orderRow.id, orderNumber: shipment.orderNumber || order.orderNumber || orderRow.id,
+      partnerId, partnerName: partner.name || 'Delivery Partner', type: 'DELIVERY',
+      productSummary: shipment.productName || 'Order consignment',
+      originAddress: shipment.destinationGodownName || godownRow.data?.name || godownRow.id,
+      destinationAddress: shipment.customerAddress || order.buyerAddress || '',
+      godownId: godownRow.id, godownName: godownRow.data?.name || shipment.destinationGodownName || godownRow.id,
+      assignedDate: now, status: 'ASSIGNED', codAmount: order.paymentMethod === 'COD' ? Number(order.totalAmount || 0) : 0, updatedAt: now
+    };
+    shipment.assignedPartnerId = partnerId;
+    shipment.assignedPartnerName = job.partnerName;
+    shipment.transferStatus = 'DELIVERY_PARTNER_ASSIGNED';
+    shipment.assignedDate = now;
+    order.deliveryPartnerId = partnerId;
+    order.deliveryPartnerName = job.partnerName;
+    order.deliveryAssignmentStatus = 'ASSIGNED';
+    order.orderStatus = 'DELIVERY_PARTNER_ASSIGNED';
+    order.updatedAt = now;
+    partner.activeJobsCount = Math.max(0, Number(partner.activeJobsCount || 0)) + (existingJobRow ? 0 : 1);
+    const event = { id:'trk_'+randomUUID(), orderId:orderRow.id, title:'DELIVERY PARTNER ASSIGNED', description:'Destination godown manager assigned '+job.partnerName+' for customer doorstep delivery.', location:job.godownName, timestamp:now, actorRole:'Warehouse Manager', actorName:String(godownRow.data?.managerName || 'Warehouse Manager'), status:'COMPLETED' };
+    const upsert = async (resource,id,data) => client.query(
+      "INSERT INTO agrochain_records(resource,id,data,created_at,updated_at) VALUES($1,$2,$3::jsonb,NOW(),NOW()) ON CONFLICT(resource,id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()",
+      [resource,id,JSON.stringify(data)]
+    );
+    await upsert('godownShipments',shipmentRow.id,shipment);
+    await upsert('orders',orderRow.id,order);
+    await upsert('deliveryPartners',partnerRow.id,partner);
+    await upsert('jobs',job.id,job);
+    await upsert('trackingEvents',event.id,event);
+    await client.query('COMMIT');
+    return res.json({ shipment, order, partner, job, event });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Transactional delivery partner assignment failed:', error.message);
+    return res.status(500).json({ message: 'Partner assignment failed; no partial changes were committed' });
+  } finally { client.release(); }
+});
+
 // Destination godown manager starts the two-party handover after partner arrival.
 app.post('/api/godowns/shipments/:shipmentId/initiate-handover', requireAuth, async (req, res) => {
   if (req.auth.role !== 'warehouse') return res.status(403).json({ message: 'Only the destination godown manager can initiate handover' });
