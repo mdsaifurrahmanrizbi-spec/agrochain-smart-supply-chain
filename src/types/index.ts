@@ -329,6 +329,9 @@ export interface Warehouse {
   code: string;
   type: 'CENTRAL' | 'REGIONAL_GODOWN';
   location: string;
+  address?: string;
+  city?: string;
+  area?: string;
   managerName: string;
   managerId: string;
   capacityMetricTons: number;
