@@ -58,18 +58,6 @@ export const WarehouseTransfers: React.FC = () => {
     }
   };
 
-  const handleLogArrived = async (shipmentId: string) => {
-    setErrorMsg(null);
-    try {
-      await agroApi.markArrivedAtLocalGodown(shipmentId);
-      await refreshData();
-      setNotice('Arrival logged at destination godown receiving dock!');
-      setTimeout(() => setNotice(null), 3500);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Arrival logging failed');
-    }
-  };
-
   const handleRerouteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reroutingShipment || !targetGodownId) return;
@@ -215,13 +203,7 @@ export const WarehouseTransfers: React.FC = () => {
                     )}
 
                     {s.transferStatus === 'GODOWN_TRANSFER_IN_TRANSIT' && (
-                      <button
-                        onClick={() => handleLogArrived(s.id)}
-                        className="px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200"
-                        title="Simulate arrival at destination godown dock"
-                      >
-                        Simulate Arrival
-                      </button>
+                      <span className="text-[11px] text-blue-700 font-medium">Awaiting destination warehouse arrival confirmation</span>
                     )}
 
                     {['ARRIVED_LOCAL_GODOWN', 'GODOWN_RECEIVED', 'DELIVERY_PARTNER_ASSIGNED', 'DELIVERY_ACCEPTED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(
