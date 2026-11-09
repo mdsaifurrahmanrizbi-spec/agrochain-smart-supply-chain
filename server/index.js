@@ -1770,7 +1770,21 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
     );
     const orderRow = orderResult.rows[0];
     const order = orderRow?.data || {};
-    const assignedWarehouseId = String(order.originWarehouseId || order.warehouseId || '');
+    // Keep intake authorization consistent with the warehouse-scoped records API and
+    // pickup assignment: older orders may not have persisted origin IDs yet, while
+    // resolveOriginWarehouseForOrder can safely infer one only when every item maps
+    // to exactly one regional warehouse.
+    let assignedWarehouseId = String(order.originWarehouseId || order.warehouseId || '');
+    if (!assignedWarehouseId) {
+      const resolvedOrigin = await resolveOriginWarehouseForOrder(client, order);
+      if (resolvedOrigin) {
+        assignedWarehouseId = String(resolvedOrigin.id);
+        order.warehouseId = assignedWarehouseId;
+        order.warehouseName = String(resolvedOrigin.data?.name || assignedWarehouseId);
+        order.originWarehouseId = assignedWarehouseId;
+        order.originWarehouseName = String(resolvedOrigin.data?.name || assignedWarehouseId);
+      }
+    }
     if (!orderRow || assignedWarehouseId !== String(warehouseRow.id)) {
       await client.query('ROLLBACK');
       return res.status(403).json({ message: 'This consignment is not assigned to your origin warehouse' });
