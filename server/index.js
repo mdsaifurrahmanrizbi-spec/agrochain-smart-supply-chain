@@ -77,6 +77,41 @@ const createFacilityInventoryStock = async (client, order, facility, eventType, 
   }
   return createdLines;
 };
+const consumeOrderProductReservations = async (client, order, actor) => {
+  if (order.stockReservationStatus !== 'RESERVED' || !Array.isArray(order.stockReservations)) return false;
+  for (const reservation of [...order.stockReservations].sort((a, b) => String(a.productId).localeCompare(String(b.productId)))) {
+    const result = await client.query("SELECT id,data FROM agrochain_records WHERE resource='products' AND id=$1 FOR UPDATE", [String(reservation.productId || '')]);
+    const row = result.rows[0];
+    const product = row?.data || {};
+    const quantity = Number(reservation.quantity);
+    const reserved = Number(product.reservedQuantity || 0);
+    if (!row || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(reserved) || reserved + 0.0001 < quantity) {
+      throw new Error('The order product reservation is missing or inconsistent; delivery stock cannot be finalized');
+    }
+    product.reservedQuantity = Number((reserved - quantity).toFixed(3));
+    product.updatedAt = new Date().toISOString();
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='products' AND id=$1", [row.id, JSON.stringify(product)]);
+    await appendInventoryLedger(client, {
+      eventType: 'ORDER_RESERVATION_CONSUMED',
+      orderId: String(order.id || ''),
+      orderNumber: String(order.orderNumber || order.id || ''),
+      productId: row.id,
+      productName: String(product.name || reservation.productName || 'Product'),
+      farmerId: String(reservation.farmerId || product.farmerId || ''),
+      quantity,
+      unit: String(reservation.unit || product.unit || ''),
+      availableAfter: Number(product.availableQuantity || 0),
+      reservedAfter: product.reservedQuantity,
+      actorId: actor.id,
+      actorRole: actor.role,
+      reason: 'Order delivered; reserved farmer listing stock finalized',
+    });
+  }
+  order.stockReservationStatus = 'CONSUMED';
+  order.stockReservationConsumedAt = new Date().toISOString();
+  return true;
+};
+
 const decrementFacilityInventoryStock = async (client, lines, eventType, actor, order) => {
   for (const line of Array.isArray(lines) ? lines : []) {
     const result = await client.query("SELECT id,data FROM agrochain_records WHERE resource='inventory' AND id=$1 FOR UPDATE", [String(line.inventoryId || '')]);
@@ -2345,7 +2380,8 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
     shipment.inventoryDestinationReceivedAt = now;
     const managerName = String(godown.managerName || req.body?.managerName || 'Warehouse Manager');
     godown.itemCount = Number(godown.itemCount || 0) + 1;
-    godown.currentStockMetricTons = Number((Number(godown.currentStockMetricTons || 0) + Number(shipment.weightKg || 0) / 1000).toFixed(2));
+    const acceptedStockKg = inventoryDestinationLines.reduce((sum, line) => sum + Number(line.quantityKg || 0), 0);
+    godown.currentStockMetricTons = Number((Number(godown.currentStockMetricTons || 0) + acceptedStockKg / 1000).toFixed(3));
     shipment.transferStatus = 'DELIVERY_ASSIGNMENT_PENDING';
     shipment.acceptedDate = now;
     shipment.acceptedByManagerId = req.auth.sub;
@@ -3085,6 +3121,8 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
       shipment.inventoryStockSyncStatus = 'DELIVERED';
       shipment.inventoryDeliveredAt = now;
     } else if (shipmentRow && shipment) shipment.inventoryStockSyncStatus = 'LEGACY_NOT_TRACKED';
+    try { await consumeOrderProductReservations(client, order, { id: req.auth.sub, role: req.auth.role }); }
+    catch (reservationError) { await client.query('ROLLBACK'); return res.status(409).json({ message: reservationError.message || 'Could not finalize the order stock reservation' }); }
     order.orderStatus = 'DELIVERED';
     order.isDeliveryVerified = true;
     order.deliveryConfirmedAt = now;
@@ -3741,6 +3779,9 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
   // Buyers may create a single pending QC queue record for an order they own.
   // They cannot edit existing QC records or submit inspection results.
   const buyerPendingQcCreate = role === 'buyer' && resource === 'qualityChecks';
+  if (resource === 'inventory' || resource === 'inventoryLedger') {
+    return res.status(403).json({ message: 'Inventory records are managed through receiving, dispatch, and audited adjustment workflows' });
+  }
   if (!canWriteResource(role, resource) && !buyerPendingQcCreate) {
     return res.status(403).json({ message: 'You do not have permission to write this resource' });
   }
