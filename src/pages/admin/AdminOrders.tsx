@@ -3,7 +3,7 @@ import { agroApi, store } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { TrackingTimeline } from '../../components/common/TrackingTimeline';
 import { Search, Banknote } from 'lucide-react';
-import { FarmerPayoutDialog, FarmerPayoutMethod } from '../../components/admin/FarmerPayoutDialog';
+import { FarmerPayoutDialog, type FarmerPayoutMethod } from '../../components/admin/FarmerPayoutDialog';
 
 export const AdminOrders: React.FC = () => {
   const [orders, setOrders] = useState(store.orders);
@@ -175,22 +175,24 @@ export const AdminOrders: React.FC = () => {
                         const payout = settlements.find((item) => item.orderId === ord.id || item.orderNumber === ord.orderNumber);
                         return <div className="mb-2">
                           <StatusBadge status={payout?.settlementStatus || 'PENDING'} size="sm" />
-                          {payout?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Transfer ref: {payout.payoutReference}</span>}
+                          {payout?.payoutMethod && <span className="mt-1 block text-[10px] text-slate-500">Via: {payout.payoutMethod}</span>}{payout?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Txn: {payout.payoutReference}</span>}
                         </div>;
                       })()}
                       {(() => {
                         const settlement = settlements.find((item) => item.orderId === ord.id || item.orderNumber === ord.orderNumber);
                         const firstItem = ord.items[0];
                         const cashVerified = codRecords.some((record) => record.orderId === ord.id && record.depositStatus === 'CASH_DEPOSIT_VERIFIED');
+                        const account = firstItem ? payoutAccounts[firstItem.farmerId] || '' : '';
+                        const accountAvailable = !!account && account !== 'Not provided';
                         const payoutReady = ord.isDeliveryVerified && ord.orderStatus === 'DELIVERED' &&
-                          (ord.paymentMethod !== 'COD' || cashVerified) &&
+                          (ord.paymentMethod !== 'COD' || cashVerified) && accountAvailable &&
                           settlement && !['PAID', 'COMPLETED'].includes(settlement.settlementStatus);
-                        if (!payoutReady || !settlement || !firstItem) return <span className="text-slate-400 text-[11px]">{ord.orderStatus === 'DELIVERED' ? 'Awaiting COD cash verification / settlement' : 'Available after delivery'}</span>;
+                        if (!payoutReady || !settlement || !firstItem) return <span className="text-slate-400 text-[11px]">{!accountAvailable && ord.orderStatus === 'DELIVERED' ? 'Farmer payout account unavailable' : ord.orderStatus === 'DELIVERED' ? 'Awaiting COD cash verification / settlement' : 'Available after delivery'}</span>;
                         return <button type="button" onClick={() => setSelectedPayout({
                           settlementId: settlement.id,
                           orderNumber: ord.orderNumber,
                           farmerName: firstItem.farmerName || settlement.farmerName,
-                          account: payoutAccounts[firstItem.farmerId] || '',
+                          account,
                           amount: settlement.netPayout || settlement.amount || net,
                         })} className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">
                           <Banknote className="h-3 w-3" /> Payment Successful
