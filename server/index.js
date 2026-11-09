@@ -3976,7 +3976,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       const wasPaid = paidStatuses.includes(existing?.settlementStatus);
 
       const immutablePaidFields = [
-        'settlementStatus', 'payoutReference', 'payoutDate',
+        'settlementStatus', 'payoutMethod', 'payoutReference', 'payoutDate',
         'amount', 'netPayout', 'productSalesValue', 'commissionDeducted',
         'farmerId', 'orderId', 'orderNumber', 'paymentMethod',
       ];
@@ -3987,9 +3987,13 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       }
 
       if (isPaidNow && !wasPaid) {
-        if (typeof data.payoutReference !== 'string' || !data.payoutReference.trim()) {
+        if (!['bKash', 'Nagad', 'Bank Transfer'].includes(data.payoutMethod)) {
           await client.query('ROLLBACK');
-          return res.status(400).json({ message: 'A real bank/MFS payout reference is required' });
+          return res.status(400).json({ message: 'Select the method used for the farmer payout' });
+        }
+        if (typeof data.payoutReference !== 'string' || !data.payoutReference.trim() || data.payoutReference.trim().length > 120) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'A valid transaction ID or bank reference is required' });
         }
         const relatedOrderId = typeof data.orderId === 'string' ? data.orderId : '';
         const relatedOrderNumber = typeof data.orderNumber === 'string' ? data.orderNumber : '';
