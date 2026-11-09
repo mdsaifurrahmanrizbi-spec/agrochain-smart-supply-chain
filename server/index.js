@@ -2373,7 +2373,7 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
     }
     const now = new Date().toISOString();
     let inventoryDestinationLines = [];
-    try { inventoryDestinationLines = await createFacilityInventoryStock(client, order, { godownId: godownRow.id, warehouseId: String(godown.warehouseId || ''), name: String(godown.name || shipment.destinationGodownName || godownRow.id), storageZone: 'Destination Godown' }, 'GODOWN_RECEIVED', { id: req.auth.sub, role: req.auth.role }); }
+    try { inventoryDestinationLines = await createFacilityInventoryStock(client, order, { godownId: godownRow.id, name: String(godown.name || shipment.destinationGodownName || godownRow.id), storageZone: 'Destination Godown' }, 'GODOWN_RECEIVED', { id: req.auth.sub, role: req.auth.role }); }
     catch (inventoryError) { await client.query('ROLLBACK'); return res.status(409).json({ message: inventoryError.message || 'Could not safely receive stock at the destination godown' }); }
     shipment.inventoryDestinationLines = inventoryDestinationLines;
     shipment.inventoryStockSyncStatus = 'AT_DESTINATION_GODOWN';
