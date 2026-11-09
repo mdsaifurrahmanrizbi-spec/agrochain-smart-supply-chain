@@ -1,13 +1,34 @@
-import React from 'react';
-import { store } from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
+import React, { useEffect, useState } from 'react';
+import { agroApi } from '../../services/api';
+import { CODRecord } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import { DollarSign, ShieldAlert, CheckCircle, Clock } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 
 export const DeliveryCOD: React.FC = () => {
-  const { user } = useAuth();
-  const partnerId = user?.id === 'u-delivery-1' ? 'dp-1' : 'dp-1';
-  const codRecords = store.codRecords.filter((c) => c.deliveryPartnerId === partnerId);
+  const [codRecords, setCodRecords] = useState<CODRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    agroApi.getCODRecordsForCurrentPartner()
+      .then((records) => {
+        if (active) setCodRecords(records);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setLoadError(error instanceof Error ? error.message : 'Could not load COD collections.');
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const totalCollected = codRecords.reduce((sum, c) => sum + c.amount, 0);
   const pendingDeposit = codRecords
@@ -80,7 +101,19 @@ export const DeliveryCOD: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {codRecords.map((r) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="py-8 px-4 text-center text-slate-500">Loading your COD collections…</td>
+                </tr>
+              ) : loadError ? (
+                <tr>
+                  <td colSpan={6} className="py-8 px-4 text-center text-red-600">{loadError}</td>
+                </tr>
+              ) : codRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 px-4 text-center text-slate-500">No COD collections have been recorded for your delivery account yet.</td>
+                </tr>
+              ) : codRecords.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
                   <td className="py-3 px-4 font-mono font-bold text-slate-900">{r.id}</td>
                   <td className="py-3 px-4 font-mono text-emerald-800 font-semibold">{r.orderNumber}</td>
