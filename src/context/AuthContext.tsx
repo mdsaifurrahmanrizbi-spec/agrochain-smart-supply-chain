@@ -53,7 +53,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch {
           // A first-time farmer may not have created a profile record yet.
         }
-        const restoredUser = { ...verifiedUser, ...profile, ...verifiedUser };
+        const restoredUser = {
+          ...verifiedUser,
+          ...profile,
+          // Keep identity and financial fields authoritative from /api/me.
+          id: verifiedUser.id,
+          email: verifiedUser.email,
+          role: verifiedUser.role,
+          status: verifiedUser.status,
+          payoutMethod: verifiedUser.payoutMethod,
+          payoutAccountNumber: verifiedUser.payoutAccountNumber,
+          payoutBankName: verifiedUser.payoutBankName,
+        };
         if (!cancelled) {
           setUser(restoredUser);
           localStorage.setItem('agro_active_user', JSON.stringify(restoredUser));
