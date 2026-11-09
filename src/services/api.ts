@@ -557,14 +557,15 @@ export const agroApi = {
     return data as User;
   },
 
-  async getFarmerPayoutAccounts(farmerIds?: string[]): Promise<Array<{
+  async getFarmerPayoutAccounts(farmerRefs?: Array<{ farmerId: string; farmerName?: string }>): Promise<Array<{
     farmerId: string;
     farmerName: string;
     payoutMethod: 'bKash' | 'Nagad' | 'Bank Transfer' | null;
     payoutAccountNumber: string | null;
     payoutBankName: string | null;
   }>> {
-    const query = farmerIds?.length ? '?farmerIds=' + encodeURIComponent(farmerIds.join(',')) : '';
+    const refs = (farmerRefs || []).filter((ref) => ref.farmerId || ref.farmerName);
+    const query = refs.length ? '?farmerRefs=' + encodeURIComponent(JSON.stringify(refs.slice(0, 100))) : '';
     const response = await fetch(API_BASE_URL + '/farmers/payout-accounts/' + query, { headers: authHeaders() });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !Array.isArray(data)) throw new Error(data.message || 'Could not load farmer payout accounts');
