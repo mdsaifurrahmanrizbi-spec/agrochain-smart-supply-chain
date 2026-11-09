@@ -1706,6 +1706,16 @@ return qc;
   },
 
   // COD & Settlements
+  // The backend scopes this response to the authenticated delivery partner.
+  // Unlike the general admin/warehouse loader, this method never falls back to
+  // shared local demo data when the authenticated request fails.
+  async getCODRecordsForCurrentPartner(): Promise<CODRecord[]> {
+    const records = await getBackendRecords<CODRecord>('codRecords');
+    store.codRecords = records;
+    localStorage.setItem('agro_cod_records', JSON.stringify(records));
+    return records;
+  },
+
   async getCODRecords(): Promise<CODRecord[]> {
     try {
       const records = await getBackendRecords<CODRecord>('codRecords');
