@@ -1771,10 +1771,15 @@ return qc;
     // until an authorized admin records an actual transfer and its reference.
   },
 
-  async releaseSellerSettlementPayout(settlementId: string, payoutReference: string): Promise<SellerSettlement> {
+  async releaseSellerSettlementPayout(
+    settlementId: string,
+    payoutMethod: 'bKash' | 'Nagad' | 'Bank Transfer',
+    payoutReference: string
+  ): Promise<SellerSettlement> {
     const stl = store.settlements.find((s) => s.id === settlementId);
     if (!stl) throw new Error('Settlement not found');
-    if (!payoutReference.trim()) throw new Error('Enter the real bank/MFS transfer reference before confirming payout');
+    if (!['bKash', 'Nagad', 'Bank Transfer'].includes(payoutMethod)) throw new Error('Choose the method used to send the farmer payout');
+    if (!payoutReference.trim()) throw new Error('Enter the real transaction ID or bank reference before confirming payout');
 
     const order = store.orders.find((o) => o.id === stl.orderId || o.orderNumber === stl.orderNumber);
     if (!order) throw new Error('Related order not found');
@@ -1793,6 +1798,7 @@ return qc;
 
     stl.settlementStatus = 'PAID';
     stl.payoutDate = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    stl.payoutMethod = payoutMethod;
     stl.payoutReference = payoutReference.trim();
     await saveBackendRecord('settlements', stl);
     localStorage.setItem('agro_settlements', JSON.stringify(store.settlements));
