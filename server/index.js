@@ -3263,6 +3263,91 @@ app.get('/api/public/batches/:batchCode', async (req, res) => {
   }
 });
 
+
+app.post('/api/inventory/:inventoryId/adjust', requireAuth, async (req, res) => {
+  if (!['admin', 'warehouse'].includes(req.auth.role)) return res.status(403).json({ message: 'Only Admin or an authorized Warehouse Manager can adjust inventory' });
+  const newQuantityKg = Number(req.body?.newQuantityKg);
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 300) : '';
+  if (!Number.isFinite(newQuantityKg) || newQuantityKg < 0 || !reason || reason.length < 5) {
+    return res.status(400).json({ message: 'Enter a non-negative physical quantity and an adjustment reason of at least 5 characters' });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query("SELECT id,data FROM agrochain_records WHERE resource='inventory' AND id=$1 FOR UPDATE", [req.params.inventoryId]);
+    const row = result.rows[0];
+    if (!row) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Inventory record not found' }); }
+    const inventory = row.data || {};
+    const warehouseId = String(inventory.warehouseId || '');
+    const godownId = String(inventory.godownId || '');
+    let facilityRow = null;
+    let facilityResource = '';
+    if (req.auth.role === 'admin') {
+      if (godownId) {
+        const found = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godowns' AND id=$1 FOR UPDATE", [godownId]);
+        if (found.rows[0]) { facilityRow = found.rows[0]; facilityResource = 'godowns'; }
+      }
+      if (!facilityRow && warehouseId) {
+        const found = await client.query("SELECT id,data FROM agrochain_records WHERE resource='warehouses' AND id=$1 FOR UPDATE", [warehouseId]);
+        if (found.rows[0]) { facilityRow = found.rows[0]; facilityResource = 'warehouses'; }
+      }
+    } else {
+      if (godownId) {
+        const found = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godowns' AND id=$1 AND data->>'managerId'=$2 AND upper(coalesce(data->>'status',''))='ACTIVE' FOR UPDATE", [godownId, String(req.auth.sub)]);
+        if (found.rows[0]) { facilityRow = found.rows[0]; facilityResource = 'godowns'; }
+      }
+      if (!facilityRow && warehouseId) {
+        const found = await client.query("SELECT id,data FROM agrochain_records WHERE resource='warehouses' AND id=$1 AND data->>'managerId'=$2 FOR UPDATE", [warehouseId, String(req.auth.sub)]);
+        if (found.rows[0]) { facilityRow = found.rows[0]; facilityResource = 'warehouses'; }
+      }
+    }
+    if (!facilityRow) { await client.query('ROLLBACK'); return res.status(403).json({ message: 'This inventory record is not assigned to your managed facility' }); }
+    const previousQuantityKg = Number(inventory.quantityKg || 0);
+    const reservedKg = Number(inventory.reservedKg || 0);
+    if (!Number.isFinite(previousQuantityKg) || !Number.isFinite(reservedKg) || reservedKg < 0 || newQuantityKg + 0.0001 < reservedKg) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Physical stock cannot be lower than the quantity already reserved' });
+    }
+    const deltaKg = Number((newQuantityKg - previousQuantityKg).toFixed(3));
+    inventory.quantityKg = Number(newQuantityKg.toFixed(3));
+    inventory.reservedKg = reservedKg;
+    inventory.availableKg = Number((inventory.quantityKg - reservedKg).toFixed(3));
+    inventory.updatedAt = new Date().toISOString();
+    inventory.lastAdjustmentReason = reason;
+    inventory.lastAdjustedBy = req.auth.sub;
+    inventory.lastAdjustedAt = inventory.updatedAt;
+    const facility = facilityRow.data || {};
+    const metricDelta = deltaKg / 1000;
+    if (facilityResource === 'godowns') facility.currentStockMetricTons = Math.max(0, Number((Number(facility.currentStockMetricTons || 0) + metricDelta).toFixed(3)));
+    else facility.currentStockMetricTons = Math.max(0, Number((Number(facility.currentStockMetricTons || 0) + metricDelta).toFixed(3)));
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='inventory' AND id=$1", [row.id, JSON.stringify(inventory)]);
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource=$3 AND id=$1", [facilityRow.id, JSON.stringify(facility), facilityResource]);
+    await appendInventoryLedger(client, {
+      eventType: 'MANUAL_ADJUSTMENT',
+      inventoryId: row.id,
+      productId: String(inventory.productId || ''),
+      productName: String(inventory.cropName || 'Product'),
+      warehouseId,
+      godownId,
+      previousQuantityKg,
+      quantityKg: deltaKg,
+      quantityDeltaKg: deltaKg,
+      physicalAfterKg: inventory.quantityKg,
+      reservedAfterKg: reservedKg,
+      availableAfterKg: inventory.availableKg,
+      reason,
+      actorId: req.auth.sub,
+      actorRole: req.auth.role,
+    });
+    await client.query('COMMIT');
+    return res.json({ inventory, deltaKg, message: 'Inventory adjustment saved with audit history' });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Inventory adjustment failed:', error.message);
+    return res.status(500).json({ message: 'Inventory adjustment failed; no partial changes were committed' });
+  } finally { client.release(); }
+});
+
 // Read records for a resource.
 app.get('/api/records/:resource', requireAuth, async (req, res) => {
   const { resource } = req.params;
