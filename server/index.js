@@ -2274,6 +2274,7 @@ app.post('/api/warehouse/shipments/:shipmentId/dispatch', requireAuth, async (re
     const order = orderRow.data || {};
     if (Array.isArray(shipment.inventorySourceLines) && shipment.inventorySourceLines.length) {
       try { await decrementFacilityInventoryStock(client, shipment.inventorySourceLines, 'WAREHOUSE_DISPATCHED', { id: req.auth.sub, role: req.auth.role }, order); }
+      if (shipment.directWarehouseReservation === true) { order.warehouseStockReservationStatus = 'CONSUMED'; order.warehouseStockReservationConsumedAt = now; }
       catch (inventoryError) { await client.query('ROLLBACK'); return res.status(409).json({ message: inventoryError.message || 'Could not safely dispatch warehouse stock' }); }
       const sourceStockKg = shipment.inventorySourceLines.reduce((sum, line) => sum + Number(line.quantityKg || 0), 0);
       const sourceStock = warehouseResult.rows[0].data || {};
@@ -3336,11 +3337,37 @@ app.post('/api/orders/:id/cancel', requireAuth, async (req, res) => {
     if (order.orderStatus === 'CANCELLED') { await client.query('ROLLBACK'); return res.status(409).json({ message: 'This order has already been cancelled' }); }
     if (order.orderStatus === 'DELIVERED' || order.isDeliveryVerified === true) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Delivered orders cannot be cancelled' }); }
     const pickupStarted = new Set(['PICKED_UP','IN_TRANSIT','IN_TRANSIT_CENTRAL','WAREHOUSE_RECEIVED','IN_WAREHOUSE','GODOWN_ASSIGNED','GODOWN_TRANSFER_IN_TRANSIT','ARRIVED_LOCAL_GODOWN','GODOWN_RECEIVED','ARRIVED_REGIONAL_GODOWN','DELIVERY_PARTNER_ASSIGNED','DELIVERY_ASSIGNMENT_PENDING','MANUAL_ROUTING_REQUIRED','DELIVERY_ACCEPTED','DELIVERY_PARTNER_COLLECTED','OUT_FOR_DELIVERY']);
-    if (pickupStarted.has(String(order.orderStatus || '').toUpperCase()) || order.partnerCollectedAt || order.handoverInitiatedAt || order.outForDeliveryAt) {
+    if ((pickupStarted.has(String(order.orderStatus || '').toUpperCase()) && !(order.fulfillmentSource === 'WAREHOUSE' && ['PENDING_DISPATCH','MANUAL_ROUTING_REQUIRED'].includes(String(order.orderStatus === 'MANUAL_ROUTING_REQUIRED' ? 'MANUAL_ROUTING_REQUIRED' : 'PENDING_DISPATCH')))) || order.partnerCollectedAt || order.handoverInitiatedAt || order.outForDeliveryAt) {
       await client.query('ROLLBACK');
       return res.status(409).json({ message: 'This order can no longer be cancelled because pickup or shipment processing has started' });
     }
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    if (order.fulfillmentSource === 'WAREHOUSE' && order.warehouseStockReservationStatus === 'RESERVED' && Array.isArray(order.warehouseStockReservations)) {
+      const { randomUUID } = await import('node:crypto');
+      for (const reservation of [...order.warehouseStockReservations].sort((a,b)=>String(a.inventoryId).localeCompare(String(b.inventoryId)))) {
+        const result = await client.query("SELECT id,data FROM agrochain_records WHERE resource='inventory' AND id=$1 FOR UPDATE", [String(reservation.inventoryId || '')]);
+        const row = result.rows[0], inventory = row?.data || {};
+        const quantityKg = Number(reservation.quantityKg), physical = Number(inventory.quantityKg || 0), reserved = Number(inventory.reservedKg || 0);
+        if (!row || !Number.isFinite(quantityKg) || quantityKg <= 0 || !Number.isFinite(physical) || !Number.isFinite(reserved) || reserved + 0.0001 < quantityKg) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message:'Could not safely release warehouse stock reservation. Stock was not changed; contact an administrator.' });
+        }
+        inventory.reservedKg = Number((reserved - quantityKg).toFixed(3));
+        inventory.availableKg = Number((physical - inventory.reservedKg).toFixed(3));
+        inventory.updatedAt = new Date().toISOString();
+        await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='inventory' AND id=$1", [row.id, JSON.stringify(inventory)]);
+        await appendInventoryLedger(client, {
+          eventType:'ORDER_WAREHOUSE_RESERVATION_RELEASED', orderId:row.id ? String(order.id || '') : '',
+          orderNumber:String(order.orderNumber || order.id || ''), inventoryId:row.id,
+          productId:String(reservation.productId || inventory.productId || ''), productName:String(inventory.cropName || 'Product'),
+          warehouseId:String(inventory.warehouseId || ''), quantityKg,
+          physicalAfterKg:physical, reservedAfterKg:inventory.reservedKg, availableAfterKg:inventory.availableKg,
+          actorId:req.auth.sub, actorRole:'buyer', reason:'Customer cancelled before warehouse dispatch; reserved stock returned to available inventory',
+        });
+      }
+      order.warehouseStockReservationStatus = 'RELEASED';
+      order.warehouseStockReservationReleasedAt = new Date().toISOString();
+    }
     if (order.stockReservationStatus === 'RESERVED' && Array.isArray(order.stockReservations)) {
       const { randomUUID } = await import('node:crypto');
       for (const reservation of [...order.stockReservations].sort((a, b) => String(a.productId).localeCompare(String(b.productId)))) {
