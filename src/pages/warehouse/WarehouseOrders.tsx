@@ -15,7 +15,15 @@ export const WarehouseOrders: React.FC = () => {
   // Warehouse staff intentionally receive COD orders only. Online orders are not rendered here.
   const [orders, setOrders] = useState(store.orders.filter((order) => order.paymentMethod === 'COD'));
   const [settlements, setSettlements] = useState(store.settlements);
-  const [payoutAccounts, setPayoutAccounts] = useState<Record<string, string>>({});
+  const [payoutAccounts, setPayoutAccounts] = useState<Awaited<ReturnType<typeof agroApi.getFarmerPayoutAccounts>>>([]);
+  const [payoutAccountsLoaded, setPayoutAccountsLoaded] = useState(false);
+  const getPayoutAccount = (farmerId: unknown, farmerName: unknown): string => {
+    const id = String(farmerId || '').trim();
+    const name = String(farmerName || '').normalize('NFKC').trim().toLocaleLowerCase();
+    const account = payoutAccounts.find((candidate) => id && String(candidate.farmerId || '').trim() === id)
+      || (name ? payoutAccounts.find((candidate) => String(candidate.farmerName || '').normalize('NFKC').trim().toLocaleLowerCase() === name) : undefined);
+    return account ? ([account.payoutMethod, account.payoutBankName, account.payoutAccountNumber].filter(Boolean).join(' · ') || 'Not provided') : '';
+  };
   const [codRecords, setCodRecords] = useState(store.codRecords);
   const [selectedPayout, setSelectedPayout] = useState<{ settlementId: string; orderNumber: string; farmerName: string; account: string; amount: number } | null>(null);
 
@@ -36,16 +44,14 @@ export const WarehouseOrders: React.FC = () => {
       farmerName: item.farmerName,
     })));
     const uniqueRefs = [...new Map(farmerRefs.map((ref) => [`${ref.farmerId}|${ref.farmerName}`, ref])).values()];
+    setPayoutAccountsLoaded(false);
     agroApi.getFarmerPayoutAccounts(uniqueRefs).then((accounts) => {
-      setPayoutAccounts(Object.fromEntries(accounts.flatMap((account) => {
-        const display = [account.payoutMethod, account.payoutBankName, account.payoutAccountNumber].filter(Boolean).join(' · ') || 'Not provided';
-        const nameKey = `name:${String(account.farmerName || '').trim().toLocaleLowerCase()}`;
-        return [
-          ...(account.farmerId ? [[account.farmerId, display] as [string, string]] : []),
-          ...(account.farmerName ? [[nameKey, display] as [string, string]] : []),
-        ];
-      })));
-    }).catch((error) => console.warn('Could not load authorized farmer payout accounts.', error));
+      setPayoutAccounts(accounts);
+      setPayoutAccountsLoaded(true);
+    }).catch((error) => {
+      console.warn('Could not load authorized farmer payout accounts.', error);
+      setPayoutAccountsLoaded(true);
+    });
   }, [orders]);
 
   const confirmFarmerPayout = async (method: FarmerPayoutMethod, reference: string) => {
@@ -132,7 +138,7 @@ export const WarehouseOrders: React.FC = () => {
                       <div className="text-[10px] text-slate-500">{order.buyerPhone} · {order.buyerCity}</div>
                     </td>
                     <td className="px-4 py-3">
-                      {order.items.map((item) => <div key={item.productId} className="mb-1"><div className="font-semibold">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div><div className="text-[10px] text-slate-600">Payout account: {payoutAccounts[item.farmerId] || payoutAccounts[`name:${String(item.farmerName || '').trim().toLocaleLowerCase()}`] || 'Loading / not provided'}</div></div>)}
+                      {order.items.map((item) => <div key={item.productId} className="mb-1"><div className="font-semibold">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div><div className="text-[10px] text-slate-600">Payout account: {getPayoutAccount(item.farmerId, item.farmerName) || (payoutAccountsLoaded ? 'Not provided' : 'Loading...')}</div></div>)}
                     </td>
                     <td className="px-4 py-3 font-bold tabular-nums">৳{order.totalAmount.toLocaleString()}</td>
                     <td className="px-4 py-3"><StatusBadge status={order.orderStatus} size="sm" />{delivered && <span className="mt-1 block text-[10px] font-semibold text-emerald-700">OTP confirmed</span>}</td>
@@ -161,7 +167,7 @@ export const WarehouseOrders: React.FC = () => {
                             const settlement = settlements.find((item) => item.orderId === order.id || item.orderNumber === order.orderNumber);
                             const firstItem = order.items[0];
                             if (!settlement || !firstItem) return;
-                            const account = payoutAccounts[firstItem.farmerId] || payoutAccounts[`name:${String(firstItem.farmerName || '').trim().toLocaleLowerCase()}`] || '';
+                            const account = getPayoutAccount(firstItem.farmerId, firstItem.farmerName);
                             if (!account || account === 'Not provided') return;
                             setSelectedPayout({
                               settlementId: settlement.id,
@@ -173,7 +179,7 @@ export const WarehouseOrders: React.FC = () => {
                           }} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 font-bold text-white"><Banknote className="h-3.5 w-3.5" /> Payment Successful</button> :
                           ['PAID', 'COMPLETED'].includes(settlements.find((item) => item.orderId === order.id || item.orderNumber === order.orderNumber)?.settlementStatus || '') ?
                             <span className="inline-flex items-center gap-1 font-bold text-emerald-700"><Banknote className="h-3.5 w-3.5" /> Paid</span> :
-                            <span className="text-[10px] text-slate-400">{delivered && verified && (!payoutAccounts[order.items[0]?.farmerId] || payoutAccounts[`name:${String(order.items[0]?.farmerName || '').trim().toLocaleLowerCase()}`] || payoutAccounts[order.items[0]?.farmerId] || payoutAccounts[`name:${String(order.items[0]?.farmerName || '').trim().toLocaleLowerCase()}`] === 'Not provided') ? 'Farmer payout account unavailable' : 'After delivery and cash verification'}</span>}
+                            <span className="text-[10px] text-slate-400">{delivered && verified && (!getPayoutAccount(order.items[0]?.farmerId, order.items[0]?.farmerName) || getPayoutAccount(order.items[0]?.farmerId, order.items[0]?.farmerName) === 'Not provided') ? 'Farmer payout account unavailable' : 'After delivery and cash verification'}</span>}
                     </td>
                   </tr>
                 );
