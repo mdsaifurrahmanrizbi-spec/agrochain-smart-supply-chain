@@ -392,7 +392,8 @@ export interface SellerSettlement {
   productSummary: string;
   deliveryDate: string;
   deliveryConfirmedAt?: string;
-  paymentMethod: 'bKash' | 'Nagad' | 'Bank Transfer';
+  // Live settlements store the order payment channel; legacy demo rows may store the payout channel.
+  paymentMethod: 'ONLINE' | 'COD' | 'bKash' | 'Nagad' | 'Bank Transfer';
   settlementStatus: 'PENDING' | 'PROCESSING' | 'PAID' | 'ON_HOLD' | 'COMPLETED';
   payoutDate?: string;
   payoutMethod?: 'bKash' | 'Nagad' | 'Bank Transfer';

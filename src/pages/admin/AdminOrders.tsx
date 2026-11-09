@@ -176,6 +176,11 @@ export const AdminOrders: React.FC = () => {
                       <span className="font-medium text-slate-800">{ord.paymentMethod === 'ONLINE' ? 'RupantorPay Online' : 'Cash on Delivery'}</span>
                       <span className={`block mt-1 text-[10px] font-bold ${ord.paymentStatus === 'PAID' ? 'text-emerald-700' : 'text-amber-700'}`}>{ord.paymentStatus === 'PAID' ? 'Customer payment: PAID' : 'Customer payment: UNPAID'}</span>
                       {ord.transactionId && <span className="block text-[10px] font-mono text-slate-500">Txn: {ord.transactionId}</span>}
+                      {ord.paymentMethod === 'COD' && (() => {
+                        const cashRecord = codRecords.find((record) => record.orderId === ord.id || record.orderNumber === ord.orderNumber);
+                        const cashVerified = cashRecord?.depositStatus === 'CASH_DEPOSIT_VERIFIED';
+                        return <span className={`mt-1 block text-[10px] font-semibold ${cashVerified ? 'text-emerald-700' : 'text-amber-700'}`}>COD cash audit: {cashVerified ? 'VERIFIED' : cashRecord ? 'PENDING VERIFICATION' : 'NOT COLLECTED'}</span>;
+                      })()}
                     </td>
                     <td className="py-3 px-4">
                       <StatusBadge status={ord.orderStatus} size="sm" />
@@ -194,10 +199,16 @@ export const AdminOrders: React.FC = () => {
                         const cashVerified = codRecords.some((record) => record.orderId === ord.id && record.depositStatus === 'CASH_DEPOSIT_VERIFIED');
                         const account = firstItem ? getPayoutAccount(firstItem.farmerId, firstItem.farmerName) : '';
                         const accountAvailable = !!account && account !== 'Not provided';
+                        const payoutPaid = !!settlement && ['PAID', 'COMPLETED'].includes(settlement.settlementStatus);
                         const payoutReady = ord.isDeliveryVerified && ord.orderStatus === 'DELIVERED' &&
                           (ord.paymentMethod !== 'COD' || cashVerified) && accountAvailable &&
-                          settlement && !['PAID', 'COMPLETED'].includes(settlement.settlementStatus);
-                        if (!payoutReady || !settlement || !firstItem) return <span className="text-slate-400 text-[11px]">{!accountAvailable && ord.orderStatus === 'DELIVERED' ? 'Farmer payout account unavailable' : ord.orderStatus === 'DELIVERED' ? 'Awaiting COD cash verification / settlement' : 'Available after delivery'}</span>;
+                          settlement && !payoutPaid;
+                        if (payoutPaid) return <span className={`text-[11px] font-semibold ${ord.paymentMethod === 'COD' && !cashVerified ? 'text-amber-700' : 'text-emerald-700'}`}>{ord.paymentMethod === 'COD' && !cashVerified ? 'PAID · COD AUDIT MISMATCH' : 'Payout already recorded'}</span>;
+                        if (!settlement) return <span className="text-slate-400 text-[11px]">Settlement record unavailable</span>;
+                        if (ord.orderStatus !== 'DELIVERED' || !ord.isDeliveryVerified) return <span className="text-slate-400 text-[11px]">Available after verified delivery</span>;
+                        if (ord.paymentMethod === 'COD' && !cashVerified) return <span className="text-amber-700 text-[11px]">Awaiting COD cash verification</span>;
+                        if (!accountAvailable) return <span className="text-slate-400 text-[11px]">Farmer payout account unavailable</span>;
+                        if (!payoutReady || !firstItem) return <span className="text-slate-400 text-[11px]">Payout not available</span>;
                         return <button type="button" onClick={() => setSelectedPayout({
                           settlementId: settlement.id,
                           orderNumber: ord.orderNumber,
