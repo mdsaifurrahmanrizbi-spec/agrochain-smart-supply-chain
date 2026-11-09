@@ -37,10 +37,14 @@ export const WarehouseOrders: React.FC = () => {
     })));
     const uniqueRefs = [...new Map(farmerRefs.map((ref) => [`${ref.farmerId}|${ref.farmerName}`, ref])).values()];
     agroApi.getFarmerPayoutAccounts(uniqueRefs).then((accounts) => {
-      setPayoutAccounts(Object.fromEntries(accounts.map((account) => [
-        account.farmerId,
-        [account.payoutMethod, account.payoutBankName, account.payoutAccountNumber].filter(Boolean).join(' · ') || 'Not provided',
-      ])));
+      setPayoutAccounts(Object.fromEntries(accounts.flatMap((account) => {
+        const display = [account.payoutMethod, account.payoutBankName, account.payoutAccountNumber].filter(Boolean).join(' · ') || 'Not provided';
+        const nameKey = `name:${String(account.farmerName || '').trim().toLocaleLowerCase()}`;
+        return [
+          ...(account.farmerId ? [[account.farmerId, display] as [string, string]] : []),
+          ...(account.farmerName ? [[nameKey, display] as [string, string]] : []),
+        ];
+      })));
     }).catch((error) => console.warn('Could not load authorized farmer payout accounts.', error));
   }, [orders]);
 
@@ -128,7 +132,7 @@ export const WarehouseOrders: React.FC = () => {
                       <div className="text-[10px] text-slate-500">{order.buyerPhone} · {order.buyerCity}</div>
                     </td>
                     <td className="px-4 py-3">
-                      {order.items.map((item) => <div key={item.productId} className="mb-1"><div className="font-semibold">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div><div className="text-[10px] text-slate-600">Payout account: {payoutAccounts[item.farmerId] || 'Loading / not provided'}</div></div>)}
+                      {order.items.map((item) => <div key={item.productId} className="mb-1"><div className="font-semibold">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div><div className="text-[10px] text-slate-600">Payout account: {payoutAccounts[item.farmerId] || payoutAccounts[`name:${String(item.farmerName || '').trim().toLocaleLowerCase()}`] || 'Loading / not provided'}</div></div>)}
                     </td>
                     <td className="px-4 py-3 font-bold tabular-nums">৳{order.totalAmount.toLocaleString()}</td>
                     <td className="px-4 py-3"><StatusBadge status={order.orderStatus} size="sm" />{delivered && <span className="mt-1 block text-[10px] font-semibold text-emerald-700">OTP confirmed</span>}</td>
@@ -157,7 +161,7 @@ export const WarehouseOrders: React.FC = () => {
                             const settlement = settlements.find((item) => item.orderId === order.id || item.orderNumber === order.orderNumber);
                             const firstItem = order.items[0];
                             if (!settlement || !firstItem) return;
-                            const account = payoutAccounts[firstItem.farmerId] || '';
+                            const account = payoutAccounts[firstItem.farmerId] || payoutAccounts[`name:${String(firstItem.farmerName || '').trim().toLocaleLowerCase()}`] || '';
                             if (!account || account === 'Not provided') return;
                             setSelectedPayout({
                               settlementId: settlement.id,
@@ -169,7 +173,7 @@ export const WarehouseOrders: React.FC = () => {
                           }} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 font-bold text-white"><Banknote className="h-3.5 w-3.5" /> Payment Successful</button> :
                           ['PAID', 'COMPLETED'].includes(settlements.find((item) => item.orderId === order.id || item.orderNumber === order.orderNumber)?.settlementStatus || '') ?
                             <span className="inline-flex items-center gap-1 font-bold text-emerald-700"><Banknote className="h-3.5 w-3.5" /> Paid</span> :
-                            <span className="text-[10px] text-slate-400">{delivered && verified && (!payoutAccounts[order.items[0]?.farmerId] || payoutAccounts[order.items[0]?.farmerId] === 'Not provided') ? 'Farmer payout account unavailable' : 'After delivery and cash verification'}</span>}
+                            <span className="text-[10px] text-slate-400">{delivered && verified && (!payoutAccounts[order.items[0]?.farmerId] || payoutAccounts[`name:${String(order.items[0]?.farmerName || '').trim().toLocaleLowerCase()}`] || payoutAccounts[order.items[0]?.farmerId] || payoutAccounts[`name:${String(order.items[0]?.farmerName || '').trim().toLocaleLowerCase()}`] === 'Not provided') ? 'Farmer payout account unavailable' : 'After delivery and cash verification'}</span>}
                     </td>
                   </tr>
                 );

@@ -33,10 +33,14 @@ export const AdminOrders: React.FC = () => {
     })));
     const uniqueRefs = [...new Map(farmerRefs.map((ref) => [`${ref.farmerId}|${ref.farmerName}`, ref])).values()];
     agroApi.getFarmerPayoutAccounts(uniqueRefs).then((accounts) => {
-      setPayoutAccounts(Object.fromEntries(accounts.map((account) => [
-        account.farmerId,
-        [account.payoutMethod, account.payoutBankName, account.payoutAccountNumber].filter(Boolean).join(' · ') || 'Not provided',
-      ])));
+      setPayoutAccounts(Object.fromEntries(accounts.flatMap((account) => {
+        const display = [account.payoutMethod, account.payoutBankName, account.payoutAccountNumber].filter(Boolean).join(' · ') || 'Not provided';
+        const nameKey = `name:${String(account.farmerName || '').trim().toLocaleLowerCase()}`;
+        return [
+          ...(account.farmerId ? [[account.farmerId, display] as [string, string]] : []),
+          ...(account.farmerName ? [[nameKey, display] as [string, string]] : []),
+        ];
+      })));
     }).catch((error) => console.warn('Could not load authorized farmer payout accounts.', error));
   }, [orders]);
   const confirmFarmerPayout = async (method: FarmerPayoutMethod, reference: string) => {
@@ -144,7 +148,7 @@ export const AdminOrders: React.FC = () => {
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      {ord.items.map((item) => <div key={`${ord.id}-${item.productId}`} className="mb-1"><div className="font-semibold text-slate-900">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div><div className="text-[10px] text-slate-600">Payout account: {payoutAccounts[item.farmerId] || 'Loading / not provided'}</div></div>)}
+                      {ord.items.map((item) => <div key={`${ord.id}-${item.productId}`} className="mb-1"><div className="font-semibold text-slate-900">{item.productName} × {item.quantity} {item.unit}</div><div className="text-[10px] text-slate-500">Farmer: {item.farmerName}</div><div className="text-[10px] text-slate-600">Payout account: {payoutAccounts[item.farmerId] || payoutAccounts[`name:${String(item.farmerName || '').trim().toLocaleLowerCase()}`] || 'Loading / not provided'}</div></div>)}
                     </td>
                     <td className="py-3 px-4 font-bold text-slate-900 tabular-nums">
                       ৳{gross.toLocaleString()}
@@ -182,7 +186,7 @@ export const AdminOrders: React.FC = () => {
                         const settlement = settlements.find((item) => item.orderId === ord.id || item.orderNumber === ord.orderNumber);
                         const firstItem = ord.items[0];
                         const cashVerified = codRecords.some((record) => record.orderId === ord.id && record.depositStatus === 'CASH_DEPOSIT_VERIFIED');
-                        const account = firstItem ? payoutAccounts[firstItem.farmerId] || '' : '';
+                        const account = firstItem ? payoutAccounts[firstItem.farmerId] || payoutAccounts[`name:${String(firstItem.farmerName || '').trim().toLocaleLowerCase()}`] || '' : '';
                         const accountAvailable = !!account && account !== 'Not provided';
                         const payoutReady = ord.isDeliveryVerified && ord.orderStatus === 'DELIVERED' &&
                           (ord.paymentMethod !== 'COD' || cashVerified) && accountAvailable &&
