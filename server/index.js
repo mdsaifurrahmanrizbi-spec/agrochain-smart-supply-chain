@@ -1360,7 +1360,15 @@ app.get('/api/me', requireAuth, async (req, res) => {
       : { rows: [] };
     return res.json({
       id: account.id, name: account.name, email: account.email, role: account.role,
-      status: account.status, createdAt: account.created_at,
+      status: account.status,
+      // Payout fields are scoped to the authenticated farmer returned by the
+      // SQL lookup using the verified JWT subject; other roles never receive them.
+      ...(account.role === 'farmer' ? {
+        payoutMethod: account.payout_method || undefined,
+        payoutAccountNumber: account.payout_account_number || undefined,
+        payoutBankName: account.payout_bank_name || undefined,
+      } : {}),
+      createdAt: account.created_at,
       ...(account.role === 'warehouse' ? { isWarehouseManager: true, managedWarehouseIds: managed.rows.map((row) => row.id) } : {}),
     });
   } catch (error) {

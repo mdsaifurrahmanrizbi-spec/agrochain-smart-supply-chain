@@ -1,19 +1,32 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { agroApi } from '../../services/api';
 import { User, Phone, Mail, MapPin, CreditCard, ShieldCheck, Check } from 'lucide-react';
 
 export const FarmerProfile: React.FC = () => {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, authLoading } = useAuth();
   const [saved, setSaved] = useState(false);
 
-  const [name, setName] = useState(user?.name || 'Md. Rafiqul Islam');
-  const [phone, setPhone] = useState(user?.phone || '+880 1819-345678');
-  const [location, setLocation] = useState(user?.location || 'Shibganj, Bogura');
+  const [name, setName] = useState(user?.name || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [location, setLocation] = useState(user?.location || '');
   const [payoutMethod, setPayoutMethod] = useState<'bKash' | 'Nagad' | 'Bank Transfer'>(user?.payoutMethod || 'bKash');
   const [payoutAccountNumber, setPayoutAccountNumber] = useState(user?.payoutAccountNumber || '');
   const [payoutBankName, setPayoutBankName] = useState(user?.payoutBankName || '');
-  const [nidNumber, setNidNumber] = useState('19842691234567890');
+
+  // The auth provider restores the backend session asynchronously after this
+  // page can mount. Keep the controlled form in sync when that verified user
+  // arrives (and after profile updates), otherwise refresh leaves stale blanks.
+  useEffect(() => {
+    if (authLoading || !user) return;
+
+    setName(user.name || '');
+    setPhone(user.phone || '');
+    setLocation(user.location || '');
+    setPayoutMethod(user.payoutMethod || 'bKash');
+    setPayoutAccountNumber(user.payoutAccountNumber || '');
+    setPayoutBankName(user.payoutBankName || '');
+  }, [authLoading, user]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,7 +120,7 @@ export const FarmerProfile: React.FC = () => {
               <input
                 type="text"
                 disabled
-                value={nidNumber}
+                value="Verified — hidden"
                 className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-mono cursor-not-allowed"
               />
             </div>
@@ -166,7 +179,8 @@ export const FarmerProfile: React.FC = () => {
           <div className="pt-2 flex justify-end">
             <button
               type="submit"
-              className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold shadow-xs transition-colors"
+              disabled={authLoading || !user}
+              className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Update Profile Settings
             </button>
