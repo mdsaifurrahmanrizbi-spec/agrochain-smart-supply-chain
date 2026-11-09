@@ -3538,6 +3538,11 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         [req.auth.sub]
       );
       const ownedWarehouseIds = new Set(ownedWarehouseRows.rows.map((row) => row.id));
+      const ownedGodownRows = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'godowns' AND data->>'managerId' = $1 AND upper(coalesce(data->>'status','')) = 'ACTIVE'",
+        [req.auth.sub]
+      );
+      const ownedGodownIds = new Set(ownedGodownRows.rows.map((row) => row.id));
       const settlementOrderId = String(data.orderId || '');
       const existingOrderId = String(existing?.orderId || '');
       const relatedOrderResult = settlementOrderId
@@ -3547,13 +3552,17 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
           )
         : { rows: [] };
       const relatedOrder = relatedOrderResult.rows[0]?.data;
+      const destinationGodownIds = [relatedOrder?.godownId, relatedOrder?.destinationGodownId]
+        .map((value) => String(value || '')).filter(Boolean);
+      const managesOrderCash = ownedWarehouseIds.has(String(relatedOrder?.warehouseId || '')) ||
+        destinationGodownIds.some((id) => ownedGodownIds.has(id));
       if (!relatedOrder ||
           relatedOrder.paymentMethod !== 'COD' ||
-          !ownedWarehouseIds.has(String(relatedOrder.warehouseId || '')) ||
+          !managesOrderCash ||
           (existing && existingOrderId !== settlementOrderId)) {
         await client.query('ROLLBACK');
         return res.status(403).json({
-          message: 'You can only process COD farmer payouts for orders assigned to your own warehouse',
+          message: 'You can only process COD farmer payouts for cash handled by your own warehouse or destination godown',
         });
       }
     }
