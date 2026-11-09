@@ -4724,7 +4724,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         data.warehouseId = directWarehouseReservation.warehouseId;
         data.warehouseName = String(warehouse.name || directWarehouseReservation.warehouseId);
         data.orderStatus = 'WAREHOUSE_RECEIVED';
-        const norm = (value) => String(value || '').normalize('NFC').toLocaleLowerCase().replace(/[^\\p{L}\\p{N}]+/gu,' ').trim().replace(/\\s+/g,' ');
+        const norm = (value) => String(value || '').normalize('NFC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
         const addressText = norm([data.buyerAddress,data.buyerCity,data.buyerArea].join(' '));
         const godowns = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godowns' ORDER BY created_at ASC");
         let destination = null;
