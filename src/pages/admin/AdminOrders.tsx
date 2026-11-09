@@ -24,8 +24,12 @@ export const AdminOrders: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const farmerIds = [...new Set(orders.flatMap((order) => order.items.map((item) => item.farmerId)))];
-    agroApi.getFarmerPayoutAccounts(farmerIds).then((accounts) => {
+    const farmerRefs = orders.flatMap((order) => order.items.map((item) => ({
+      farmerId: item.farmerId,
+      farmerName: item.farmerName,
+    })));
+    const uniqueRefs = [...new Map(farmerRefs.map((ref) => [`${ref.farmerId}|${ref.farmerName}`, ref])).values()];
+    agroApi.getFarmerPayoutAccounts(uniqueRefs).then((accounts) => {
       setPayoutAccounts(Object.fromEntries(accounts.map((account) => [
         account.farmerId,
         [account.payoutMethod, account.payoutBankName, account.payoutAccountNumber].filter(Boolean).join(' · ') || 'Not provided',
