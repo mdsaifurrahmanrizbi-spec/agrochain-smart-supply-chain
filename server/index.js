@@ -1664,7 +1664,7 @@ const resourceWriteRoles = {
 function canReadResource(role, resource) {
   if (resource === 'users') return role === 'admin';
   if (resource === 'settlements') return ['admin', 'farmer', 'warehouse'].includes(role);
-  if (resource === 'codRecords') return ['admin', 'warehouse'].includes(role);
+  if (resource === 'codRecords') return ['admin', 'warehouse', 'delivery'].includes(role);
   return allowedResources.has(resource);
 }
 
@@ -3303,7 +3303,7 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
       }
     }
 
-    if (req.auth.role === 'delivery' && ['deliveryPartners', 'jobs', 'orders', 'qualityChecks', 'godownShipments'].includes(resource)) {
+    if (req.auth.role === 'delivery' && ['deliveryPartners', 'jobs', 'orders', 'qualityChecks', 'godownShipments', 'codRecords'].includes(resource)) {
       // Use one account identity rule everywhere: linked user ID, legacy profile ID,
       // or the authenticated account email for older partner records.
       const accountResult = await pool.query(
@@ -3333,6 +3333,12 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
         rows = rows.filter((row) => ownPartnerIds.has(row.data?.partnerId));
       } else if (resource === 'godownShipments') {
         rows = rows.filter((row) => ownPartner && row.data?.assignedPartnerId === ownPartner.id);
+      } else if (resource === 'codRecords') {
+        // A delivery partner can see only COD cash collected under their own
+        // canonical partner profile; other partners' cash records stay private.
+        rows = rows.filter((row) =>
+          ownPartner && row.data?.deliveryPartnerId === ownPartner.id
+        );
       }
     }
 
