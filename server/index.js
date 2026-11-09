@@ -1711,6 +1711,7 @@ const allowedResources = new Set([
   'trackingEvents',
   'godowns',
   'godownShipments',
+  'inventoryLedger',
 ]);
 
 const resourceWriteRoles = {
@@ -1733,6 +1734,7 @@ const resourceWriteRoles = {
 };
 
 function canReadResource(role, resource) {
+  if (resource === 'inventoryLedger') return ['admin', 'warehouse'].includes(role);
   if (resource === 'users') return role === 'admin';
   if (resource === 'settlements') return ['admin', 'farmer', 'warehouse'].includes(role);
   if (resource === 'codRecords') return ['admin', 'warehouse', 'delivery'].includes(role);
@@ -3138,6 +3140,52 @@ app.post('/api/orders/:id/cancel', requireAuth, async (req, res) => {
       return res.status(409).json({ message: 'This order can no longer be cancelled because pickup or shipment processing has started' });
     }
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    if (order.stockReservationStatus === 'RESERVED' && Array.isArray(order.stockReservations)) {
+      const { randomUUID } = await import('node:crypto');
+      for (const reservation of [...order.stockReservations].sort((a, b) => String(a.productId).localeCompare(String(b.productId)))) {
+        const productResult = await client.query(
+          "SELECT id, data FROM agrochain_records WHERE resource = 'products' AND id = $1 FOR UPDATE",
+          [String(reservation.productId || '')]
+        );
+        const productRow = productResult.rows[0];
+        const product = productRow?.data || {};
+        const quantity = Number(reservation.quantity);
+        const reserved = Number(product.reservedQuantity || 0);
+        if (!productRow || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(reserved) || reserved < quantity) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'Could not safely release this order reservation. Stock was not changed; contact an administrator.' });
+        }
+        product.availableQuantity = Number((Number(product.availableQuantity || 0) + quantity).toFixed(3));
+        product.reservedQuantity = Number((reserved - quantity).toFixed(3));
+        product.updatedAt = new Date().toISOString();
+        await client.query(
+          "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'products' AND id = $1",
+          [productRow.id, JSON.stringify(product)]
+        );
+        const ledger = {
+          id: `inv-ledger-${randomUUID()}`,
+          eventType: 'ORDER_RESERVATION_RELEASED',
+          orderId: row.id,
+          orderNumber: String(order.orderNumber || row.id),
+          productId: productRow.id,
+          productName: String(product.name || reservation.productName || 'Product'),
+          farmerId: String(reservation.farmerId || product.farmerId || ''),
+          quantity,
+          unit: String(reservation.unit || product.unit || ''),
+          availableAfter: product.availableQuantity,
+          reservedAfter: product.reservedQuantity,
+          actorId: req.auth.sub,
+          actorRole: 'buyer',
+          createdAt: new Date().toISOString(),
+        };
+        await client.query(
+          "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('inventoryLedger', $1, $2::jsonb, NOW(), NOW())",
+          [ledger.id, JSON.stringify(ledger)]
+        );
+      }
+      order.stockReservationStatus = 'RELEASED';
+      order.stockReservationReleasedAt = new Date().toISOString();
+    }
     order.orderStatus = 'CANCELLED'; order.cancelledAt = now; order.cancelledBy = 'buyer'; order.updatedAt = now;
     await client.query("UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1", [row.id, JSON.stringify(order)]);
     const event = { id: `trk-cancel-${row.id}-${Date.now()}`, orderId: row.id, title: 'ORDER CANCELLED', description: 'Customer cancelled the order before pickup.', location: order.buyerCity || '', timestamp: now, actorRole: 'Customer', actorName: order.buyerName || 'Customer', status: 'COMPLETED' };
@@ -4136,6 +4184,24 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       }
     }
 
+    // Product quantities are server-owned once orders reserve them. A generic
+    // product edit must not overwrite the reservation counter or reduce stock
+    // below zero. Farmer edits may still adjust the unreserved listing quantity.
+    if (resource === 'products') {
+      const availableQuantity = Number(data.availableQuantity);
+      const reservedQuantity = Number(existing?.reservedQuantity || 0);
+      if (!Number.isFinite(availableQuantity) || availableQuantity < 0 ||
+          (existing && Number(data.reservedQuantity || 0) !== reservedQuantity)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'Product stock values are invalid or include a protected reservation change' });
+      }
+      if (existing && reservedQuantity > 0 && availableQuantity !== Number(existing.availableQuantity || 0)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'Available quantity cannot be manually overwritten while this product has active order reservations' });
+      }
+      data.reservedQuantity = reservedQuantity;
+    }
+
     // Payment fields must only be changed by a dedicated server-side payment flow.
     if (resource === 'orders') {
       const protectedPaymentFields = [
@@ -4307,6 +4373,88 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         message: 'Only an admin or quality inspector may set or change order QC status',
       });
     }
+    // Reserve every product line atomically with the initial order insert. Product
+    // rows are locked in stable ID order so concurrent checkouts cannot oversell or
+    // deadlock when carts contain multiple products. Existing orders are untouched.
+    if (resource === 'orders' && role === 'buyer' && !existing) {
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (!items.length) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'An order must contain at least one product' });
+      }
+      const grouped = new Map();
+      for (const item of items) {
+        const productId = String(item?.productId || '').trim();
+        const quantity = Number(item?.quantity);
+        const unit = String(item?.unit || '').trim();
+        if (!productId || !Number.isFinite(quantity) || quantity <= 0 || !unit) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'Every order item must have a valid product, positive quantity, and unit' });
+        }
+        const current = grouped.get(productId) || { productId, quantity: 0, unit, farmerId: String(item?.farmerId || ''), productName: String(item?.productName || 'Product') };
+        if (current.unit.toLowerCase() !== unit.toLowerCase() || current.farmerId !== String(item?.farmerId || '')) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'The same product has inconsistent unit or farmer details in this order' });
+        }
+        current.quantity += quantity;
+        grouped.set(productId, current);
+      }
+      const reservations = [];
+      const { randomUUID } = await import('node:crypto');
+      for (const line of [...grouped.values()].sort((a, b) => a.productId.localeCompare(b.productId))) {
+        const productResult = await client.query(
+          "SELECT id, data FROM agrochain_records WHERE resource = 'products' AND id = $1 FOR UPDATE",
+          [line.productId]
+        );
+        const productRow = productResult.rows[0];
+        const product = productRow?.data || {};
+        const available = Number(product.availableQuantity);
+        if (!productRow || String(product.farmerId || '') !== line.farmerId ||
+            String(product.unit || '').toLowerCase() !== line.unit.toLowerCase() ||
+            !Number.isFinite(available) || available < line.quantity) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: `Insufficient or unavailable stock for ${line.productName}. Refresh the product list and try again.` });
+        }
+        const reservedQuantity = Number(product.reservedQuantity || 0);
+        if (!Number.isFinite(reservedQuantity) || reservedQuantity < 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: `Stock reservation data is invalid for ${line.productName}. Contact an administrator.` });
+        }
+        product.availableQuantity = Number((available - line.quantity).toFixed(3));
+        product.reservedQuantity = Number((reservedQuantity + line.quantity).toFixed(3));
+        product.updatedAt = new Date().toISOString();
+        await client.query(
+          "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'products' AND id = $1",
+          [line.productId, JSON.stringify(product)]
+        );
+        const reservation = { productId: line.productId, productName: String(product.name || line.productName), farmerId: line.farmerId, quantity: line.quantity, unit: line.unit };
+        reservations.push(reservation);
+        const ledger = {
+          id: `inv-ledger-${randomUUID()}`,
+          eventType: 'ORDER_RESERVED',
+          orderId: id,
+          orderNumber: String(data.orderNumber || id),
+          productId: line.productId,
+          productName: reservation.productName,
+          farmerId: line.farmerId,
+          quantity: line.quantity,
+          unit: line.unit,
+          availableAfter: product.availableQuantity,
+          reservedAfter: product.reservedQuantity,
+          actorId: req.auth.sub,
+          actorRole: role,
+          createdAt: new Date().toISOString(),
+        };
+        await client.query(
+          "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('inventoryLedger', $1, $2::jsonb, NOW(), NOW())",
+          [ledger.id, JSON.stringify(ledger)]
+        );
+      }
+      data.stockReservations = reservations;
+      data.stockReservationStatus = 'RESERVED';
+      data.stockReservedAt = new Date().toISOString();
+    }
+
     // Create the initial pending QC record atomically with a buyer's new order.
     // Buyers cannot write the privileged qualityChecks resource directly; doing this
     // server-side prevents a confirmed order from being stranded without a QC queue item.
