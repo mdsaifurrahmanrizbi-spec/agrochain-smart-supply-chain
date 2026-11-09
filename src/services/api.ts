@@ -1695,15 +1695,39 @@ return qc;
   },
 
   async getInventory(): Promise<WarehouseInventoryItem[]> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
-      const records = await getBackendRecords<WarehouseInventoryItem>('inventory');
+      const records = await getBackendRecords<WarehouseInventoryItem>('inventory', controller.signal);
       store.inventory = records;
       localStorage.setItem('agro_inventory', JSON.stringify(records));
+      return records;
     } catch (error) {
-      if (JSON.parse(localStorage.getItem('agro_active_user') || '{}').role === 'warehouse') store.inventory = [];
+      if (isWarehouseSession()) {
+        store.inventory = [];
+        localStorage.setItem('agro_inventory', JSON.stringify([]));
+        if (controller.signal.aborted) throw new Error('Inventory request timed out after 15 seconds. Check the backend connection and try again.');
+        throw error;
+      }
       console.warn('Could not load warehouse inventory from backend.', error);
+      return store.inventory;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    return store.inventory;
+  },
+
+  async adjustInventoryStock(id: string, newQuantityKg: number, reason: string): Promise<WarehouseInventoryItem> {
+    const response = await fetch(`${API_BASE_URL}/inventory/${encodeURIComponent(id)}/adjust`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ newQuantityKg, reason }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.inventory) throw new Error(data.message || `Could not adjust inventory (${response.status})`);
+    const updated = data.inventory as WarehouseInventoryItem;
+    store.inventory = store.inventory.map((item) => item.id === id ? updated : item);
+    localStorage.setItem('agro_inventory', JSON.stringify(store.inventory));
+    return updated;
   },
 
   // COD & Settlements
