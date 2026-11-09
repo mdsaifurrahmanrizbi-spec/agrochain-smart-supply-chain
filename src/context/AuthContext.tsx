@@ -44,9 +44,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       try {
         const verifiedUser = await agroApi.getCurrentUser();
+        // Restore the separately persisted profile fields as well as the
+        // authoritative account fields returned by /api/me. Payout details
+        // remain sourced only from the authenticated user's auth_users row.
+        let profile: Partial<User> = {};
+        try {
+          profile = await agroApi.getMyProfile();
+        } catch {
+          // A first-time farmer may not have created a profile record yet.
+        }
+        const restoredUser = { ...verifiedUser, ...profile, ...verifiedUser };
         if (!cancelled) {
-          setUser(verifiedUser);
-          localStorage.setItem('agro_active_user', JSON.stringify(verifiedUser));
+          setUser(restoredUser);
+          localStorage.setItem('agro_active_user', JSON.stringify(restoredUser));
         }
       } catch {
         localStorage.removeItem('agro_auth_token');
