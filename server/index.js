@@ -18,6 +18,89 @@ const lockDeliveryOrder = async (client, orderId) => {
     ['agrochain-delivery-order:' + normalizedOrderId]
   );
 };
+
+const appendInventoryLedger = async (client, entry) => {
+  const { randomUUID } = await import('node:crypto');
+  const ledger = { id: 'inv-ledger-' + randomUUID(), createdAt: new Date().toISOString(), ...entry };
+  await client.query("INSERT INTO agrochain_records (resource,id,data,created_at,updated_at) VALUES ('inventoryLedger',$1,$2::jsonb,NOW(),NOW())", [ledger.id, JSON.stringify(ledger)]);
+  return ledger;
+};
+const orderInventoryLinesInKg = (order) => {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  if (!items.length) throw new Error('This order has no product lines to receive into inventory');
+  const totalWeightKg = Number(order.totalWeightKg || 0);
+  return items.map((item) => {
+    const unit = String(item.unit || '').trim().toLowerCase();
+    const quantity = Number(item.quantity);
+    let quantityKg = Number(item.quantityKg);
+    if (!Number.isFinite(quantityKg) || quantityKg <= 0) {
+      if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('An order line has an invalid quantity');
+      if (unit === 'kg') quantityKg = quantity;
+      else if (['ton','tonne','metric ton'].includes(unit)) quantityKg = quantity * 1000;
+      else if (items.length === 1 && Number.isFinite(totalWeightKg) && totalWeightKg > 0) quantityKg = totalWeightKg;
+      else throw new Error('Inventory receiving requires a verified kg conversion for every order item');
+    }
+    const productId = String(item.productId || '').trim();
+    if (!productId || !Number.isFinite(quantityKg) || quantityKg <= 0) throw new Error('An order line is missing its product link or verified kg quantity');
+    return { item, productId, quantityKg: Number(quantityKg.toFixed(3)) };
+  });
+};
+const createFacilityInventoryStock = async (client, order, facility, eventType, actor) => {
+  const lines = orderInventoryLinesInKg(order);
+  const createdLines = [];
+  const { randomUUID } = await import('node:crypto');
+  for (const line of lines) {
+    const productResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='products' AND id=$1 LIMIT 1", [line.productId]);
+    const product = productResult.rows[0]?.data || {};
+    const batchResult = product.batchId ? await client.query("SELECT data FROM agrochain_records WHERE resource='batches' AND id=$1 LIMIT 1", [String(product.batchId)]) : { rows: [] };
+    const batch = batchResult.rows[0]?.data || {};
+    const inventoryId = 'inv-stock-' + randomUUID();
+    const inventory = {
+      id: inventoryId, ...(facility.warehouseId ? { warehouseId: facility.warehouseId } : {}),
+      ...(facility.godownId ? { godownId: facility.godownId } : {}), warehouseName: facility.name,
+      productId: line.productId, orderId: String(order.id || ''),
+      cropName: String(product.name || line.item.productName || batch.cropName || 'Product'),
+      category: String(product.category || ''), batchCode: String(batch.batchCode || product.batchCode || product.batchId || order.orderNumber || order.id || ''),
+      farmerName: String(line.item.farmerName || product.farmerName || ''), quantityKg: line.quantityKg,
+      reservedKg: 0, availableKg: line.quantityKg, storageZone: facility.storageZone || 'Receiving Bay',
+      qualityStatus: 'APPROVED', arrivalDate: new Date().toISOString(), stockSource: 'ORDER_RECEIPT',
+    };
+    await client.query("INSERT INTO agrochain_records (resource,id,data,created_at,updated_at) VALUES ('inventory',$1,$2::jsonb,NOW(),NOW())", [inventoryId, JSON.stringify(inventory)]);
+    await appendInventoryLedger(client, {
+      eventType, orderId: String(order.id || ''), orderNumber: String(order.orderNumber || order.id || ''),
+      inventoryId, productId: line.productId, productName: inventory.cropName,
+      warehouseId: facility.warehouseId || '', godownId: facility.godownId || '', quantityKg: line.quantityKg,
+      physicalAfterKg: line.quantityKg, reservedAfterKg: 0, availableAfterKg: line.quantityKg,
+      actorId: actor.id, actorRole: actor.role, reason: 'Verified consignment receipt',
+    });
+    createdLines.push({ inventoryId, productId: line.productId, quantityKg: line.quantityKg });
+  }
+  return createdLines;
+};
+const decrementFacilityInventoryStock = async (client, lines, eventType, actor, order) => {
+  for (const line of Array.isArray(lines) ? lines : []) {
+    const result = await client.query("SELECT id,data FROM agrochain_records WHERE resource='inventory' AND id=$1 FOR UPDATE", [String(line.inventoryId || '')]);
+    const row = result.rows[0], inventory = row?.data || {};
+    const quantityKg = Number(line.quantityKg), physical = Number(inventory.quantityKg || 0), reserved = Number(inventory.reservedKg || 0);
+    if (!row || !Number.isFinite(quantityKg) || quantityKg <= 0 || !Number.isFinite(physical) ||
+        physical + 0.0001 < quantityKg || !Number.isFinite(reserved) || reserved > physical - quantityKg + 0.0001) {
+      throw new Error('Inventory stock is insufficient or inconsistent for this consignment; movement was not committed');
+    }
+    inventory.quantityKg = Number((physical - quantityKg).toFixed(3));
+    inventory.availableKg = Number((inventory.quantityKg - reserved).toFixed(3));
+    inventory.updatedAt = new Date().toISOString();
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='inventory' AND id=$1", [row.id, JSON.stringify(inventory)]);
+    await appendInventoryLedger(client, {
+      eventType, orderId: String(order?.id || ''), orderNumber: String(order?.orderNumber || order?.id || ''),
+      inventoryId: row.id, productId: String(line.productId || inventory.productId || ''),
+      productName: String(inventory.cropName || 'Product'), warehouseId: String(inventory.warehouseId || ''),
+      godownId: String(inventory.godownId || ''), quantityKg, physicalAfterKg: inventory.quantityKg,
+      reservedAfterKg: reserved, availableAfterKg: inventory.availableKg, actorId: actor.id, actorRole: actor.role,
+      reason: eventType === 'WAREHOUSE_DISPATCHED' ? 'Consignment dispatched to destination godown' : 'Consignment delivered to customer',
+    });
+  }
+};
+
 const PORT = Number(process.env.PORT || 8000);
 
 app.use(express.json({ limit: '1mb' }));
@@ -1915,6 +1998,12 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
     }
     const manualRouting = !destination;
     const now = new Date().toISOString();
+    let inventorySourceLines;
+    try { inventorySourceLines = await createFacilityInventoryStock(client, order, { warehouseId: warehouseRow.id, name: String(warehouse.name || warehouseRow.id), storageZone: 'Receiving Bay' }, 'WAREHOUSE_RECEIVED', { id: req.auth.sub, role: req.auth.role }); }
+    catch (inventoryError) { await client.query('ROLLBACK'); return res.status(409).json({ message: inventoryError.message || 'Could not safely record received stock' }); }
+    const receivedKg = inventorySourceLines.reduce((sum, line) => sum + line.quantityKg, 0);
+    warehouse.currentStockMetricTons = Number((Number(warehouse.currentStockMetricTons || 0) + receivedKg / 1000).toFixed(3));
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='warehouses' AND id=$1", [warehouseRow.id, JSON.stringify(warehouse)]);
     const crypto = await import('node:crypto');
     const shipmentId = 'shp_' + crypto.randomUUID();
     const shipment = {
@@ -1935,6 +2024,8 @@ app.post('/api/warehouse/intake/:jobId', requireAuth, async (req, res) => {
       customerPhone: order.buyerPhone || '',
       productCondition: 'EXCELLENT',
       transferStatus: manualRouting ? 'MANUAL_ROUTING_REQUIRED' : 'PENDING_DISPATCH',
+      inventorySourceLines,
+      inventoryStockSyncStatus: 'AT_ORIGIN_WAREHOUSE',
       ...(manualRouting ? { exceptionNotes: 'No active destination godown service area matched the customer address. Manual routing review required.' } : {}),
     };
     job.status = 'WAREHOUSE_HANDOVER';
@@ -2103,6 +2194,16 @@ app.post('/api/warehouse/shipments/:shipmentId/dispatch', requireAuth, async (re
     shipment.dispatchDate = now;
     shipment.transferCarrier = carrier;
     const order = orderRow.data || {};
+    if (Array.isArray(shipment.inventorySourceLines) && shipment.inventorySourceLines.length) {
+      try { await decrementFacilityInventoryStock(client, shipment.inventorySourceLines, 'WAREHOUSE_DISPATCHED', { id: req.auth.sub, role: req.auth.role }, order); }
+      catch (inventoryError) { await client.query('ROLLBACK'); return res.status(409).json({ message: inventoryError.message || 'Could not safely dispatch warehouse stock' }); }
+      const sourceStockKg = shipment.inventorySourceLines.reduce((sum, line) => sum + Number(line.quantityKg || 0), 0);
+      const sourceStock = warehouseResult.rows[0].data || {};
+      sourceStock.currentStockMetricTons = Math.max(0, Number((Number(sourceStock.currentStockMetricTons || 0) - sourceStockKg / 1000).toFixed(3)));
+      await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='warehouses' AND id=$1", [warehouseResult.rows[0].id, JSON.stringify(sourceStock)]);
+      shipment.inventoryStockSyncStatus = 'IN_TRANSIT';
+      shipment.inventoryDispatchedAt = now;
+    } else shipment.inventoryStockSyncStatus = 'LEGACY_NOT_TRACKED';
     order.orderStatus = 'GODOWN_TRANSFER_IN_TRANSIT';
     order.destinationGodownId = destination.id;
     order.destinationGodownName = destination.data?.name || destination.id;
@@ -2236,6 +2337,12 @@ app.post('/api/godowns/shipments/:shipmentId/accept', requireAuth, async (req, r
       return res.status(409).json({ message: 'A delivery request already exists or is active for this consignment' });
     }
     const now = new Date().toISOString();
+    let inventoryDestinationLines = [];
+    try { inventoryDestinationLines = await createFacilityInventoryStock(client, order, { godownId: godownRow.id, warehouseId: String(godown.warehouseId || ''), name: String(godown.name || shipment.destinationGodownName || godownRow.id), storageZone: 'Destination Godown' }, 'GODOWN_RECEIVED', { id: req.auth.sub, role: req.auth.role }); }
+    catch (inventoryError) { await client.query('ROLLBACK'); return res.status(409).json({ message: inventoryError.message || 'Could not safely receive stock at the destination godown' }); }
+    shipment.inventoryDestinationLines = inventoryDestinationLines;
+    shipment.inventoryStockSyncStatus = 'AT_DESTINATION_GODOWN';
+    shipment.inventoryDestinationReceivedAt = now;
     const managerName = String(godown.managerName || req.body?.managerName || 'Warehouse Manager');
     godown.itemCount = Number(godown.itemCount || 0) + 1;
     godown.currentStockMetricTons = Number((Number(godown.currentStockMetricTons || 0) + Number(shipment.weightKg || 0) / 1000).toFixed(2));
@@ -2965,6 +3072,19 @@ app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
     const shipmentRow = shipmentResult.rows[0] || null;
     const shipment = shipmentRow?.data || null;
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    if (shipmentRow && shipment && Array.isArray(shipment.inventoryDestinationLines) && shipment.inventoryDestinationLines.length) {
+      try { await decrementFacilityInventoryStock(client, shipment.inventoryDestinationLines, 'CUSTOMER_DELIVERED', { id: req.auth.sub, role: req.auth.role }, order); }
+      catch (inventoryError) { await client.query('ROLLBACK'); return res.status(409).json({ message: inventoryError.message || 'Inventory stock could not be reconciled for delivery' }); }
+      const deliveredKg = shipment.inventoryDestinationLines.reduce((sum, line) => sum + Number(line.quantityKg || 0), 0);
+      const destinationGodownResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godowns' AND id=$1 FOR UPDATE", [String(shipment.destinationGodownId || '')]);
+      if (destinationGodownResult.rows[0]) {
+        const destinationGodown = destinationGodownResult.rows[0].data || {};
+        destinationGodown.currentStockMetricTons = Math.max(0, Number((Number(destinationGodown.currentStockMetricTons || 0) - deliveredKg / 1000).toFixed(3)));
+        await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godowns' AND id=$1", [destinationGodownResult.rows[0].id, JSON.stringify(destinationGodown)]);
+      }
+      shipment.inventoryStockSyncStatus = 'DELIVERED';
+      shipment.inventoryDeliveredAt = now;
+    } else if (shipmentRow && shipment) shipment.inventoryStockSyncStatus = 'LEGACY_NOT_TRACKED';
     order.orderStatus = 'DELIVERED';
     order.isDeliveryVerified = true;
     order.deliveryConfirmedAt = now;
@@ -3411,7 +3531,7 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
         row.data?.managerId === req.auth.sub || warehouseIds.has(row.data?.warehouseId)
       ).map((row) => row.id));
       if (resource === 'warehouses') rows = owned.rows;
-      else if (resource === 'inventory') rows = rows.filter((row) => warehouseIds.has(row.data?.warehouseId));
+      else if (resource === 'inventory') rows = rows.filter((row) => warehouseIds.has(String(row.data?.warehouseId || '')) || godownIds.has(String(row.data?.godownId || '')));
       else if (resource === 'godowns') {
         // Origin warehouse staff need destination-facility routing metadata to
         // dispatch consignments. Expose only active routing fields, not manager
