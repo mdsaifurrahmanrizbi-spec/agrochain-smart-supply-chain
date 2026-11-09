@@ -13,7 +13,6 @@ export const FarmerProfile: React.FC = () => {
   const [payoutMethod, setPayoutMethod] = useState<'bKash' | 'Nagad' | 'Bank Transfer'>(user?.payoutMethod || 'bKash');
   const [payoutAccountNumber, setPayoutAccountNumber] = useState(user?.payoutAccountNumber || '');
   const [payoutBankName, setPayoutBankName] = useState(user?.payoutBankName || '');
-  const [nidNumber, setNidNumber] = useState('');
 
   // The auth provider restores the backend session asynchronously after this
   // page can mount. Keep the controlled form in sync when that verified user
@@ -121,7 +120,7 @@ export const FarmerProfile: React.FC = () => {
               <input
                 type="text"
                 disabled
-                value={nidNumber}
+                value="Verified — hidden"
                 className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-mono cursor-not-allowed"
               />
             </div>
