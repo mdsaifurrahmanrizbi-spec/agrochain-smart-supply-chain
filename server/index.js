@@ -45,6 +45,56 @@ const orderInventoryLinesInKg = (order) => {
     return { item, productId, quantityKg: Number(quantityKg.toFixed(3)) };
   });
 };
+const reserveWarehouseStockForOrder = async (client, order, actor) => {
+  let lines;
+  try {
+    const rawLines = orderInventoryLinesInKg(order);
+    const grouped = new Map();
+    for (const line of rawLines) {
+      const existingLine = grouped.get(line.productId) || { ...line, quantityKg: 0 };
+      existingLine.quantityKg = Number((existingLine.quantityKg + line.quantityKg).toFixed(3));
+      grouped.set(line.productId, existingLine);
+    }
+    lines = [...grouped.values()];
+  } catch { return null; }
+  const ids = [...new Set(lines.map((line) => line.productId))].sort();
+  const inventoryResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='inventory' AND data->>'productId'=ANY($1::text[]) ORDER BY id FOR UPDATE", [ids]);
+  const warehouses = await client.query("SELECT id,data FROM agrochain_records WHERE resource='warehouses' ORDER BY id");
+  let selected = null;
+  for (const warehouseRow of warehouses.rows) {
+    if (String(warehouseRow.data?.status || 'ACTIVE').toUpperCase() !== 'ACTIVE') continue;
+    const rows = inventoryResult.rows.filter((row) => String(row.data?.warehouseId || '') === String(warehouseRow.id) && String(row.data?.qualityStatus || '').toUpperCase() === 'APPROVED');
+    const allocations = [];
+    let complete = true;
+    for (const line of lines) {
+      let remaining = line.quantityKg;
+      for (const row of rows.filter((candidate) => String(candidate.data?.productId || '') === line.productId)) {
+        const physical = Number(row.data?.quantityKg || 0), reserved = Number(row.data?.reservedKg || 0);
+        const available = physical - reserved;
+        const take = Math.min(Math.max(0, available), remaining);
+        if (take > 0) { allocations.push({ inventoryId: row.id, productId: line.productId, quantityKg: Number(take.toFixed(3)), warehouseId: warehouseRow.id }); remaining = Number((remaining - take).toFixed(3)); }
+        if (remaining <= 0.0001) break;
+      }
+      if (remaining > 0.0001) { complete = false; break; }
+    }
+    if (complete) { selected = { warehouseRow, allocations }; break; }
+  }
+  if (!selected) return null;
+  for (const allocation of selected.allocations) {
+    const row = inventoryResult.rows.find((candidate) => candidate.id === allocation.inventoryId);
+    const inventory = row?.data || {};
+    const physical = Number(inventory.quantityKg || 0), reserved = Number(inventory.reservedKg || 0);
+    const available = Number(inventory.availableKg ?? physical - reserved);
+    if (!row || !Number.isFinite(available) || available + 0.0001 < allocation.quantityKg) throw new Error('Warehouse stock changed during checkout. Please refresh and try again.');
+    inventory.reservedKg = Number((reserved + allocation.quantityKg).toFixed(3));
+    inventory.availableKg = Number((physical - inventory.reservedKg).toFixed(3));
+    inventory.updatedAt = new Date().toISOString();
+    await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='inventory' AND id=$1", [row.id, JSON.stringify(inventory)]);
+    await appendInventoryLedger(client, { eventType:'ORDER_WAREHOUSE_STOCK_RESERVED', orderId:String(order.id || ''), orderNumber:String(order.orderNumber || order.id || ''), inventoryId:row.id, productId:allocation.productId, productName:String(inventory.cropName || 'Product'), warehouseId:String(selected.warehouseRow.id), quantityKg:allocation.quantityKg, physicalAfterKg:physical, reservedAfterKg:inventory.reservedKg, availableAfterKg:inventory.availableKg, actorId:actor.id, actorRole:actor.role, reason:'Buyer checkout reserved QC-approved existing warehouse stock' });
+  }
+  return { warehouseId:selected.warehouseRow.id, warehouse:selected.warehouseRow.data || {}, allocations:selected.allocations };
+};
+
 const createFacilityInventoryStock = async (client, order, facility, eventType, actor) => {
   const lines = orderInventoryLinesInKg(order);
   const createdLines = [];
@@ -118,11 +168,13 @@ const decrementFacilityInventoryStock = async (client, lines, eventType, actor, 
     const row = result.rows[0], inventory = row?.data || {};
     const quantityKg = Number(line.quantityKg), physical = Number(inventory.quantityKg || 0), reserved = Number(inventory.reservedKg || 0);
     if (!row || !Number.isFinite(quantityKg) || quantityKg <= 0 || !Number.isFinite(physical) ||
-        physical + 0.0001 < quantityKg || !Number.isFinite(reserved) || reserved > physical - quantityKg + 0.0001) {
+        physical + 0.0001 < quantityKg || !Number.isFinite(reserved) || (line.consumeReservation === true ? reserved + 0.0001 < quantityKg : reserved > physical - quantityKg + 0.0001)) {
       throw new Error('Inventory stock is insufficient or inconsistent for this consignment; movement was not committed');
     }
     inventory.quantityKg = Number((physical - quantityKg).toFixed(3));
-    inventory.availableKg = Number((inventory.quantityKg - reserved).toFixed(3));
+    const reservedAfter = line.consumeReservation === true ? Number((reserved - quantityKg).toFixed(3)) : reserved;
+    inventory.reservedKg = reservedAfter;
+    inventory.availableKg = Number((inventory.quantityKg - reservedAfter).toFixed(3));
     inventory.updatedAt = new Date().toISOString();
     await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='inventory' AND id=$1", [row.id, JSON.stringify(inventory)]);
     await appendInventoryLedger(client, {
@@ -130,7 +182,7 @@ const decrementFacilityInventoryStock = async (client, lines, eventType, actor, 
       inventoryId: row.id, productId: String(line.productId || inventory.productId || ''),
       productName: String(inventory.cropName || 'Product'), warehouseId: String(inventory.warehouseId || ''),
       godownId: String(inventory.godownId || ''), quantityKg, physicalAfterKg: inventory.quantityKg,
-      reservedAfterKg: reserved, availableAfterKg: inventory.availableKg, actorId: actor.id, actorRole: actor.role,
+      reservedAfterKg: reservedAfter, availableAfterKg: inventory.availableKg, actorId: actor.id, actorRole: actor.role,
       reason: eventType === 'WAREHOUSE_DISPATCHED' ? 'Consignment dispatched to destination godown' : 'Consignment delivered to customer',
     });
   }
@@ -2229,9 +2281,11 @@ app.post('/api/warehouse/shipments/:shipmentId/dispatch', requireAuth, async (re
     shipment.dispatchDate = now;
     shipment.transferCarrier = carrier;
     const order = orderRow.data || {};
+    if (order.orderStatus === 'CANCELLED' || (shipment.directWarehouseReservation === true && order.warehouseStockReservationStatus !== 'RESERVED')) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Cancelled or unreserved orders cannot be dispatched' }); }
     if (Array.isArray(shipment.inventorySourceLines) && shipment.inventorySourceLines.length) {
       try { await decrementFacilityInventoryStock(client, shipment.inventorySourceLines, 'WAREHOUSE_DISPATCHED', { id: req.auth.sub, role: req.auth.role }, order); }
       catch (inventoryError) { await client.query('ROLLBACK'); return res.status(409).json({ message: inventoryError.message || 'Could not safely dispatch warehouse stock' }); }
+      if (shipment.directWarehouseReservation === true) { order.warehouseStockReservationStatus = 'CONSUMED'; order.warehouseStockReservationConsumedAt = now; }
       const sourceStockKg = shipment.inventorySourceLines.reduce((sum, line) => sum + Number(line.quantityKg || 0), 0);
       const sourceStock = warehouseResult.rows[0].data || {};
       sourceStock.currentStockMetricTons = Math.max(0, Number((Number(sourceStock.currentStockMetricTons || 0) - sourceStockKg / 1000).toFixed(3)));
@@ -3293,11 +3347,42 @@ app.post('/api/orders/:id/cancel', requireAuth, async (req, res) => {
     if (order.orderStatus === 'CANCELLED') { await client.query('ROLLBACK'); return res.status(409).json({ message: 'This order has already been cancelled' }); }
     if (order.orderStatus === 'DELIVERED' || order.isDeliveryVerified === true) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Delivered orders cannot be cancelled' }); }
     const pickupStarted = new Set(['PICKED_UP','IN_TRANSIT','IN_TRANSIT_CENTRAL','WAREHOUSE_RECEIVED','IN_WAREHOUSE','GODOWN_ASSIGNED','GODOWN_TRANSFER_IN_TRANSIT','ARRIVED_LOCAL_GODOWN','GODOWN_RECEIVED','ARRIVED_REGIONAL_GODOWN','DELIVERY_PARTNER_ASSIGNED','DELIVERY_ASSIGNMENT_PENDING','MANUAL_ROUTING_REQUIRED','DELIVERY_ACCEPTED','DELIVERY_PARTNER_COLLECTED','OUT_FOR_DELIVERY']);
-    if (pickupStarted.has(String(order.orderStatus || '').toUpperCase()) || order.partnerCollectedAt || order.handoverInitiatedAt || order.outForDeliveryAt) {
+    const directShipmentLookup = order.fulfillmentSource === 'WAREHOUSE'
+      ? await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND data->>'orderId'=$1 LIMIT 1", [row.id])
+      : { rows: [] };
+    const directWarehouseCanCancel = order.fulfillmentSource === 'WAREHOUSE' &&
+      ['PENDING_DISPATCH','MANUAL_ROUTING_REQUIRED'].includes(String(directShipmentLookup.rows[0]?.data?.transferStatus || '').toUpperCase());
+    if ((pickupStarted.has(String(order.orderStatus || '').toUpperCase()) && !directWarehouseCanCancel) || order.partnerCollectedAt || order.handoverInitiatedAt || order.outForDeliveryAt) {
       await client.query('ROLLBACK');
       return res.status(409).json({ message: 'This order can no longer be cancelled because pickup or shipment processing has started' });
     }
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    if (order.fulfillmentSource === 'WAREHOUSE' && order.warehouseStockReservationStatus === 'RESERVED' && Array.isArray(order.warehouseStockReservations)) {
+      const { randomUUID } = await import('node:crypto');
+      for (const reservation of [...order.warehouseStockReservations].sort((a,b)=>String(a.inventoryId).localeCompare(String(b.inventoryId)))) {
+        const result = await client.query("SELECT id,data FROM agrochain_records WHERE resource='inventory' AND id=$1 FOR UPDATE", [String(reservation.inventoryId || '')]);
+        const row = result.rows[0], inventory = row?.data || {};
+        const quantityKg = Number(reservation.quantityKg), physical = Number(inventory.quantityKg || 0), reserved = Number(inventory.reservedKg || 0);
+        if (!row || !Number.isFinite(quantityKg) || quantityKg <= 0 || !Number.isFinite(physical) || !Number.isFinite(reserved) || reserved + 0.0001 < quantityKg) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message:'Could not safely release warehouse stock reservation. Stock was not changed; contact an administrator.' });
+        }
+        inventory.reservedKg = Number((reserved - quantityKg).toFixed(3));
+        inventory.availableKg = Number((physical - inventory.reservedKg).toFixed(3));
+        inventory.updatedAt = new Date().toISOString();
+        await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='inventory' AND id=$1", [row.id, JSON.stringify(inventory)]);
+        await appendInventoryLedger(client, {
+          eventType:'ORDER_WAREHOUSE_RESERVATION_RELEASED', orderId:String(order.id || row.id),
+          orderNumber:String(order.orderNumber || order.id || ''), inventoryId:row.id,
+          productId:String(reservation.productId || inventory.productId || ''), productName:String(inventory.cropName || 'Product'),
+          warehouseId:String(inventory.warehouseId || ''), quantityKg,
+          physicalAfterKg:physical, reservedAfterKg:inventory.reservedKg, availableAfterKg:inventory.availableKg,
+          actorId:req.auth.sub, actorRole:'buyer', reason:'Customer cancelled before warehouse dispatch; reserved stock returned to available inventory',
+        });
+      }
+      order.warehouseStockReservationStatus = 'RELEASED';
+      order.warehouseStockReservationReleasedAt = new Date().toISOString();
+    }
     if (order.stockReservationStatus === 'RESERVED' && Array.isArray(order.stockReservations)) {
       const { randomUUID } = await import('node:crypto');
       for (const reservation of [...order.stockReservations].sort((a, b) => String(a.productId).localeCompare(String(b.productId)))) {
@@ -3343,6 +3428,13 @@ app.post('/api/orders/:id/cancel', requireAuth, async (req, res) => {
       }
       order.stockReservationStatus = 'RELEASED';
       order.stockReservationReleasedAt = new Date().toISOString();
+    }
+    if (directWarehouseCanCancel && directShipmentLookup.rows[0]?.id) {
+      const shipment = directShipmentLookup.rows[0].data || {};
+      shipment.transferStatus = 'CANCELLED';
+      shipment.cancelledAt = new Date().toISOString();
+      shipment.cancelledBy = req.auth.sub;
+      await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godownShipments' AND id=$1", [directShipmentLookup.rows[0].id, JSON.stringify(shipment)]);
     }
     order.orderStatus = 'CANCELLED'; order.cancelledAt = now; order.cancelledBy = 'buyer'; order.updatedAt = now;
     await client.query("UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1", [row.id, JSON.stringify(order)]);
@@ -4623,10 +4715,57 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         message: 'Only an admin or quality inspector may set or change order QC status',
       });
     }
+    let directWarehouseReservation = null;
+    if (resource === 'orders' && role === 'buyer' && !existing && !directWarehouseReservation) {
+      directWarehouseReservation = await reserveWarehouseStockForOrder(client, data, { id:req.auth.sub, role });
+      if (directWarehouseReservation) {
+        const warehouse = directWarehouseReservation.warehouse;
+        data.fulfillmentSource = 'WAREHOUSE';
+        data.warehouseStockReservations = directWarehouseReservation.allocations;
+        data.warehouseStockReservationStatus = 'RESERVED';
+        data.warehouseStockReservedAt = new Date().toISOString();
+        data.stockReservations = [];
+        data.stockReservationStatus = 'NOT_REQUIRED';
+        data.qualityStatus = 'APPROVED';
+        data.originWarehouseId = directWarehouseReservation.warehouseId;
+        data.originWarehouseName = String(warehouse.name || directWarehouseReservation.warehouseId);
+        data.warehouseId = directWarehouseReservation.warehouseId;
+        data.warehouseName = String(warehouse.name || directWarehouseReservation.warehouseId);
+        data.orderStatus = 'WAREHOUSE_RECEIVED';
+        const norm = (value) => String(value || '').normalize('NFC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
+        const addressText = norm([data.buyerAddress,data.buyerCity,data.buyerArea].join(' '));
+        const godowns = await client.query("SELECT id,data FROM agrochain_records WHERE resource='godowns' ORDER BY created_at ASC");
+        let destination = null;
+        for (const row of godowns.rows) {
+          if (String(row.data?.status || '').toUpperCase() !== 'ACTIVE') continue;
+          if ((Array.isArray(row.data?.serviceAreas) ? row.data.serviceAreas : []).some((area) => { const term=norm(area); return term && (' '+addressText+' ').includes(' '+term+' '); })) { destination=row; break; }
+        }
+        const shipmentId = 'shp_' + (await import('node:crypto')).randomUUID();
+        const shipment = {
+          id:shipmentId, orderId:id, orderNumber:data.orderNumber || id,
+          productName:(Array.isArray(data.items)?data.items:[]).map((item)=>String(item.quantity||0)+' '+String(item.unit||'kg')+' '+String(item.productName||'Product')).join(', '),
+          quantity:(Array.isArray(data.items)?data.items:[]).reduce((sum,item)=>sum+(Number(item.quantity)||0),0),
+          unit:data.items?.[0]?.unit || 'kg',
+          weightKg:Number(data.totalWeightKg)||directWarehouseReservation.allocations.reduce((sum,line)=>sum+line.quantityKg,0),
+          sourceWarehouseId:directWarehouseReservation.warehouseId, sourceWarehouseName:String(warehouse.name || directWarehouseReservation.warehouseId),
+          destinationGodownId:destination?.id || 'unassigned', destinationGodownName:destination?.data?.name || 'Unassigned - Manual Routing Required',
+          customerArea:data.buyerCity || data.buyerAddress || '', customerAddress:data.buyerAddress || '',
+          customerName:data.buyerName || '', customerPhone:data.buyerPhone || '', productCondition:'EXCELLENT',
+          transferStatus:destination?'PENDING_DISPATCH':'MANUAL_ROUTING_REQUIRED',
+          inventorySourceLines:directWarehouseReservation.allocations.map((line)=>({...line,consumeReservation:true})),
+          inventoryStockSyncStatus:'AT_ORIGIN_WAREHOUSE', directWarehouseReservation:true,
+          ...(destination?{}:{exceptionNotes:'No active destination godown service area matched the customer address. Manual routing review required.'}),
+        };
+        if(destination){data.destinationGodownId=destination.id;data.destinationGodownName=destination.data?.name || destination.id;}
+        else data.orderStatus='MANUAL_ROUTING_REQUIRED';
+        await client.query("INSERT INTO agrochain_records(resource,id,data,created_at,updated_at) VALUES('godownShipments',$1,$2::jsonb,NOW(),NOW())",[shipmentId,JSON.stringify(shipment)]);
+      }
+    }
+
     // Reserve every product line atomically with the initial order insert. Product
     // rows are locked in stable ID order so concurrent checkouts cannot oversell or
     // deadlock when carts contain multiple products. Existing orders are untouched.
-    if (resource === 'orders' && role === 'buyer' && !existing) {
+    if (resource === 'orders' && role === 'buyer' && !existing && !directWarehouseReservation) {
       const items = Array.isArray(data.items) ? data.items : [];
       if (!items.length) {
         await client.query('ROLLBACK');
@@ -4708,7 +4847,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     // Create the initial pending QC record atomically with a buyer's new order.
     // Buyers cannot write the privileged qualityChecks resource directly; doing this
     // server-side prevents a confirmed order from being stranded without a QC queue item.
-    if (resource === 'orders' && role === 'buyer' && !existing) {
+    if (resource === 'orders' && role === 'buyer' && !existing && !directWarehouseReservation) {
       const firstItem = Array.isArray(data.items) ? data.items[0] : null;
       const qcId = typeof data.qualityCheckId === 'string' && data.qualityCheckId
         ? data.qualityCheckId

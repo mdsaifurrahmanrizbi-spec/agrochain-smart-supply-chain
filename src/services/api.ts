@@ -103,7 +103,7 @@ async function getBackendRecords<T>(resource: string, signal?: AbortSignal): Pro
 async function saveBackendRecord<T extends { id: string }>(
   resource: string,
   record: T
-): Promise<void> {
+): Promise<{ id: string; data: T } | null> {
   const response = await fetch(
     `${API_BASE_URL}/records/${resource}/${encodeURIComponent(record.id)}`,
     {
@@ -121,6 +121,7 @@ async function saveBackendRecord<T extends { id: string }>(
     const detail = typeof payload.message === 'string' ? `: ${payload.message}` : '';
     throw new Error(`Failed to save ${resource}: ${response.status}${detail}`);
   }
+  return await response.json().catch(() => null);
 }
 
 
@@ -825,64 +826,68 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
     };
 
-    await saveBackendRecord('orders', newOrder);
+    const savedOrder = await saveBackendRecord('orders', newOrder);
+    if (savedOrder?.data) Object.assign(newOrder, savedOrder.data);
     store.orders.unshift(newOrder);
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
 
-    // The backend atomically creates and links a pending QC queue record when
-    // the buyer's order is first inserted. Avoid duplicate QC writes and immediate
-    // order rewrites, which caused checkout 403s after the first insert.
-    const firstItem = newOrder.items[0];
-    const relatedBatch = store.batches.find((batch) =>
-      batch.farmerId === firstItem?.farmerId &&
-      (batch.cropName === firstItem?.productName || batch.id === firstItem?.productId)
-    );
-    const pendingQc: QualityCheck = {
-      id: newOrder.qualityCheckId || `qc-order-${newOrder.id}`,
-      orderId: newOrder.id,
-      batchId: relatedBatch?.id || firstItem?.productId || `unassigned-${newOrder.id}`,
-      batchCode: relatedBatch?.batchCode || 'BATCH-PENDING-ASSIGNMENT',
-      cropName: newOrder.items.map((item) => item.productName).join(', '),
-      farmerName: newOrder.items.map((item) => item.farmerName).filter(Boolean).join(', ') || 'Farmer not assigned',
-      farmLocation: store.products.find((product) => product.batchId === relatedBatch?.id || product.id === firstItem?.productId)?.farmLocation || 'Farm location pending verification',
-      inspectorId: '',
-      inspectorName: 'Unassigned Inspector',
-      inspectionDate: '',
-      inspectionLocation: 'FARM',
-      grade: 'Not graded',
-      moistureContentPercent: 0,
-      pesticideResiduePpm: 0,
-      foreignMatterPercent: 0,
-      status: 'PENDING',
-      remarks: 'Awaiting physical QC inspection. Measurements and grade have not been recorded.',
-    };
-    newOrder.qualityCheckId = pendingQc.id;
-    newOrder.qualityStatus = 'PENDING';
-    store.qualityChecks.unshift(pendingQc);
-    localStorage.setItem('agro_quality_checks', JSON.stringify(store.qualityChecks));
-    localStorage.setItem('agro_orders', JSON.stringify(store.orders));
-
-    // Ask the backend to assign an approved, area-matched pickup partner now,
-    // before QC. The server owns partner selection and persists the assignment.
-    try {
-      const assignmentResponse = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(newOrder.id)}/assign-pickup`, {
-        method: 'POST',
-        headers: authHeaders(),
-        cache: 'no-store',
-      });
-      const assignmentPayload = await assignmentResponse.json().catch(() => ({}));
-      if (assignmentResponse.ok && assignmentPayload.job) {
-        const assignedJob = assignmentPayload.job as LogisticsJob;
-        store.jobs = [assignedJob, ...store.jobs.filter((job) => job.id !== assignedJob.id)];
-        localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
-      } else {
-        // The order remains confirmed; dispatch can assign it when an eligible
-        // pickup partner becomes available. Do not falsely mark QC as passed.
-        console.warn('Pickup assignment is pending:', assignmentPayload.message || assignmentResponse.status);
+    if ((newOrder as Order & { fulfillmentSource?: string }).fulfillmentSource !== 'WAREHOUSE') {
+      // The backend atomically creates and links a pending QC queue record when
+      // the buyer's order is first inserted. Avoid duplicate QC writes and immediate
+      // order rewrites, which caused checkout 403s after the first insert.
+      const firstItem = newOrder.items[0];
+      const relatedBatch = store.batches.find((batch) =>
+        batch.farmerId === firstItem?.farmerId &&
+        (batch.cropName === firstItem?.productName || batch.id === firstItem?.productId)
+      );
+      const pendingQc: QualityCheck = {
+        id: newOrder.qualityCheckId || `qc-order-${newOrder.id}`,
+        orderId: newOrder.id,
+        batchId: relatedBatch?.id || firstItem?.productId || `unassigned-${newOrder.id}`,
+        batchCode: relatedBatch?.batchCode || 'BATCH-PENDING-ASSIGNMENT',
+        cropName: newOrder.items.map((item) => item.productName).join(', '),
+        farmerName: newOrder.items.map((item) => item.farmerName).filter(Boolean).join(', ') || 'Farmer not assigned',
+        farmLocation: store.products.find((product) => product.batchId === relatedBatch?.id || product.id === firstItem?.productId)?.farmLocation || 'Farm location pending verification',
+        inspectorId: '',
+        inspectorName: 'Unassigned Inspector',
+        inspectionDate: '',
+        inspectionLocation: 'FARM',
+        grade: 'Not graded',
+        moistureContentPercent: 0,
+        pesticideResiduePpm: 0,
+        foreignMatterPercent: 0,
+        status: 'PENDING',
+        remarks: 'Awaiting physical QC inspection. Measurements and grade have not been recorded.',
+      };
+      newOrder.qualityCheckId = pendingQc.id;
+      newOrder.qualityStatus = 'PENDING';
+      store.qualityChecks.unshift(pendingQc);
+      localStorage.setItem('agro_quality_checks', JSON.stringify(store.qualityChecks));
+      localStorage.setItem('agro_orders', JSON.stringify(store.orders));
+  
+      // Ask the backend to assign an approved, area-matched pickup partner now,
+      // before QC. The server owns partner selection and persists the assignment.
+      try {
+        const assignmentResponse = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(newOrder.id)}/assign-pickup`, {
+          method: 'POST',
+          headers: authHeaders(),
+          cache: 'no-store',
+        });
+        const assignmentPayload = await assignmentResponse.json().catch(() => ({}));
+        if (assignmentResponse.ok && assignmentPayload.job) {
+          const assignedJob = assignmentPayload.job as LogisticsJob;
+          store.jobs = [assignedJob, ...store.jobs.filter((job) => job.id !== assignedJob.id)];
+          localStorage.setItem('agro_jobs', JSON.stringify(store.jobs));
+        } else {
+          // The order remains confirmed; dispatch can assign it when an eligible
+          // pickup partner becomes available. Do not falsely mark QC as passed.
+          console.warn('Pickup assignment is pending:', assignmentPayload.message || assignmentResponse.status);
+        }
+      } catch (assignmentError) {
+        console.warn('Could not create the pre-QC pickup assignment:', assignmentError);
       }
-    } catch (assignmentError) {
-      console.warn('Could not create the pre-QC pickup assignment:', assignmentError);
-    }
+  
+      }
 
     // Initialize tracking timeline for this order
     const initialTimeline: TrackingEvent[] = [
