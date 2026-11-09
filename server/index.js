@@ -1298,6 +1298,35 @@ app.get('/api/farmers/payout-accounts/', requireAuth, async (req, res) => {
   }
 
   try {
+    if (req.auth.role === 'warehouse') {
+      const [warehouseRows, godownRows, codOrderRows] = await Promise.all([
+        pool.query("SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1", [req.auth.sub]),
+        pool.query("SELECT id FROM agrochain_records WHERE resource = 'godowns' AND data->>'managerId' = $1 AND upper(coalesce(data->>'status','')) = 'ACTIVE'", [req.auth.sub]),
+        pool.query("SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND data->>'paymentMethod' = 'COD'"),
+      ]);
+      const warehouseIds = new Set(warehouseRows.rows.map((row) => String(row.id)));
+      const godownIds = new Set(godownRows.rows.map((row) => String(row.id)));
+      const permittedOrderIds = new Set(codOrderRows.rows.filter((row) => {
+        const order = row.data || {};
+        const originId = String(order.warehouseId || order.originWarehouseId || '');
+        const destinationIds = [order.godownId, order.destinationGodownId].map((value) => String(value || '')).filter(Boolean);
+        return warehouseIds.has(originId) || destinationIds.some((id) => godownIds.has(id));
+      }).map((row) => row.id));
+      const permittedFarmerIds = new Set();
+      const permittedFarmerNames = new Set();
+      for (const row of codOrderRows.rows) {
+        if (!permittedOrderIds.has(row.id)) continue;
+        for (const item of Array.isArray(row.data?.items) ? row.data.items : []) {
+          if (item?.farmerId) permittedFarmerIds.add(String(item.farmerId).trim());
+          if (item?.farmerName) permittedFarmerNames.add(String(item.farmerName).trim().toLocaleLowerCase());
+        }
+      }
+      requestedRefs = requestedRefs.filter((ref) =>
+        (ref.farmerId && permittedFarmerIds.has(ref.farmerId)) ||
+        (ref.farmerName && permittedFarmerNames.has(ref.farmerName.toLocaleLowerCase()))
+      );
+    }
+
     const ids = [...new Set(requestedRefs.map((ref) => ref.farmerId).filter(Boolean))];
     const names = [...new Set(requestedRefs.map((ref) => ref.farmerName).filter(Boolean))];
     const result = await pool.query(
