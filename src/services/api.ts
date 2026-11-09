@@ -1703,14 +1703,10 @@ return qc;
       localStorage.setItem('agro_inventory', JSON.stringify(records));
       return records;
     } catch (error) {
-      if (isWarehouseSession()) {
-        store.inventory = [];
-        localStorage.setItem('agro_inventory', JSON.stringify([]));
-        if (controller.signal.aborted) throw new Error('Inventory request timed out after 15 seconds. Check the backend connection and try again.');
-        throw error;
-      }
-      console.warn('Could not load warehouse inventory from backend.', error);
-      return store.inventory;
+      store.inventory = [];
+      localStorage.setItem('agro_inventory', JSON.stringify([]));
+      if (controller.signal.aborted) throw new Error('Inventory request timed out after 15 seconds. Check the backend connection and try again.');
+      throw error;
     } finally {
       clearTimeout(timeoutId);
     }
