@@ -4188,17 +4188,21 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     // product edit must not overwrite the reservation counter or reduce stock
     // below zero. Farmer edits may still adjust the unreserved listing quantity.
     if (resource === 'products') {
-      const availableQuantity = Number(data.availableQuantity);
+      const availableQuantity = data.availableQuantity === undefined && existing
+        ? Number(existing.availableQuantity)
+        : Number(data.availableQuantity);
       const reservedQuantity = Number(existing?.reservedQuantity || 0);
       if (!Number.isFinite(availableQuantity) || availableQuantity < 0 ||
-          (existing && Number(data.reservedQuantity || 0) !== reservedQuantity)) {
+          (existing && data.reservedQuantity !== undefined && Number(data.reservedQuantity) !== reservedQuantity)) {
         await client.query('ROLLBACK');
         return res.status(409).json({ message: 'Product stock values are invalid or include a protected reservation change' });
       }
-      if (existing && reservedQuantity > 0 && availableQuantity !== Number(existing.availableQuantity || 0)) {
+      if (existing && reservedQuantity > 0 && data.availableQuantity !== undefined &&
+          availableQuantity !== Number(existing.availableQuantity || 0)) {
         await client.query('ROLLBACK');
         return res.status(409).json({ message: 'Available quantity cannot be manually overwritten while this product has active order reservations' });
       }
+      data.availableQuantity = availableQuantity;
       data.reservedQuantity = reservedQuantity;
     }
 
