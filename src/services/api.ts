@@ -831,7 +831,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     store.orders.unshift(newOrder);
     localStorage.setItem('agro_orders', JSON.stringify(store.orders));
 
-    if (newOrder.fulfillmentSource !== 'WAREHOUSE') {
+    if ((newOrder as Order & { fulfillmentSource?: string }).fulfillmentSource !== 'WAREHOUSE') {
       // The backend atomically creates and links a pending QC queue record when
       // the buyer's order is first inserted. Avoid duplicate QC writes and immediate
       // order rewrites, which caused checkout 403s after the first insert.
