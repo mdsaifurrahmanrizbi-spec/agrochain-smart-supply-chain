@@ -110,6 +110,7 @@ export const DashboardLayout: React.FC = () => {
           { label: 'Delivery Fleet', path: '/admin/delivery-partners', icon: Truck },
           { label: 'Partner Approvals', path: '/admin/partner-approvals', icon: ShieldCheck },
           { label: 'Regional Warehouses', path: '/admin/warehouses', icon: Warehouse },
+          { label: 'Warehouse Inventory', path: '/admin/inventory', icon: Package },
           { label: 'Local Godown Operations', path: '/warehouse/godown', icon: Building },
           { label: 'Quality Control Audits', path: '/admin/quality-checks', icon: FileCheck },
           { label: 'Delivery Verifications', path: '/admin/delivery-verifications', icon: CheckCircle },

@@ -7,6 +7,7 @@ export const WarehouseInventory: React.FC = () => {
   const [inventory, setInventory] = useState(store.inventory);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [adjustingId, setAdjustingId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -20,10 +21,35 @@ export const WarehouseInventory: React.FC = () => {
   const [selectedWarehouse, setSelectedWarehouse] = useState('All');
 
   const filtered = inventory.filter((item) => {
-    const matchesSearch = item.cropName.toLowerCase().includes(search.toLowerCase()) || item.batchCode.toLowerCase().includes(search.toLowerCase());
-    const matchesWh = selectedWarehouse === 'All' || item.warehouseName.includes(selectedWarehouse);
+    const matchesSearch = String(item.cropName || '').toLowerCase().includes(search.toLowerCase()) || String(item.batchCode || '').toLowerCase().includes(search.toLowerCase());
+    const matchesWh = selectedWarehouse === 'All' || String(item.warehouseName || '').includes(selectedWarehouse);
     return matchesSearch && matchesWh;
   });
+
+  const handleManualAdjustment = async (item: (typeof inventory)[number]) => {
+    const enteredQuantity = window.prompt(`Enter the verified physical stock for ${item.cropName} (kg):`, String(item.quantityKg));
+    if (enteredQuantity === null) return;
+    const newQuantityKg = Number(enteredQuantity);
+    if (!Number.isFinite(newQuantityKg) || newQuantityKg < 0) {
+      setLoadError('Enter a valid non-negative stock quantity in kg.');
+      return;
+    }
+    const reason = window.prompt('Why is this stock being corrected? (Required)');
+    if (!reason || reason.trim().length < 5) {
+      setLoadError('A correction reason of at least 5 characters is required.');
+      return;
+    }
+    setAdjustingId(item.id);
+    setLoadError(null);
+    try {
+      const updated = await agroApi.adjustInventoryStock(item.id, newQuantityKg, reason.trim());
+      setInventory((current) => current.map((row) => row.id === updated.id ? updated : row));
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Could not save the stock correction.');
+    } finally {
+      setAdjustingId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -72,26 +98,32 @@ export const WarehouseInventory: React.FC = () => {
                 <th className="py-3 px-4">Commodity</th>
                 <th className="py-3 px-4">Batch Code</th>
                 <th className="py-3 px-4">Grower Name</th>
-                <th className="py-3 px-4">Stock (kg)</th>
+                <th className="py-3 px-4">Physical (kg)</th>
+                <th className="py-3 px-4">Reserved (kg)</th>
+                <th className="py-3 px-4">Available (kg)</th>
                 <th className="py-3 px-4">Bay / Storage Zone</th>
                 <th className="py-3 px-4">Arrival Date</th>
                 <th className="py-3 px-4">Quality Status</th>
+                <th className="py-3 px-4">Correction</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading ? <tr><td colSpan={8} className="py-8 text-center text-slate-500">Loading inventory…</td></tr> : filtered.length === 0 ? <tr><td colSpan={8} className="py-8 text-center text-slate-500">No inventory records found for this warehouse.</td></tr> : filtered.map((item) => (
+              {loading ? <tr><td colSpan={11} className="py-8 text-center text-slate-500">Loading inventory…</td></tr> : filtered.length === 0 ? <tr><td colSpan={11} className="py-8 text-center text-slate-500">No inventory records found for this warehouse.</td></tr> : filtered.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                   <td className="py-3 px-4 font-semibold text-slate-900">{item.warehouseName}</td>
                   <td className="py-3 px-4">{item.cropName}</td>
                   <td className="py-3 px-4 font-mono font-bold text-slate-800">{item.batchCode}</td>
                   <td className="py-3 px-4">{item.farmerName}</td>
-                  <td className="py-3 px-4 font-bold text-slate-900 tabular-nums">
-                    {item.quantityKg.toLocaleString()} kg
-                  </td>
+                  <td className="py-3 px-4 font-bold text-slate-900 tabular-nums">{Number(item.quantityKg || 0).toLocaleString()} kg</td>
+                  <td className="py-3 px-4 text-slate-600 tabular-nums">{Number(item.reservedKg || 0).toLocaleString()} kg</td>
+                  <td className="py-3 px-4 font-bold text-emerald-700 tabular-nums">{Math.max(0, Number(item.availableKg ?? (Number(item.quantityKg || 0) - Number(item.reservedKg || 0)))).toLocaleString()} kg</td>
                   <td className="py-3 px-4 text-slate-600">{item.storageZone}</td>
                   <td className="py-3 px-4 font-mono text-slate-500">{item.arrivalDate}</td>
+                  <td className="py-3 px-4"><StatusBadge status={item.qualityStatus} size="sm" /></td>
                   <td className="py-3 px-4">
-                    <StatusBadge status={item.qualityStatus} size="sm" />
+                    <button type="button" disabled={adjustingId === item.id} onClick={() => void handleManualAdjustment(item)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                      {adjustingId === item.id ? 'Saving…' : 'Adjust'}
+                    </button>
                   </td>
                 </tr>
               ))}

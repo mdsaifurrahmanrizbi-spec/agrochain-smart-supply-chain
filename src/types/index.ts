@@ -345,16 +345,23 @@ export interface Warehouse {
 
 export interface WarehouseInventoryItem {
   id: string;
-  warehouseId: string;
+  warehouseId?: string;
+  godownId?: string;
   warehouseName: string;
+  productId?: string;
+  orderId?: string;
   cropName: string;
   category: string;
   batchCode: string;
   farmerName: string;
   quantityKg: number;
+  reservedKg?: number;
+  availableKg?: number;
   storageZone: string;
   qualityStatus: 'APPROVED' | 'PENDING';
   arrivalDate: string;
+  lastAdjustmentReason?: string;
+  lastAdjustedAt?: string;
 }
 
 export interface QualityCheck {
