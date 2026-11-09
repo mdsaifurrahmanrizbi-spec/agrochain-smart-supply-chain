@@ -12,16 +12,34 @@ export const WarehouseIncoming: React.FC = () => {
   useEffect(() => {
     let active = true;
     Promise.all([agroApi.getLogisticsJobs(), agroApi.getOrders(), agroApi.getWarehouses({ strict: true }), agroApi.getGodownShipments()])
-      .then(([records, , facilities, shipmentRecords]) => { if (active) { setJobs(records.filter((job) => job.type === 'PICKUP')); setWarehouseFacility(facilities[0] || null); setShipments(shipmentRecords); } })
+      .then(([records, orderRecords, facilities, shipmentRecords]) => {
+        if (active) {
+          // Keep the shared API store in sync with the authoritative backend records.
+          // Intake actions resolve the selected job from store.jobs.
+          store.jobs = records;
+          store.orders = orderRecords;
+          store.godownShipments = shipmentRecords;
+          localStorage.setItem('agro_jobs', JSON.stringify(records));
+          localStorage.setItem('agro_orders', JSON.stringify(orderRecords));
+          localStorage.setItem('agro_godown_shipments', JSON.stringify(shipmentRecords));
+          setJobs(records.filter((job) => job.type === 'PICKUP'));
+          setWarehouseFacility(facilities[0] || null);
+          setShipments(shipmentRecords);
+        }
+      })
       .catch((error: unknown) => { if (active) setErrorMsg(error instanceof Error ? error.message : 'Could not load incoming jobs.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [receivingJobId, setReceivingJobId] = useState<string | null>(null);
 
   const handleConfirmIntake = async (jobId: string) => {
+    if (receivingJobId) return;
     setErrorMsg(null);
+    setSuccessMsg(null);
+    setReceivingJobId(jobId);
     try {
       const res = await agroApi.centralWarehouseReceive(jobId);
       setJobs([...store.jobs.filter((j) => j.type === 'PICKUP')]);
@@ -33,10 +51,10 @@ export const WarehouseIncoming: React.FC = () => {
       } else {
         setSuccessMsg(`Shipment intake completed. Placed in review queue.`);
       }
-      setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: any) {
       setErrorMsg(err.message || 'Intake failed.');
-      setTimeout(() => setErrorMsg(null), 4000);
+    } finally {
+      setReceivingJobId(null);
     }
   };
 
@@ -122,10 +140,11 @@ export const WarehouseIncoming: React.FC = () => {
                 {awaitingIntake ? (
                   <button
                     onClick={() => handleConfirmIntake(job.id)}
+                    disabled={receivingJobId === job.id}
                     className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
                   >
                     <Scale className="w-3.5 h-3.5" />
-                    <span>Verify Weight & Receive at {warehouseFacility?.name || 'Assigned Warehouse'}</span>
+                    <span>{receivingJobId === job.id ? 'Verifying intake…' : `Verify Weight & Receive at ${warehouseFacility?.name || 'Assigned Warehouse'}`}</span>
                   </button>
                 ) : isReceived ? (
                   <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
