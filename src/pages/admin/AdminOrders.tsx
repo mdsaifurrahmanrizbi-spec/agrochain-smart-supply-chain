@@ -29,7 +29,14 @@ export const AdminOrders: React.FC = () => {
       farmerName: item.farmerName,
     })));
     const uniqueRefs = [...new Map(farmerRefs.map((ref) => [`${ref.farmerId}|${ref.farmerName}`, ref])).values()];
-    agroApi.getFarmerPayoutAccounts(uniqueRefs).then((accounts) => {
+    // The API accepts at most 100 farmer references per request. Fetch every
+    // batch so orders later in a long order list are not silently omitted.
+    const accountRequests = [];
+    for (let index = 0; index < uniqueRefs.length; index += 100) {
+      accountRequests.push(agroApi.getFarmerPayoutAccounts(uniqueRefs.slice(index, index + 100)));
+    }
+    Promise.all(accountRequests).then((batches) => {
+      const accounts = batches.flat();
       setPayoutAccounts(Object.fromEntries(accounts.map((account) => [
         account.farmerId,
         [account.payoutMethod, account.payoutBankName, account.payoutAccountNumber].filter(Boolean).join(' · ') || 'Not provided',
