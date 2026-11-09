@@ -1281,27 +1281,61 @@ app.patch('/api/farmer/payout-account/', requireAuth, async (req, res) => {
 
 app.get('/api/farmers/payout-accounts/', requireAuth, async (req, res) => {
   if (!['admin', 'warehouse'].includes(req.auth.role)) return res.status(403).json({ message: 'Admin or Warehouse Manager access required' });
-  const requestedIds = typeof req.query.farmerIds === 'string'
-    ? req.query.farmerIds.split(',').map((value) => value.trim()).filter(Boolean).slice(0, 100)
-    : [];
+
+  let requestedRefs = [];
+  if (typeof req.query.farmerRefs === 'string') {
+    try {
+      const parsed = JSON.parse(req.query.farmerRefs);
+      if (Array.isArray(parsed)) {
+        requestedRefs = parsed.slice(0, 100).map((ref) => ({
+          farmerId: typeof ref?.farmerId === 'string' ? ref.farmerId.trim().slice(0, 160) : '',
+          farmerName: typeof ref?.farmerName === 'string' ? ref.farmerName.trim().slice(0, 120) : '',
+        })).filter((ref) => ref.farmerId || ref.farmerName);
+      }
+    } catch {
+      return res.status(400).json({ message: 'Invalid farmer references' });
+    }
+  }
+
   try {
-    const result = requestedIds.length
-      ? await pool.query(
-          `SELECT id, name, payout_method, payout_account_number, payout_bank_name
-           FROM auth_users WHERE role = 'farmer' AND id = ANY($1::text[]) ORDER BY name`,
-          [requestedIds]
-        )
-      : await pool.query(
-          `SELECT id, name, payout_method, payout_account_number, payout_bank_name
-           FROM auth_users WHERE role = 'farmer' ORDER BY name`
-        );
-    return res.json(result.rows.map((row) => ({
-      farmerId: row.id,
-      farmerName: row.name,
-      payoutMethod: row.payout_method || null,
-      payoutAccountNumber: row.payout_account_number || null,
-      payoutBankName: row.payout_bank_name || null,
-    })));
+    const ids = [...new Set(requestedRefs.map((ref) => ref.farmerId).filter(Boolean))];
+    const names = [...new Set(requestedRefs.map((ref) => ref.farmerName).filter(Boolean))];
+    const result = await pool.query(
+      `SELECT id, name, payout_method, payout_account_number, payout_bank_name
+       FROM auth_users
+       WHERE role = 'farmer'
+         AND (id = ANY($1::text[]) OR LOWER(BTRIM(name)) = ANY($2::text[]))
+       ORDER BY name`,
+      [ids, names.map((name) => name.toLocaleLowerCase())]
+    );
+
+    const byId = new Map(result.rows.map((row) => [row.id, row]));
+    const byName = new Map();
+    for (const row of result.rows) {
+      const key = String(row.name || '').trim().toLocaleLowerCase();
+      const matches = byName.get(key) || [];
+      matches.push(row);
+      byName.set(key, matches);
+    }
+
+    const response = requestedRefs.flatMap((ref) => {
+      const direct = ref.farmerId ? byId.get(ref.farmerId) : null;
+      const nameMatches = ref.farmerName
+        ? (byName.get(ref.farmerName.toLocaleLowerCase()) || [])
+        : [];
+      // Legacy order IDs may differ from auth_users.id. Name fallback is allowed
+      // only for a unique exact match; ambiguous names never expose an account.
+      const row = direct || (nameMatches.length === 1 ? nameMatches[0] : null);
+      if (!row) return [];
+      return [{
+        farmerId: ref.farmerId || row.id,
+        farmerName: row.name,
+        payoutMethod: row.payout_method || null,
+        payoutAccountNumber: row.payout_account_number || null,
+        payoutBankName: row.payout_bank_name || null,
+      }];
+    });
+    return res.json(response);
   } catch (error) {
     console.error('Could not load farmer payout accounts:', error.message);
     return res.status(500).json({ message: 'Could not load payout accounts' });
