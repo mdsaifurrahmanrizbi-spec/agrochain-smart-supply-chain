@@ -2274,8 +2274,8 @@ app.post('/api/warehouse/shipments/:shipmentId/dispatch', requireAuth, async (re
     const order = orderRow.data || {};
     if (Array.isArray(shipment.inventorySourceLines) && shipment.inventorySourceLines.length) {
       try { await decrementFacilityInventoryStock(client, shipment.inventorySourceLines, 'WAREHOUSE_DISPATCHED', { id: req.auth.sub, role: req.auth.role }, order); }
-      if (shipment.directWarehouseReservation === true) { order.warehouseStockReservationStatus = 'CONSUMED'; order.warehouseStockReservationConsumedAt = now; }
       catch (inventoryError) { await client.query('ROLLBACK'); return res.status(409).json({ message: inventoryError.message || 'Could not safely dispatch warehouse stock' }); }
+      if (shipment.directWarehouseReservation === true) { order.warehouseStockReservationStatus = 'CONSUMED'; order.warehouseStockReservationConsumedAt = now; }
       const sourceStockKg = shipment.inventorySourceLines.reduce((sum, line) => sum + Number(line.quantityKg || 0), 0);
       const sourceStock = warehouseResult.rows[0].data || {};
       sourceStock.currentStockMetricTons = Math.max(0, Number((Number(sourceStock.currentStockMetricTons || 0) - sourceStockKg / 1000).toFixed(3)));
