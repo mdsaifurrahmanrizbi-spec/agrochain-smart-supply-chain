@@ -2281,6 +2281,7 @@ app.post('/api/warehouse/shipments/:shipmentId/dispatch', requireAuth, async (re
     shipment.dispatchDate = now;
     shipment.transferCarrier = carrier;
     const order = orderRow.data || {};
+    if (order.orderStatus === 'CANCELLED' || (shipment.directWarehouseReservation === true && order.warehouseStockReservationStatus !== 'RESERVED')) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Cancelled or unreserved orders cannot be dispatched' }); }
     if (Array.isArray(shipment.inventorySourceLines) && shipment.inventorySourceLines.length) {
       try { await decrementFacilityInventoryStock(client, shipment.inventorySourceLines, 'WAREHOUSE_DISPATCHED', { id: req.auth.sub, role: req.auth.role }, order); }
       catch (inventoryError) { await client.query('ROLLBACK'); return res.status(409).json({ message: inventoryError.message || 'Could not safely dispatch warehouse stock' }); }
@@ -3347,7 +3348,7 @@ app.post('/api/orders/:id/cancel', requireAuth, async (req, res) => {
     if (order.orderStatus === 'DELIVERED' || order.isDeliveryVerified === true) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Delivered orders cannot be cancelled' }); }
     const pickupStarted = new Set(['PICKED_UP','IN_TRANSIT','IN_TRANSIT_CENTRAL','WAREHOUSE_RECEIVED','IN_WAREHOUSE','GODOWN_ASSIGNED','GODOWN_TRANSFER_IN_TRANSIT','ARRIVED_LOCAL_GODOWN','GODOWN_RECEIVED','ARRIVED_REGIONAL_GODOWN','DELIVERY_PARTNER_ASSIGNED','DELIVERY_ASSIGNMENT_PENDING','MANUAL_ROUTING_REQUIRED','DELIVERY_ACCEPTED','DELIVERY_PARTNER_COLLECTED','OUT_FOR_DELIVERY']);
     const directShipmentLookup = order.fulfillmentSource === 'WAREHOUSE'
-      ? await client.query("SELECT data FROM agrochain_records WHERE resource='godownShipments' AND data->>'orderId'=$1 LIMIT 1", [row.id])
+      ? await client.query("SELECT id,data FROM agrochain_records WHERE resource='godownShipments' AND data->>'orderId'=$1 LIMIT 1", [row.id])
       : { rows: [] };
     const directWarehouseCanCancel = order.fulfillmentSource === 'WAREHOUSE' &&
       ['PENDING_DISPATCH','MANUAL_ROUTING_REQUIRED'].includes(String(directShipmentLookup.rows[0]?.data?.transferStatus || '').toUpperCase());
@@ -3427,6 +3428,13 @@ app.post('/api/orders/:id/cancel', requireAuth, async (req, res) => {
       }
       order.stockReservationStatus = 'RELEASED';
       order.stockReservationReleasedAt = new Date().toISOString();
+    }
+    if (directWarehouseCanCancel && directShipmentLookup.rows[0]?.id) {
+      const shipment = directShipmentLookup.rows[0].data || {};
+      shipment.transferStatus = 'CANCELLED';
+      shipment.cancelledAt = new Date().toISOString();
+      shipment.cancelledBy = req.auth.sub;
+      await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='godownShipments' AND id=$1", [directShipmentLookup.rows[0].id, JSON.stringify(shipment)]);
     }
     order.orderStatus = 'CANCELLED'; order.cancelledAt = now; order.cancelledBy = 'buyer'; order.updatedAt = now;
     await client.query("UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1", [row.id, JSON.stringify(order)]);
