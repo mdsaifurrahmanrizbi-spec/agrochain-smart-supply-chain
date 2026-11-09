@@ -70,7 +70,7 @@ const reserveWarehouseStockForOrder = async (client, order, actor) => {
       let remaining = line.quantityKg;
       for (const row of rows.filter((candidate) => String(candidate.data?.productId || '') === line.productId)) {
         const physical = Number(row.data?.quantityKg || 0), reserved = Number(row.data?.reservedKg || 0);
-        const available = Number(row.data?.availableKg ?? physical - reserved);
+        const available = physical - reserved;
         const take = Math.min(Math.max(0, available), remaining);
         if (take > 0) { allocations.push({ inventoryId: row.id, productId: line.productId, quantityKg: Number(take.toFixed(3)), warehouseId: warehouseRow.id }); remaining = Number((remaining - take).toFixed(3)); }
         if (remaining <= 0.0001) break;
