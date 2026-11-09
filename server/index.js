@@ -3248,9 +3248,9 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
           .filter((row) => {
             const order = row.data || {};
             const originId = originWarehouseByOrderId.get(row.id)?.id || String(order.warehouseId || order.originWarehouseId || '');
-            const destinationGodownId = String(order.godownId || order.destinationGodownId || '');
+            const destinationGodownIds = [order.godownId, order.destinationGodownId].map((value) => String(value || '')).filter(Boolean);
             return order.paymentMethod === 'COD' &&
-              (warehouseIds.has(originId) || godownIds.has(destinationGodownId));
+              (warehouseIds.has(originId) || destinationGodownIds.some((id) => godownIds.has(id)));
           })
           .map((row) => {
             const origin = originWarehouseByOrderId.get(row.id);
@@ -3264,7 +3264,8 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
           "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND data->>'paymentMethod' = 'COD'"
         );
         const ownedCodOrderIds = new Set(codOrderRows.rows
-          .filter((row) => godownIds.has(String(row.data?.godownId || row.data?.destinationGodownId || '')))
+          .filter((row) => [row.data?.godownId, row.data?.destinationGodownId]
+            .some((id) => id && godownIds.has(String(id))))
           .map((row) => row.id));
         rows = rows.filter((row) => ownedCodOrderIds.has(String(row.data?.orderId || '')));
       }
@@ -3312,8 +3313,8 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
           .filter((row) => {
             const order = row.data || {};
             const originId = String(order.warehouseId || order.originWarehouseId || '');
-            const destinationGodownId = String(order.godownId || order.destinationGodownId || '');
-            return ownedWarehouseIds.has(originId) || ownedGodownIds.has(destinationGodownId);
+            const destinationGodownIds = [order.godownId, order.destinationGodownId].map((value) => String(value || '')).filter(Boolean);
+            return ownedWarehouseIds.has(originId) || destinationGodownIds.some((id) => ownedGodownIds.has(id));
           })
           .map((row) => row.id));
         rows = rows.filter((row) => ownedCodOrderIds.has(String(row.data?.orderId || '')));
@@ -4015,11 +4016,12 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       if (role === 'warehouse') {
         // Only the manager of the destination godown may verify custody of the
         // COD cash collected at the customer's doorstep.
-        const destinationGodownId = String(relatedOrder?.godownId || relatedOrder?.destinationGodownId || '');
-        const ownedDestinationGodown = destinationGodownId
+        const destinationGodownIds = [relatedOrder?.godownId, relatedOrder?.destinationGodownId]
+          .map((value) => String(value || '')).filter(Boolean);
+        const ownedDestinationGodown = destinationGodownIds.length
           ? await client.query(
-              "SELECT id FROM agrochain_records WHERE resource = 'godowns' AND id = $1 AND data->>'managerId' = $2 AND upper(coalesce(data->>'status','')) = 'ACTIVE' LIMIT 1",
-              [destinationGodownId, req.auth.sub]
+              "SELECT id FROM agrochain_records WHERE resource = 'godowns' AND id = ANY($1::text[]) AND data->>'managerId' = $2 AND upper(coalesce(data->>'status','')) = 'ACTIVE' LIMIT 1",
+              [destinationGodownIds, req.auth.sub]
             )
           : { rows: [] };
         if (!ownedDestinationGodown.rows[0]) {
