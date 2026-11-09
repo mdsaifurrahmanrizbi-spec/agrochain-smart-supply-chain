@@ -30,6 +30,13 @@ export const BuyerTracking: React.FC = () => {
     myOrders[0] ||
     store.orders[0];
 
+  const [deliveryPasscode, setDeliveryPasscode] = useState<{
+    loading: boolean;
+    error: string;
+    otp: string | null;
+    attemptsRemaining: number | null;
+    verified: boolean;
+  }>({ loading: true, error: '', otp: null, attemptsRemaining: null, verified: false });
   const [events, setEvents] = useState(store.trackingEvents[order?.id || ''] || []);
   useEffect(() => {
     let active = true;
@@ -41,12 +48,43 @@ export const BuyerTracking: React.FC = () => {
     return () => { active = false; };
   }, [order?.id]);
 
+  useEffect(() => {
+    let active = true;
+    setDeliveryPasscode({ loading: true, error: '', otp: null, attemptsRemaining: null, verified: false });
+    if (!order?.id || user?.role !== 'buyer' || String(order.buyerId) !== String(user.id)) {
+      setDeliveryPasscode({ loading: false, error: 'Sign in with the buyer account that placed this order to view its delivery passcode.', otp: null, attemptsRemaining: null, verified: false });
+      return () => { active = false; };
+    }
+    agroApi.getBuyerDeliveryPasscode(order.id)
+      .then((result) => {
+        if (!active) return;
+        setDeliveryPasscode({
+          loading: false,
+          error: '',
+          otp: result.deliveryOtp,
+          attemptsRemaining: result.otpAttemptsRemaining,
+          verified: result.isDeliveryVerified,
+        });
+      })
+      .catch((error) => {
+        if (!active) return;
+        setDeliveryPasscode({
+          loading: false,
+          error: error instanceof Error ? error.message : 'Could not load delivery passcode. Please refresh.',
+          otp: null,
+          attemptsRemaining: null,
+          verified: false,
+        });
+      });
+    return () => { active = false; };
+  }, [order?.id, order?.buyerId, user?.id, user?.role]);
+
   const farmQc = store.qualityChecks.find((check) =>
     check.orderId === order?.id || check.id === order?.qualityCheckId
   );
 
   // Check if current user is the owner of this order (or demo viewing customer panel)
-  const isCorrectCustomer = user?.role === 'buyer' || user?.role === 'admin' || !user;
+  const isCorrectCustomer = user?.role === 'buyer' && String(order.buyerId) === String(user.id);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -82,10 +120,10 @@ export const BuyerTracking: React.FC = () => {
 
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20 text-center min-w-[180px] shrink-0">
               <span className="text-[10px] uppercase tracking-widest text-emerald-300 font-bold block mb-1">
-                {order.isDeliveryVerified ? 'Status: VERIFIED' : 'Active Passcode'}
+                {deliveryPasscode.verified ? 'Status: VERIFIED' : 'Active Passcode'}
               </span>
 
-              {order.isDeliveryVerified ? (
+              {deliveryPasscode.verified ? (
                 <div className="space-y-1">
                   <div className="inline-flex items-center gap-1 text-sm text-emerald-200 font-bold">
                     <CheckCircle2 className="w-4 h-4 text-emerald-300" />
@@ -95,10 +133,10 @@ export const BuyerTracking: React.FC = () => {
               ) : (
                 <div className="space-y-1">
                   <div className="font-mono text-3xl font-black text-white tracking-widest bg-emerald-950/60 py-1.5 px-3 rounded-lg border border-emerald-400/40">
-                    {order.deliveryOtp}
+                    {deliveryPasscode.loading ? 'Loading…' : deliveryPasscode.error ? 'Unavailable' : deliveryPasscode.otp || 'Not available'}
                   </div>
                   <div className="text-[10px] text-emerald-200 mt-1">
-                    {order.otpAttemptsRemaining} verification attempts remaining
+                    {deliveryPasscode.loading ? 'Checking secure order record…' : deliveryPasscode.error ? deliveryPasscode.error : deliveryPasscode.attemptsRemaining === null ? 'Verification attempts unavailable' : `${deliveryPasscode.attemptsRemaining} verification attempts remaining`}
                   </div>
                 </div>
               )}
