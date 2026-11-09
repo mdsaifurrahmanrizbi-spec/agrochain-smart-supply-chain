@@ -3337,7 +3337,12 @@ app.post('/api/orders/:id/cancel', requireAuth, async (req, res) => {
     if (order.orderStatus === 'CANCELLED') { await client.query('ROLLBACK'); return res.status(409).json({ message: 'This order has already been cancelled' }); }
     if (order.orderStatus === 'DELIVERED' || order.isDeliveryVerified === true) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'Delivered orders cannot be cancelled' }); }
     const pickupStarted = new Set(['PICKED_UP','IN_TRANSIT','IN_TRANSIT_CENTRAL','WAREHOUSE_RECEIVED','IN_WAREHOUSE','GODOWN_ASSIGNED','GODOWN_TRANSFER_IN_TRANSIT','ARRIVED_LOCAL_GODOWN','GODOWN_RECEIVED','ARRIVED_REGIONAL_GODOWN','DELIVERY_PARTNER_ASSIGNED','DELIVERY_ASSIGNMENT_PENDING','MANUAL_ROUTING_REQUIRED','DELIVERY_ACCEPTED','DELIVERY_PARTNER_COLLECTED','OUT_FOR_DELIVERY']);
-    if ((pickupStarted.has(String(order.orderStatus || '').toUpperCase()) && !(order.fulfillmentSource === 'WAREHOUSE' && ['PENDING_DISPATCH','MANUAL_ROUTING_REQUIRED'].includes(String(order.orderStatus === 'MANUAL_ROUTING_REQUIRED' ? 'MANUAL_ROUTING_REQUIRED' : 'PENDING_DISPATCH')))) || order.partnerCollectedAt || order.handoverInitiatedAt || order.outForDeliveryAt) {
+    const directShipmentLookup = order.fulfillmentSource === 'WAREHOUSE'
+      ? await client.query("SELECT data FROM agrochain_records WHERE resource='godownShipments' AND data->>'orderId'=$1 LIMIT 1", [row.id])
+      : { rows: [] };
+    const directWarehouseCanCancel = order.fulfillmentSource === 'WAREHOUSE' &&
+      ['PENDING_DISPATCH','MANUAL_ROUTING_REQUIRED'].includes(String(directShipmentLookup.rows[0]?.data?.transferStatus || '').toUpperCase());
+    if ((pickupStarted.has(String(order.orderStatus || '').toUpperCase()) && !directWarehouseCanCancel) || order.partnerCollectedAt || order.handoverInitiatedAt || order.outForDeliveryAt) {
       await client.query('ROLLBACK');
       return res.status(409).json({ message: 'This order can no longer be cancelled because pickup or shipment processing has started' });
     }
@@ -3357,7 +3362,7 @@ app.post('/api/orders/:id/cancel', requireAuth, async (req, res) => {
         inventory.updatedAt = new Date().toISOString();
         await client.query("UPDATE agrochain_records SET data=$2::jsonb,updated_at=NOW() WHERE resource='inventory' AND id=$1", [row.id, JSON.stringify(inventory)]);
         await appendInventoryLedger(client, {
-          eventType:'ORDER_WAREHOUSE_RESERVATION_RELEASED', orderId:row.id ? String(order.id || '') : '',
+          eventType:'ORDER_WAREHOUSE_RESERVATION_RELEASED', orderId:String(order.id || row.id),
           orderNumber:String(order.orderNumber || order.id || ''), inventoryId:row.id,
           productId:String(reservation.productId || inventory.productId || ''), productName:String(inventory.cropName || 'Product'),
           warehouseId:String(inventory.warehouseId || ''), quantityKg,
