@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { agroApi, store } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Search, ShieldCheck, Banknote } from 'lucide-react';
+import { FarmerPayoutDialog, type FarmerPayoutMethod } from '../../components/admin/FarmerPayoutDialog';
 
 export const WarehouseOrders: React.FC = () => {
   const navigate = useNavigate();
@@ -15,13 +16,16 @@ export const WarehouseOrders: React.FC = () => {
   const [orders, setOrders] = useState(store.orders.filter((order) => order.paymentMethod === 'COD'));
   const [settlements, setSettlements] = useState(store.settlements);
   const [payoutAccounts, setPayoutAccounts] = useState<Record<string, string>>({});
+  const [codRecords, setCodRecords] = useState(store.codRecords);
+  const [selectedPayout, setSelectedPayout] = useState<{ settlementId: string; orderNumber: string; farmerName: string; account: string; amount: number } | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([agroApi.getOrders(), agroApi.getSettlements(), agroApi.getCODRecords()]).then(([loadedOrders, loadedSettlements]) => {
+    Promise.all([agroApi.getOrders(), agroApi.getSettlements(), agroApi.getCODRecords()]).then(([loadedOrders, loadedSettlements, loadedCodRecords]) => {
       if (!mounted) return;
       setOrders(loadedOrders.filter((order) => order.paymentMethod === 'COD'));
       setSettlements(loadedSettlements);
+      setCodRecords(loadedCodRecords);
     }).catch((error) => console.warn('Could not refresh warehouse COD orders and payouts.', error));
     return () => { mounted = false; };
   }, []);
@@ -40,21 +44,12 @@ export const WarehouseOrders: React.FC = () => {
     }).catch((error) => console.warn('Could not load authorized farmer payout accounts.', error));
   }, [orders]);
 
-  const handleFarmerPayout = async (orderId: string) => {
-    const settlement = settlements.find((item) => item.orderId === orderId);
-    if (!settlement) {
-      window.alert('Farmer payout record is not available yet. Refresh orders after delivery confirmation.');
-      return;
-    }
-    const reference = window.prompt('After you have actually transferred the money to the farmer, enter the bank/bKash/Nagad transaction reference:');
-    if (reference === null) return;
-    try {
-      await agroApi.releaseSellerSettlementPayout(settlement.id, reference);
-      setSettlements([...store.settlements]);
-      setRevision((value) => value + 1);
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'Could not record farmer payout.');
-    }
+  const confirmFarmerPayout = async (method: FarmerPayoutMethod, reference: string) => {
+    if (!selectedPayout) return;
+    await agroApi.releaseSellerSettlementPayout(selectedPayout.settlementId, method, reference);
+    setSettlements([...store.settlements]);
+    setSelectedPayout(null);
+    setRevision((value) => value + 1);
   };
 
   const filtered = orders.filter((order) => {
@@ -67,7 +62,7 @@ export const WarehouseOrders: React.FC = () => {
       order.buyerCity,
       ...order.items.flatMap((item) => [item.productName, item.farmerName]),
     ].some((value) => String(value || '').toLowerCase().includes(query));
-    const record = store.codRecords.find((item) => item.orderId === order.id);
+    const record = codRecords.find((item) => item.orderId === order.id);
     const verified = record?.depositStatus === 'CASH_DEPOSIT_VERIFIED';
     const matchesCash = cashFilter === 'ALL' ||
       (cashFilter === 'VERIFIED' && verified) ||
@@ -119,7 +114,7 @@ export const WarehouseOrders: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.map((order) => {
-                const record = store.codRecords.find((item) => item.orderId === order.id);
+                const record = codRecords.find((item) => item.orderId === order.id);
                 const verified = record?.depositStatus === 'CASH_DEPOSIT_VERIFIED';
                 const delivered = order.isDeliveryVerified && order.orderStatus === 'DELIVERED';
                 return (
@@ -147,21 +142,34 @@ export const WarehouseOrders: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       {(() => {
-                        const settlement = settlements.find((item) => item.orderId === order.id);
+                        const settlement = settlements.find((item) => item.orderId === order.id || item.orderNumber === order.orderNumber);
                         const paid = settlement && ['PAID', 'COMPLETED'].includes(settlement.settlementStatus);
                         return <><StatusBadge status={settlement?.settlementStatus || 'PENDING'} size="sm" />
-                          {settlement?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Ref: {settlement.payoutReference}</span>}
+                          {settlement?.payoutMethod && <span className="mt-1 block text-[10px] text-slate-500">Via: {settlement.payoutMethod}</span>}{settlement?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Txn: {settlement.payoutReference}</span>}
                           {paid && <span className="mt-1 block text-[10px] font-semibold text-emerald-700">Farmer payout successful</span>}
                         </>;
                       })()}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {!verified && delivered && record ? <button onClick={() => navigate('/warehouse/verifications')} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 font-bold text-white"><ShieldCheck className="h-3.5 w-3.5" /> Audit cash</button> :
-                        verified && delivered && !['PAID', 'COMPLETED'].includes(store.settlements.find((item) => item.orderId === order.id)?.settlementStatus || 'PENDING') ?
-                          <button onClick={() => void handleFarmerPayout(order.id)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 font-bold text-white"><Banknote className="h-3.5 w-3.5" /> Farmer payout success</button> :
-                          ['PAID', 'COMPLETED'].includes(store.settlements.find((item) => item.orderId === order.id)?.settlementStatus || '') ?
+                        verified && delivered && !['PAID', 'COMPLETED'].includes(settlements.find((item) => item.orderId === order.id || item.orderNumber === order.orderNumber)?.settlementStatus || 'PENDING') ?
+                          <button onClick={() => {
+                            const settlement = settlements.find((item) => item.orderId === order.id || item.orderNumber === order.orderNumber);
+                            const firstItem = order.items[0];
+                            if (!settlement || !firstItem) return;
+                            const account = payoutAccounts[firstItem.farmerId] || '';
+                            if (!account || account === 'Not provided') return;
+                            setSelectedPayout({
+                              settlementId: settlement.id,
+                              orderNumber: order.orderNumber,
+                              farmerName: firstItem.farmerName || settlement.farmerName,
+                              account,
+                              amount: settlement.netPayout || settlement.amount || order.sellerNetEarnings || 0,
+                            });
+                          }} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 font-bold text-white"><Banknote className="h-3.5 w-3.5" /> Payment Successful</button> :
+                          ['PAID', 'COMPLETED'].includes(settlements.find((item) => item.orderId === order.id || item.orderNumber === order.orderNumber)?.settlementStatus || '') ?
                             <span className="inline-flex items-center gap-1 font-bold text-emerald-700"><Banknote className="h-3.5 w-3.5" /> Paid</span> :
-                            <span className="text-[10px] text-slate-400">After delivery</span>}
+                            <span className="text-[10px] text-slate-400">{delivered && verified && (!payoutAccounts[order.items[0]?.farmerId] || payoutAccounts[order.items[0]?.farmerId] === 'Not provided') ? 'Farmer payout account unavailable' : 'After delivery and cash verification'}</span>}
                     </td>
                   </tr>
                 );
@@ -171,6 +179,15 @@ export const WarehouseOrders: React.FC = () => {
           </table>
         </div>
       </div>
+      <FarmerPayoutDialog
+        open={!!selectedPayout}
+        orderNumber={selectedPayout?.orderNumber || ''}
+        farmerName={selectedPayout?.farmerName || ''}
+        payoutAccount={selectedPayout?.account || ''}
+        amount={selectedPayout?.amount || 0}
+        onClose={() => setSelectedPayout(null)}
+        onSubmit={confirmFarmerPayout}
+      />
     </div>
   );
 };

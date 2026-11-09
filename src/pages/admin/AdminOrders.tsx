@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { agroApi, store } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { TrackingTimeline } from '../../components/common/TrackingTimeline';
-import { Search, ShieldCheck } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Search, Banknote } from 'lucide-react';
+import { FarmerPayoutDialog, type FarmerPayoutMethod } from '../../components/admin/FarmerPayoutDialog';
 
 export const AdminOrders: React.FC = () => {
   const [orders, setOrders] = useState(store.orders);
@@ -12,13 +12,16 @@ export const AdminOrders: React.FC = () => {
   const [search, setSearch] = useState('');
   const [trackingOrder, setTrackingOrder] = useState<(typeof store.orders)[number] | null>(null);
   const [trackingEvents, setTrackingEvents] = useState(store.trackingEvents[store.orders[0]?.id || ''] || []);
+  const [codRecords, setCodRecords] = useState(store.codRecords);
+  const [selectedPayout, setSelectedPayout] = useState<{ settlementId: string; orderNumber: string; farmerName: string; account: string; amount: number } | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([agroApi.getOrders(), agroApi.getSettlements()]).then(([loadedOrders, loadedSettlements]) => {
+    Promise.all([agroApi.getOrders(), agroApi.getSettlements(), agroApi.getCODRecords()]).then(([loadedOrders, loadedSettlements, loadedCodRecords]) => {
       if (!mounted) return;
       setOrders(loadedOrders);
       setSettlements(loadedSettlements);
+      setCodRecords(loadedCodRecords);
     }).catch((error) => console.warn('Could not refresh admin orders and payouts.', error));
     return () => { mounted = false; };
   }, []);
@@ -36,6 +39,13 @@ export const AdminOrders: React.FC = () => {
       ])));
     }).catch((error) => console.warn('Could not load authorized farmer payout accounts.', error));
   }, [orders]);
+  const confirmFarmerPayout = async (method: FarmerPayoutMethod, reference: string) => {
+    if (!selectedPayout) return;
+    await agroApi.releaseSellerSettlementPayout(selectedPayout.settlementId, method, reference);
+    setSettlements([...store.settlements]);
+    setSelectedPayout(null);
+  };
+
   const openTracking = async (order: (typeof store.orders)[number]) => {
     setTrackingOrder(order);
     setTrackingEvents(store.trackingEvents[order.id] || []);
@@ -165,14 +175,29 @@ export const AdminOrders: React.FC = () => {
                         const payout = settlements.find((item) => item.orderId === ord.id || item.orderNumber === ord.orderNumber);
                         return <div className="mb-2">
                           <StatusBadge status={payout?.settlementStatus || 'PENDING'} size="sm" />
-                          {payout?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Transfer ref: {payout.payoutReference}</span>}
+                          {payout?.payoutMethod && <span className="mt-1 block text-[10px] text-slate-500">Via: {payout.payoutMethod}</span>}{payout?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Txn: {payout.payoutReference}</span>}
                         </div>;
                       })()}
-                      {ord.isDeliveryVerified && ord.orderStatus === 'DELIVERED' ? (
-                        <Link to="/admin/seller-payments" className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
-                          <ShieldCheck className="w-3 h-3" /> Manage farmer payout
-                        </Link>
-                      ) : <span className="text-slate-400 text-[11px]">Available after delivery</span>}
+                      {(() => {
+                        const settlement = settlements.find((item) => item.orderId === ord.id || item.orderNumber === ord.orderNumber);
+                        const firstItem = ord.items[0];
+                        const cashVerified = codRecords.some((record) => record.orderId === ord.id && record.depositStatus === 'CASH_DEPOSIT_VERIFIED');
+                        const account = firstItem ? payoutAccounts[firstItem.farmerId] || '' : '';
+                        const accountAvailable = !!account && account !== 'Not provided';
+                        const payoutReady = ord.isDeliveryVerified && ord.orderStatus === 'DELIVERED' &&
+                          (ord.paymentMethod !== 'COD' || cashVerified) && accountAvailable &&
+                          settlement && !['PAID', 'COMPLETED'].includes(settlement.settlementStatus);
+                        if (!payoutReady || !settlement || !firstItem) return <span className="text-slate-400 text-[11px]">{!accountAvailable && ord.orderStatus === 'DELIVERED' ? 'Farmer payout account unavailable' : ord.orderStatus === 'DELIVERED' ? 'Awaiting COD cash verification / settlement' : 'Available after delivery'}</span>;
+                        return <button type="button" onClick={() => setSelectedPayout({
+                          settlementId: settlement.id,
+                          orderNumber: ord.orderNumber,
+                          farmerName: firstItem.farmerName || settlement.farmerName,
+                          account,
+                          amount: settlement.netPayout || settlement.amount || net,
+                        })} className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">
+                          <Banknote className="h-3 w-3" /> Payment Successful
+                        </button>;
+                      })()}
                     </td>
                   </tr>
                 );
@@ -181,6 +206,16 @@ export const AdminOrders: React.FC = () => {
           </table>
         </div>
       </div>
+
+      <FarmerPayoutDialog
+        open={!!selectedPayout}
+        orderNumber={selectedPayout?.orderNumber || ''}
+        farmerName={selectedPayout?.farmerName || ''}
+        payoutAccount={selectedPayout?.account || ''}
+        amount={selectedPayout?.amount || 0}
+        onClose={() => setSelectedPayout(null)}
+        onSubmit={confirmFarmerPayout}
+      />
 
       {trackingOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4">

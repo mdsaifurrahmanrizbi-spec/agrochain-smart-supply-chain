@@ -395,6 +395,7 @@ export interface SellerSettlement {
   paymentMethod: 'bKash' | 'Nagad' | 'Bank Transfer';
   settlementStatus: 'PENDING' | 'PROCESSING' | 'PAID' | 'ON_HOLD' | 'COMPLETED';
   payoutDate?: string;
+  payoutMethod?: 'bKash' | 'Nagad' | 'Bank Transfer';
   payoutReference?: string;
   holdReason?: string;
 }

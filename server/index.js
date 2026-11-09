@@ -1298,6 +1298,35 @@ app.get('/api/farmers/payout-accounts/', requireAuth, async (req, res) => {
   }
 
   try {
+    if (req.auth.role === 'warehouse') {
+      const [warehouseRows, godownRows, codOrderRows] = await Promise.all([
+        pool.query("SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND data->>'managerId' = $1", [req.auth.sub]),
+        pool.query("SELECT id FROM agrochain_records WHERE resource = 'godowns' AND data->>'managerId' = $1 AND upper(coalesce(data->>'status','')) = 'ACTIVE'", [req.auth.sub]),
+        pool.query("SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND data->>'paymentMethod' = 'COD'"),
+      ]);
+      const warehouseIds = new Set(warehouseRows.rows.map((row) => String(row.id)));
+      const godownIds = new Set(godownRows.rows.map((row) => String(row.id)));
+      const permittedOrderIds = new Set(codOrderRows.rows.filter((row) => {
+        const order = row.data || {};
+        const originId = String(order.warehouseId || order.originWarehouseId || '');
+        const destinationIds = [order.godownId, order.destinationGodownId].map((value) => String(value || '')).filter(Boolean);
+        return warehouseIds.has(originId) || destinationIds.some((id) => godownIds.has(id));
+      }).map((row) => row.id));
+      const permittedFarmerIds = new Set();
+      const permittedFarmerNames = new Set();
+      for (const row of codOrderRows.rows) {
+        if (!permittedOrderIds.has(row.id)) continue;
+        for (const item of Array.isArray(row.data?.items) ? row.data.items : []) {
+          if (item?.farmerId) permittedFarmerIds.add(String(item.farmerId).trim());
+          if (item?.farmerName) permittedFarmerNames.add(String(item.farmerName).trim().toLocaleLowerCase());
+        }
+      }
+      requestedRefs = requestedRefs.filter((ref) =>
+        (ref.farmerId && permittedFarmerIds.has(ref.farmerId)) ||
+        (ref.farmerName && permittedFarmerNames.has(ref.farmerName.toLocaleLowerCase()))
+      );
+    }
+
     const ids = [...new Set(requestedRefs.map((ref) => ref.farmerId).filter(Boolean))];
     const names = [...new Set(requestedRefs.map((ref) => ref.farmerName).filter(Boolean))];
     const result = await pool.query(
@@ -3538,6 +3567,11 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         [req.auth.sub]
       );
       const ownedWarehouseIds = new Set(ownedWarehouseRows.rows.map((row) => row.id));
+      const ownedGodownRows = await client.query(
+        "SELECT id FROM agrochain_records WHERE resource = 'godowns' AND data->>'managerId' = $1 AND upper(coalesce(data->>'status','')) = 'ACTIVE'",
+        [req.auth.sub]
+      );
+      const ownedGodownIds = new Set(ownedGodownRows.rows.map((row) => row.id));
       const settlementOrderId = String(data.orderId || '');
       const existingOrderId = String(existing?.orderId || '');
       const relatedOrderResult = settlementOrderId
@@ -3547,13 +3581,17 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
           )
         : { rows: [] };
       const relatedOrder = relatedOrderResult.rows[0]?.data;
+      const destinationGodownIds = [relatedOrder?.godownId, relatedOrder?.destinationGodownId]
+        .map((value) => String(value || '')).filter(Boolean);
+      const managesOrderCash = ownedWarehouseIds.has(String(relatedOrder?.warehouseId || '')) ||
+        destinationGodownIds.some((id) => ownedGodownIds.has(id));
       if (!relatedOrder ||
           relatedOrder.paymentMethod !== 'COD' ||
-          !ownedWarehouseIds.has(String(relatedOrder.warehouseId || '')) ||
+          !managesOrderCash ||
           (existing && existingOrderId !== settlementOrderId)) {
         await client.query('ROLLBACK');
         return res.status(403).json({
-          message: 'You can only process COD farmer payouts for orders assigned to your own warehouse',
+          message: 'You can only process COD farmer payouts for cash handled by your own warehouse or destination godown',
         });
       }
     }
@@ -3976,7 +4014,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       const wasPaid = paidStatuses.includes(existing?.settlementStatus);
 
       const immutablePaidFields = [
-        'settlementStatus', 'payoutReference', 'payoutDate',
+        'settlementStatus', 'payoutMethod', 'payoutReference', 'payoutDate',
         'amount', 'netPayout', 'productSalesValue', 'commissionDeducted',
         'farmerId', 'orderId', 'orderNumber', 'paymentMethod',
       ];
@@ -3987,9 +4025,13 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       }
 
       if (isPaidNow && !wasPaid) {
-        if (typeof data.payoutReference !== 'string' || !data.payoutReference.trim()) {
+        if (!['bKash', 'Nagad', 'Bank Transfer'].includes(data.payoutMethod)) {
           await client.query('ROLLBACK');
-          return res.status(400).json({ message: 'A real bank/MFS payout reference is required' });
+          return res.status(400).json({ message: 'Select the method used for the farmer payout' });
+        }
+        if (typeof data.payoutReference !== 'string' || !data.payoutReference.trim() || data.payoutReference.trim().length > 120) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'A valid transaction ID or bank reference is required' });
         }
         const relatedOrderId = typeof data.orderId === 'string' ? data.orderId : '';
         const relatedOrderNumber = typeof data.orderNumber === 'string' ? data.orderNumber : '';

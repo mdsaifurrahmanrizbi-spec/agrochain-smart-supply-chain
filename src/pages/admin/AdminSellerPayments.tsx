@@ -37,15 +37,20 @@ export const AdminSellerPayments: React.FC = () => {
   );
 
   const handleDisburse = async (id: string) => {
-    const payoutReference = window.prompt(
-      'After you have actually transferred the money, enter the bank/bKash/Nagad transaction reference to record the payout:'
-    );
+    const methodChoice = window.prompt('Select the method used to send the farmer payout:\n1 = bKash\n2 = Nagad\n3 = Bank Transfer');
+    if (methodChoice === null) return;
+    const payoutMethod = ({ '1': 'bKash', '2': 'Nagad', '3': 'Bank Transfer' } as const)[methodChoice.trim() as '1' | '2' | '3'];
+    if (!payoutMethod) {
+      setNotice('Choose 1 for bKash, 2 for Nagad, or 3 for Bank Transfer.');
+      return;
+    }
+    const payoutReference = window.prompt('Enter the real transaction ID / bank reference after sending the money:');
     if (payoutReference === null) return;
 
     try {
-      await agroApi.releaseSellerSettlementPayout(id, payoutReference);
+      await agroApi.releaseSellerSettlementPayout(id, payoutMethod, payoutReference);
       setSettlements([...store.settlements]);
-      setNotice(`Farmer payout recorded with transfer reference ${payoutReference.trim()}.`);
+      setNotice(`Farmer payout saved: ${payoutMethod} · ${payoutReference.trim()}.`);
       setTimeout(() => setNotice(null), 4000);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not record farmer payout.');
@@ -168,7 +173,7 @@ export const AdminSellerPayments: React.FC = () => {
                     <td className="py-3 px-4 font-medium text-slate-800">{s.paymentMethod}</td>
                     <td className="py-3 px-4">
                       <StatusBadge status={s.settlementStatus} size="sm" />
-                      {s.payoutReference && <span className="block mt-1 text-[10px] text-slate-500 font-mono">Ref: {s.payoutReference}</span>}
+                      {s.payoutMethod && <span className="block mt-1 text-[10px] text-slate-600">Via: {s.payoutMethod}</span>}{s.payoutReference && <span className="block mt-1 text-[10px] text-slate-500 font-mono">Txn: {s.payoutReference}</span>}
                     </td>
                     <td className="py-3 px-4 text-right space-x-1 whitespace-nowrap">
                       {!isPaid ? (
