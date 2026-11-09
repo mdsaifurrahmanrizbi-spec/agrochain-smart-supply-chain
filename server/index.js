@@ -3076,6 +3076,39 @@ app.post('/api/delivery/jobs/:jobId/status', requireAuth, async (req, res) => {
 
 // Server-authoritative delivery confirmation. COD customer payment becomes PAID
 // at the exact moment the assigned delivery partner verifies the customer's OTP.
+// Buyer-only delivery passcode retrieval. Never expose OTP through the general records API.
+app.get('/api/buyer/orders/:id/delivery-passcode', requireAuth, async (req, res) => {
+  if (req.auth.role !== 'buyer') {
+    return res.status(403).json({ message: 'Only the buyer who placed this order can view its delivery passcode' });
+  }
+  const orderKey = String(req.params.id || '').trim();
+  if (!orderKey) return res.status(400).json({ message: 'Order reference is required' });
+  try {
+    const result = await pool.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND (id = $1 OR data->>'orderNumber' = $1) LIMIT 1",
+      [orderKey]
+    );
+    const order = result.rows[0]?.data;
+    if (!order || String(order.buyerId || '') !== String(req.auth.sub)) {
+      return res.status(404).json({ message: 'Order not found for this customer account' });
+    }
+    return res.set('Cache-Control', 'no-store, private').json({
+      orderId: result.rows[0].id,
+      isDeliveryVerified: Boolean(order.isDeliveryVerified || order.orderStatus === 'DELIVERED'),
+      deliveryOtp: order.isDeliveryVerified || order.orderStatus === 'DELIVERED'
+        ? null
+        : (typeof order.deliveryOtp === 'string' ? order.deliveryOtp : null),
+      otpAttemptsRemaining: Number.isFinite(Number(order.otpAttemptsRemaining))
+        ? Number(order.otpAttemptsRemaining)
+        : null,
+      otpExpiresAt: order.otpExpiresAt || null,
+    });
+  } catch (error) {
+    console.error('Buyer delivery passcode lookup failed:', error.message);
+    return res.status(500).json({ message: 'Could not load the delivery passcode. Please refresh and try again.' });
+  }
+});
+
 app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
   if (req.auth.role !== 'delivery') {
     return res.status(403).json({ message: 'Only the assigned delivery partner can confirm delivery' });
