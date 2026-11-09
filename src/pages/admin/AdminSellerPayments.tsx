@@ -15,11 +15,15 @@ import {
 
 export const AdminSellerPayments: React.FC = () => {
   const [settlements, setSettlements] = useState(store.settlements);
+  const [codRecords, setCodRecords] = useState(store.codRecords);
   const [notice, setNotice] = useState<string | null>(null);
   
   useEffect(() => {
     Promise.all([agroApi.getSettlements(), agroApi.getCODRecords()])
-      .then(([loaded]) => setSettlements(loaded))
+      .then(([loadedSettlements, loadedCodRecords]) => {
+        setSettlements(loadedSettlements);
+        setCodRecords(loadedCodRecords);
+      })
       .catch((error) => console.warn('Could not refresh farmer payout ledger.', error));
   }, []);
 
@@ -37,6 +41,14 @@ export const AdminSellerPayments: React.FC = () => {
   );
 
   const handleDisburse = async (id: string) => {
+    const settlement = settlements.find((item) => item.id === id);
+    if (settlement?.paymentMethod === 'COD') {
+      const cashRecord = codRecords.find((record) => record.orderId === settlement.orderId || record.orderNumber === settlement.orderNumber);
+      if (cashRecord?.depositStatus !== 'CASH_DEPOSIT_VERIFIED') {
+        setNotice('COD cash must be verified by the warehouse before farmer payout can be recorded.');
+        return;
+      }
+    }
     const methodChoice = window.prompt('Select the method used to send the farmer payout:\n1 = bKash\n2 = Nagad\n3 = Bank Transfer');
     if (methodChoice === null) return;
     const payoutMethod = ({ '1': 'bKash', '2': 'Nagad', '3': 'Bank Transfer' } as const)[methodChoice.trim() as '1' | '2' | '3'];
@@ -146,6 +158,7 @@ export const AdminSellerPayments: React.FC = () => {
                 <th className="py-3 px-4">Net Seller Payout</th>
                 <th className="py-3 px-4">Delivery Fee (Logistics)</th>
                 <th className="py-3 px-4">Channel</th>
+                <th className="py-3 px-4">COD Cash Audit</th>
                 <th className="py-3 px-4">Status / Transfer Ref</th>
                 <th className="py-3 px-4 text-right">Settlement Action</th>
               </tr>
@@ -157,6 +170,9 @@ export const AdminSellerPayments: React.FC = () => {
                 const net = s.netPayout || s.amount || 0;
                 const dFee = s.deliveryFee || 420;
                 const isPaid = s.settlementStatus === 'PAID' || s.settlementStatus === 'COMPLETED';
+                const cashRecord = codRecords.find((record) => record.orderId === s.orderId || record.orderNumber === s.orderNumber);
+                const cashVerified = cashRecord?.depositStatus === 'CASH_DEPOSIT_VERIFIED';
+                const codPayoutBlocked = s.paymentMethod === 'COD' && !cashVerified;
 
                 return (
                   <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
@@ -172,18 +188,27 @@ export const AdminSellerPayments: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 font-medium text-slate-800">{s.paymentMethod}</td>
                     <td className="py-3 px-4">
+                      {s.paymentMethod === 'COD'
+                        ? <span className={`text-[10px] font-bold ${cashVerified ? 'text-emerald-700' : 'text-amber-700'}`}>{cashVerified ? 'CASH VERIFIED' : cashRecord ? 'CASH PENDING' : 'AWAITING COLLECTION'}</span>
+                        : <span className="text-[10px] text-slate-400">Not required</span>}
+                    </td>
+                    <td className="py-3 px-4">
                       <StatusBadge status={s.settlementStatus} size="sm" />
                       {s.payoutMethod && <span className="block mt-1 text-[10px] text-slate-600">Via: {s.payoutMethod}</span>}{s.payoutReference && <span className="block mt-1 text-[10px] text-slate-500 font-mono">Txn: {s.payoutReference}</span>}
                     </td>
                     <td className="py-3 px-4 text-right space-x-1 whitespace-nowrap">
                       {!isPaid ? (
                         <>
-                          <button
-                            onClick={() => handleDisburse(s.id)}
-                            className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
-                          >
-                            Record successful payout
-                          </button>
+                          {codPayoutBlocked ? (
+                            <span className="text-[10px] font-semibold text-amber-700">Awaiting COD cash verification</span>
+                          ) : (
+                            <button
+                              onClick={() => handleDisburse(s.id)}
+                              className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
+                            >
+                              Record successful payout
+                            </button>
+                          )}
                           {s.settlementStatus !== 'ON_HOLD' && (
                             <button
                               onClick={() => handleUpdateStatus(s.id, 'ON_HOLD', 'Audit check pending')}
