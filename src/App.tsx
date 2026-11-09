@@ -208,6 +208,7 @@ export default function App() {
               <Route path="partner-approvals" element={<AdminPartnerApprovals />} />
               <Route path="service-areas" element={<AdminPartnerApprovals />} />
               <Route path="warehouses" element={<AdminWarehouses />} />
+              <Route path="inventory" element={<WarehouseInventory />} />
               <Route path="quality-checks" element={<AdminQualityChecks />} />
               <Route path="logistics" element={<AdminDeliveryPartners />} />
               <Route path="delivery-verifications" element={<AdminDeliveryVerifications />} />
