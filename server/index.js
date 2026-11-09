@@ -3242,24 +3242,31 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
         warehouseIds.has(row.data?.sourceWarehouseId) || godownIds.has(row.data?.destinationGodownId)
       );
       else if (resource === 'orders') {
-        // Warehouse access follows the farm-origin facility. Buyer destination is
-        // a later-mile routing attribute and must not determine first-mile intake.
+        // Keep first-mile access with the origin warehouse, but also expose a COD
+        // order to the manager of its destination godown for last-mile cash audit.
         rows = rows
-          .filter((row) => row.data?.paymentMethod === 'COD' &&
-            warehouseIds.has(originWarehouseByOrderId.get(row.id)?.id || String(row.data?.warehouseId || row.data?.originWarehouseId || '')))
+          .filter((row) => {
+            const order = row.data || {};
+            const originId = originWarehouseByOrderId.get(row.id)?.id || String(order.warehouseId || order.originWarehouseId || '');
+            const destinationGodownIds = [order.godownId, order.destinationGodownId].map((value) => String(value || '')).filter(Boolean);
+            return order.paymentMethod === 'COD' &&
+              (warehouseIds.has(originId) || destinationGodownIds.some((id) => godownIds.has(id)));
+          })
           .map((row) => {
             const origin = originWarehouseByOrderId.get(row.id);
             return origin?.id ? { ...row, data: { ...row.data, warehouseId: origin.id, warehouseName: origin.name, originWarehouseId: origin.id, originWarehouseName: origin.name } } : row;
           });
       }
       else if (resource === 'codRecords') {
-        // COD cash custody records are visible only to the manager responsible
-        // for the warehouse assigned to the related COD order.
-        const ownedCodOrders = await pool.query(
-          "SELECT id FROM agrochain_records WHERE resource = 'orders' AND data->>'paymentMethod' = 'COD' AND data->>'warehouseId' = ANY($1::text[])",
-          [[...warehouseIds]]
+        // Cash custody belongs to the destination godown, not the farm-origin
+        // warehouse. A manager sees COD records only for their managed godown.
+        const codOrderRows = await pool.query(
+          "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND data->>'paymentMethod' = 'COD'"
         );
-        const ownedCodOrderIds = new Set(ownedCodOrders.rows.map((row) => row.id));
+        const ownedCodOrderIds = new Set(codOrderRows.rows
+          .filter((row) => [row.data?.godownId, row.data?.destinationGodownId]
+            .some((id) => id && godownIds.has(String(id))))
+          .map((row) => row.id));
         rows = rows.filter((row) => ownedCodOrderIds.has(String(row.data?.orderId || '')));
       }
       else if (resource === 'jobs') {
@@ -3294,11 +3301,22 @@ app.get('/api/records/:resource', requireAuth, async (req, res) => {
           [req.auth.sub]
         );
         const ownedWarehouseIds = new Set(ownedWarehouseRows.rows.map((row) => row.id));
-        const ownedCodOrders = await pool.query(
-          "SELECT id FROM agrochain_records WHERE resource = 'orders' AND data->>'paymentMethod' = 'COD' AND data->>'warehouseId' = ANY($1::text[])",
-          [[...ownedWarehouseIds]]
+        const ownedGodownRows = await pool.query(
+          "SELECT id FROM agrochain_records WHERE resource = 'godowns' AND data->>'managerId' = $1 AND upper(coalesce(data->>'status','')) = 'ACTIVE'",
+          [req.auth.sub]
         );
-        const ownedCodOrderIds = new Set(ownedCodOrders.rows.map((row) => row.id));
+        const ownedGodownIds = new Set(ownedGodownRows.rows.map((row) => row.id));
+        const codOrderRows = await pool.query(
+          "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND data->>'paymentMethod' = 'COD'"
+        );
+        const ownedCodOrderIds = new Set(codOrderRows.rows
+          .filter((row) => {
+            const order = row.data || {};
+            const originId = String(order.warehouseId || order.originWarehouseId || '');
+            const destinationGodownIds = [order.godownId, order.destinationGodownId].map((value) => String(value || '')).filter(Boolean);
+            return ownedWarehouseIds.has(originId) || destinationGodownIds.some((id) => ownedGodownIds.has(id));
+          })
+          .map((row) => row.id));
         rows = rows.filter((row) => ownedCodOrderIds.has(String(row.data?.orderId || '')));
       }
     }
@@ -3996,16 +4014,20 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       );
       const relatedOrder = orderResult.rows[0]?.data;
       if (role === 'warehouse') {
-        const ownedWarehouse = relatedOrder?.warehouseId
+        // Only the manager of the destination godown may verify custody of the
+        // COD cash collected at the customer's doorstep.
+        const destinationGodownIds = [relatedOrder?.godownId, relatedOrder?.destinationGodownId]
+          .map((value) => String(value || '')).filter(Boolean);
+        const ownedDestinationGodown = destinationGodownIds.length
           ? await client.query(
-              "SELECT id FROM agrochain_records WHERE resource = 'warehouses' AND id = $1 AND data->>'managerId' = $2 LIMIT 1",
-              [String(relatedOrder.warehouseId), req.auth.sub]
+              "SELECT id FROM agrochain_records WHERE resource = 'godowns' AND id = ANY($1::text[]) AND data->>'managerId' = $2 AND upper(coalesce(data->>'status','')) = 'ACTIVE' LIMIT 1",
+              [destinationGodownIds, req.auth.sub]
             )
           : { rows: [] };
-        if (!ownedWarehouse.rows[0]) {
+        if (!ownedDestinationGodown.rows[0]) {
           await client.query('ROLLBACK');
           return res.status(403).json({
-            message: 'You can only verify COD deposits for orders assigned to your own warehouse',
+            message: 'Only the manager of the destination godown may verify this COD cash deposit',
           });
         }
       }
