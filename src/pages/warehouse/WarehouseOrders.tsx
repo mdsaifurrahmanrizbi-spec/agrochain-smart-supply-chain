@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { agroApi, store } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Search, ShieldCheck, Banknote } from 'lucide-react';
-import { FarmerPayoutDialog, FarmerPayoutMethod } from '../../components/admin/FarmerPayoutDialog';
+import { FarmerPayoutDialog, type FarmerPayoutMethod } from '../../components/admin/FarmerPayoutDialog';
 
 export const WarehouseOrders: React.FC = () => {
   const navigate = useNavigate();
@@ -145,7 +145,7 @@ export const WarehouseOrders: React.FC = () => {
                         const settlement = settlements.find((item) => item.orderId === order.id || item.orderNumber === order.orderNumber);
                         const paid = settlement && ['PAID', 'COMPLETED'].includes(settlement.settlementStatus);
                         return <><StatusBadge status={settlement?.settlementStatus || 'PENDING'} size="sm" />
-                          {settlement?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Ref: {settlement.payoutReference}</span>}
+                          {settlement?.payoutMethod && <span className="mt-1 block text-[10px] text-slate-500">Via: {settlement.payoutMethod}</span>}{settlement?.payoutReference && <span className="mt-1 block text-[10px] text-slate-500">Txn: {settlement.payoutReference}</span>}
                           {paid && <span className="mt-1 block text-[10px] font-semibold text-emerald-700">Farmer payout successful</span>}
                         </>;
                       })()}
@@ -157,17 +157,19 @@ export const WarehouseOrders: React.FC = () => {
                             const settlement = settlements.find((item) => item.orderId === order.id || item.orderNumber === order.orderNumber);
                             const firstItem = order.items[0];
                             if (!settlement || !firstItem) return;
+                            const account = payoutAccounts[firstItem.farmerId] || '';
+                            if (!account || account === 'Not provided') return;
                             setSelectedPayout({
                               settlementId: settlement.id,
                               orderNumber: order.orderNumber,
                               farmerName: firstItem.farmerName || settlement.farmerName,
-                              account: payoutAccounts[firstItem.farmerId] || '',
+                              account,
                               amount: settlement.netPayout || settlement.amount || order.sellerNetEarnings || 0,
                             });
                           }} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 font-bold text-white"><Banknote className="h-3.5 w-3.5" /> Payment Successful</button> :
                           ['PAID', 'COMPLETED'].includes(settlements.find((item) => item.orderId === order.id || item.orderNumber === order.orderNumber)?.settlementStatus || '') ?
                             <span className="inline-flex items-center gap-1 font-bold text-emerald-700"><Banknote className="h-3.5 w-3.5" /> Paid</span> :
-                            <span className="text-[10px] text-slate-400">After delivery and cash verification</span>}
+                            <span className="text-[10px] text-slate-400">{delivered && verified && (!payoutAccounts[order.items[0]?.farmerId] || payoutAccounts[order.items[0]?.farmerId] === 'Not provided') ? 'Farmer payout account unavailable' : 'After delivery and cash verification'}</span>}
                     </td>
                   </tr>
                 );
