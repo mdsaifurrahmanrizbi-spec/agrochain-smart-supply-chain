@@ -47,7 +47,16 @@ const orderInventoryLinesInKg = (order) => {
 };
 const reserveWarehouseStockForOrder = async (client, order, actor) => {
   let lines;
-  try { lines = orderInventoryLinesInKg(order); } catch { return null; }
+  try {
+    const rawLines = orderInventoryLinesInKg(order);
+    const grouped = new Map();
+    for (const line of rawLines) {
+      const existingLine = grouped.get(line.productId) || { ...line, quantityKg: 0 };
+      existingLine.quantityKg = Number((existingLine.quantityKg + line.quantityKg).toFixed(3));
+      grouped.set(line.productId, existingLine);
+    }
+    lines = [...grouped.values()];
+  } catch { return null; }
   const ids = [...new Set(lines.map((line) => line.productId))].sort();
   const inventoryResult = await client.query("SELECT id,data FROM agrochain_records WHERE resource='inventory' AND data->>'productId'=ANY($1::text[]) ORDER BY id FOR UPDATE", [ids]);
   const warehouses = await client.query("SELECT id,data FROM agrochain_records WHERE resource='warehouses' ORDER BY id");
@@ -4748,7 +4757,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     // Reserve every product line atomically with the initial order insert. Product
     // rows are locked in stable ID order so concurrent checkouts cannot oversell or
     // deadlock when carts contain multiple products. Existing orders are untouched.
-    if (resource === 'orders' && role === 'buyer' && !existing) {
+    if (resource === 'orders' && role === 'buyer' && !existing && !directWarehouseReservation) {
       const items = Array.isArray(data.items) ? data.items : [];
       if (!items.length) {
         await client.query('ROLLBACK');
