@@ -399,7 +399,7 @@ export const FarmerProducts: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={isPublishing || !formData.imageUrl}
+                  disabled={isPublishing || (!editingProduct && !formData.imageUrl)}
                   className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-400 disabled:cursor-not-allowed text-white rounded-lg font-bold shadow-xs"
                 >
                   {isPublishing ? 'Saving…' : editingProduct ? 'Save Changes' : 'Publish Listing'}
