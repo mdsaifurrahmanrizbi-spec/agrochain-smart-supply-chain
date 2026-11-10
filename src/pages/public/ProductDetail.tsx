@@ -28,7 +28,9 @@ export const ProductDetail: React.FC = () => {
 
   useEffect(() => {
     let active = true;
-    Promise.all([agroApi.getProducts(), agroApi.getBatches()]).finally(() => {
+    Promise.all([agroApi.getProducts(), agroApi.getBatches()]).catch((error) => {
+      console.error('Could not load public product details:', error);
+    }).finally(() => {
       if (active) setCatalogReady(true);
     });
     return () => { active = false; };
@@ -38,16 +40,16 @@ export const ProductDetail: React.FC = () => {
   const batch = product ? store.batches.find((b) => b.id === product.batchId) : undefined;
   const farm = batch ? store.farms.find((f) => f.id === batch.farmId) : undefined;
   const approvedListing = Boolean(product && batch && product.qualityStatus === 'APPROVED' && batch.qualityStatus === 'APPROVED' && (product.listingStatus === 'APPROVED' || (!product.listingStatus && batch.qualityStatus === 'APPROVED')));
-  const qc = store.qualityChecks.find((q) => q.batchId === batch.id) || store.qualityChecks[0];
+  const qc = batch ? store.qualityChecks.find((q) => q.batchId === batch.id) || store.qualityChecks[0] : undefined;
+
+  if (!catalogReady) return <div className="min-h-screen bg-slate-50 p-8 text-center text-sm text-slate-600">Loading product details…</div>;
+  if (!product || !batch || !farm || !approvedListing) return <div className="min-h-screen bg-slate-50 p-8"><div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center"><h1 className="font-bold text-amber-900">Product not available</h1><p className="mt-2 text-sm text-amber-800">This listing is awaiting crop quality inspection or Admin approval, or it is no longer available in the marketplace.</p><button onClick={() => navigate('/products')} className="mt-4 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white">Back to Marketplace</button></div></div>;
 
   const handleAdd = () => {
     addToCart(product, quantity);
     setAddedNotice(true);
     setTimeout(() => setAddedNotice(false), 3000);
   };
-
-  if (!catalogReady) return <div className="min-h-screen bg-slate-50 p-8 text-center text-sm text-slate-600">Loading product details…</div>;
-  if (!product || !batch || !farm || !approvedListing) return <div className="min-h-screen bg-slate-50 p-8"><div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center"><h1 className="font-bold text-amber-900">Product not available</h1><p className="mt-2 text-sm text-amber-800">This listing is awaiting crop quality inspection or Admin approval, or it is no longer available in the marketplace.</p><button onClick={() => navigate('/products')} className="mt-4 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white">Back to Marketplace</button></div></div>;
 
   return (
     <div className="bg-slate-50 min-h-screen py-8">
