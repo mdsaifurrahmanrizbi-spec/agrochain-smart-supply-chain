@@ -115,6 +115,7 @@ export const BuyerTracking: React.FC = () => {
     void (async () => {
       try {
         const data = await agroApi.getBuyerDeliveryPasscode(requestedOrderId);
+        console.log("OTP API response:", data);
         if (!active) return;
         // Do not discard a valid OTP because a response orderId differs in formatting or mapping.
         setDeliveryPasscode((current) => ({
@@ -134,13 +135,16 @@ export const BuyerTracking: React.FC = () => {
           verified: false,
         }));
       } finally {
-        if (active) {
-          setDeliveryPasscode((current) => ({ ...current, loading: false }));
-        }
+        // Always end the loading state when this request settles, even if the effect was cleaned up.
+        setDeliveryPasscode((current) => ({ ...current, loading: false }));
       }
     })();
     return () => { active = false; };
   }, [orderLoading, order?.id, order?.buyerId, user?.id, user?.role]);
+
+  useEffect(() => {
+    console.log("OTP state:", deliveryPasscode.otp, "loading:", deliveryPasscode.loading);
+  }, [deliveryPasscode.otp, deliveryPasscode.loading]);
 
   if (authLoading || orderLoading) {
     return <div className="max-w-4xl mx-auto rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Loading your order…</div>;
