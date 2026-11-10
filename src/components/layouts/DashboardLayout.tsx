@@ -65,7 +65,7 @@ export const DashboardLayout: React.FC = () => {
           { label: 'Browse Marketplace', path: '/buyer/products', icon: Package },
           { label: 'Shopping Cart', path: '/buyer/cart', icon: ShoppingBag },
           { label: 'My Orders', path: '/buyer/orders', icon: ClipboardList },
-          { label: 'Track Shipment', path: '/buyer/tracking/ord-1001', icon: Truck },
+          { label: 'Track Shipment', path: '/buyer/orders', icon: Truck },
           { label: 'Buyer Profile', path: '/buyer/profile', icon: User },
         ];
       case 'delivery':
