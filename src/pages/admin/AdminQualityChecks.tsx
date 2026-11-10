@@ -1,18 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
 import { store, agroApi } from '../../services/api';
 import { QualityCheck } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { useAuth } from '../../context/AuthContext';
+
+type InspectorAccount = { id: string; name: string; email?: string; role: string; status?: string };
+
+type InspectorAccount = { id: string; name: string; email?: string; role: string; status?: string };
 
 export const AdminQualityChecks: React.FC = () => {
   const { user } = useAuth();
   const [checks, setChecks] = useState(store.qualityChecks);
   const [orders, setOrders] = useState(store.orders);
+  const [inspectors, setInspectors] = useState<InspectorAccount[]>([]);
+  const [inspectors, setInspectors] = useState<InspectorAccount[]>([]);
   const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [selected, setSelected] = useState<QualityCheck | null>(null);
-  const [form, setForm] = useState({ grade: 'Grade A - Premium' as QualityCheck['grade'], moisture: '', pesticide: '', foreignMatter: '', remarks: '', decision: 'APPROVED' as QualityCheck['status'] });
+  const [form, setForm] = useState({ inspectorId: '', grade: 'Grade A - Premium' as QualityCheck['grade'], moisture: '', pesticide: '', foreignMatter: '', remarks: '', decision: 'APPROVED' as QualityCheck['status'] });
 
   const refresh = async () => {
     try {
@@ -28,15 +34,16 @@ export const AdminQualityChecks: React.FC = () => {
 
   useEffect(() => {
     let active = true;
-    Promise.all([agroApi.getQualityChecks(), agroApi.getOrders()])
-      .then(([freshChecks, freshOrders]) => {
+    Promise.all([agroApi.getQualityChecks(), agroApi.getOrders(), agroApi.getAdminUsers()])
+      .then(([freshChecks, freshOrders, accounts]) => {
         if (!active) return;
         setChecks([...freshChecks]);
         setOrders([...freshOrders]);
+        setInspectors((accounts as InspectorAccount[]).filter((account) => account.role === 'inspector' && account.status !== 'SUSPENDED'));
       })
       .catch((error) => {
         console.error('Could not load QC audit data:', error);
-        if (active) setLoadError('Could not load QC records. Refresh and try again.');
+        if (active) setLoadError('Could not load QC records or inspector accounts. Refresh and try again.');
       });
     return () => { active = false; };
   }, []);
@@ -44,6 +51,7 @@ export const AdminQualityChecks: React.FC = () => {
   const openInspection = (check: QualityCheck) => {
     setSelected(check);
     setForm({
+      inspectorId: check.inspectorId || '',
       grade: check.grade && check.grade !== 'Not graded' ? check.grade : 'Grade A - Premium',
       moisture: check.status === 'PENDING' ? '' : String(check.moistureContentPercent ?? ''),
       pesticide: check.status === 'PENDING' ? '' : String(check.pesticideResiduePpm ?? ''),
@@ -54,9 +62,23 @@ export const AdminQualityChecks: React.FC = () => {
     setNotice('');
   };
 
+  const assignInspector = async (check: QualityCheck, inspectorId: string) => {
+    const inspector = inspectors.find((item) => item.id === inspectorId);
+    if (!inspector) return;
+    setBusy(true); setNotice('');
+    try {
+      await agroApi.saveQualityCheckDetails(check.id, { inspectorId: inspector.id, inspectorName: inspector.name });
+      await refresh();
+      setNotice(`Inspector assigned to ${check.id}: ${inspector.name}`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not assign inspector.');
+    } finally { setBusy(false); }
+  };
+
   const submitInspection = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selected) return;
+    if (selected.orderId && !form.inspectorId) { setNotice('Assign an inspector before saving an order inspection.'); return; }
     const moisture = Number(form.moisture);
     const pesticide = Number(form.pesticide);
     const foreignMatter = Number(form.foreignMatter);
@@ -69,14 +91,16 @@ export const AdminQualityChecks: React.FC = () => {
     if (!form.remarks.trim()) { setNotice('Add inspection remarks before submitting the decision.'); return; }
     setBusy(true); setNotice('');
     try {
+      const inspector = inspectors.find((item) => item.id === form.inspectorId);
+      const isBatchAdminReview = !selected.orderId;
       const certificateNumber = form.decision === 'APPROVED'
         ? (selected.certificateNumber || `QC-CERT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`)
         : undefined;
       await agroApi.updateQualityCheck(selected.id, {
-        inspectorId: '',
-        inspectorName: 'Admin QC Review',
-        reviewedByRole: 'ADMIN',
-        reviewedByName: user?.name || 'Admin',
+        inspectorId: isBatchAdminReview ? '' : form.inspectorId,
+        inspectorName: isBatchAdminReview ? 'Admin QC Review' : (inspector?.name || selected.inspectorName),
+        reviewedByRole: isBatchAdminReview ? 'ADMIN' : 'INSPECTOR',
+        reviewedByName: isBatchAdminReview ? (user?.name || 'Admin') : (inspector?.name || selected.inspectorName),
         grade: form.grade,
         moistureContentPercent: moisture,
         pesticideResiduePpm: pesticide,
@@ -106,7 +130,7 @@ export const AdminQualityChecks: React.FC = () => {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Platform Quality Control Audits</h1>
-          <p className="mt-1 text-xs text-slate-500">Admin can perform and record crop-batch QC directly. Enter actual measurements before approving or rejecting a batch.</p>
+          <p className="mt-1 text-xs text-slate-500">Inspect and record real measurements before farm pickup can proceed.</p>
         </div>
         <button type="button" onClick={() => void refresh()} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Refresh QC</button>
       </div>
@@ -139,7 +163,14 @@ export const AdminQualityChecks: React.FC = () => {
               <td className="px-4 py-3 font-bold text-slate-900">{c.cropName}</td>
               <td className="px-4 py-3 font-mono font-semibold text-emerald-800">{c.batchCode || 'Not assigned'}</td>
               <td className="px-4 py-3">{c.farmerName || 'Not available'}{c.farmLocation ? ` (${c.farmLocation})` : ''}</td>
-              <td className="px-4 py-3"><div className="font-medium text-slate-800">{c.reviewedByName || (c.status === 'PENDING' ? 'Admin review required' : c.inspectorName || 'Admin review required')}</div><div className="mt-1 text-[10px] text-slate-500">{c.reviewedByRole === 'ADMIN' ? 'Admin-managed QC' : c.status === 'PENDING' ? 'Awaiting Admin inspection' : 'Recorded QC reviewer'}</div></td>
+              <td className="min-w-52 px-4 py-3">
+                {c.orderId ? <>
+                  <div className="mb-2 font-medium text-slate-800">{c.inspectorName || 'Not assigned'}</div>
+                  <select aria-label={`Assign inspector for ${c.id}`} value={c.inspectorId || ''} disabled={busy} onChange={(e) => void assignInspector(c, e.target.value)} className="w-full rounded border border-slate-300 bg-white px-2 py-1.5">
+                    <option value="">Assign inspector…</option>{inspectors.map((inspector) => <option key={inspector.id} value={inspector.id}>{inspector.name}{inspector.email ? ` — ${inspector.email}` : ''}</option>)}
+                  </select>
+                </> : <><div className="font-medium text-slate-800">{c.reviewedByName || (c.status === 'PENDING' ? 'Admin review required' : c.inspectorName || 'Admin review required')}</div><div className="mt-1 text-[10px] text-slate-500">Admin-managed batch QC</div></>}
+              </td>
               <td className="px-4 py-3 font-mono tabular-nums">{c.status === 'PENDING' ? 'Not measured' : `${c.moistureContentPercent}%`}</td>
               <td className="px-4 py-3 font-mono tabular-nums">{c.status === 'PENDING' ? 'Not measured' : `${c.pesticideResiduePpm} ppm`}</td>
               <td className="px-4 py-3">{c.status === 'PENDING' ? 'Not graded' : c.grade}</td>
@@ -155,7 +186,7 @@ export const AdminQualityChecks: React.FC = () => {
         <section role="dialog" aria-modal="true" aria-labelledby="qc-inspection-title" className="my-8 w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl sm:p-7">
           <div className="mb-5 flex items-start justify-between gap-4"><div><h2 id="qc-inspection-title" className="text-lg font-bold text-slate-900">QC Inspection — {selected.id}</h2><p className="mt-1 text-xs text-slate-500">{selected.cropName} · {selected.farmerName} · {selected.farmLocation}</p></div><button type="button" onClick={() => setSelected(null)} className="rounded-lg border px-3 py-1.5 text-sm">Close</button></div>
           <form onSubmit={submitInspection} className="space-y-4">
-            <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"><strong>Reviewer:</strong> Admin — {user?.name || 'Current administrator'}<br />No separate Inspector account or assignment is required for this batch inspection.</div>
+            {selected.orderId ? <div><label className="mb-1 block font-semibold text-slate-700">Assigned inspector</label><select required value={form.inspectorId} onChange={(e) => setForm({ ...form, inspectorId: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2"><option value="">Choose an active inspector</option>{inspectors.map((inspector) => <option key={inspector.id} value={inspector.id}>{inspector.name}{inspector.email ? ` — ${inspector.email}` : ''}</option>)}</select>{inspectors.length === 0 && <p className="mt-1 text-xs text-amber-700">No inspector accounts found for this order QC record.</p>}</div> : <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"><strong>Reviewer:</strong> Admin — {user?.name || 'Current administrator'}<br />No separate Inspector account or assignment is required for this crop-batch inspection.</div>}
             <div className="grid gap-4 sm:grid-cols-2">
               <div><label className="mb-1 block font-semibold text-slate-700">Grade classification</label><select value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value as QualityCheck['grade'] })} className="w-full rounded-lg border border-slate-300 px-3 py-2"><option value="Grade A - Premium">Grade A — Premium</option><option value="Grade B - Standard">Grade B — Standard</option><option value="Grade C - Commercial">Grade C — Commercial</option></select></div>
               <div><label className="mb-1 block font-semibold text-slate-700">Moisture (%)</label><input required type="number" min="0" max="100" step="0.01" value={form.moisture} onChange={(e) => setForm({ ...form, moisture: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Enter measured value" /></div>
@@ -164,8 +195,8 @@ export const AdminQualityChecks: React.FC = () => {
             </div>
             <div><label className="mb-1 block font-semibold text-slate-700">Inspection remarks</label><textarea required rows={3} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Record actual inspection findings…" /></div>
             <div><label className="mb-1 block font-semibold text-slate-700">Decision</label><select value={form.decision} onChange={(e) => setForm({ ...form, decision: e.target.value as QualityCheck['status'] })} className="w-full rounded-lg border border-slate-300 px-3 py-2"><option value="APPROVED">Approve — unlock pickup</option><option value="RECHECK_REQUIRED">Recheck required — keep on hold</option><option value="REJECTED">Reject — block pickup</option></select></div>
-            <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Enter actual inspection measurements. Approval unlocks the batch quality gate; rejection and recheck keep the batch blocked. Product listing still requires separate Admin approval.</p>
-            <div className="flex flex-wrap justify-end gap-2"><button type="button" disabled={busy} onClick={() => setSelected(null)} className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700">Cancel</button><button type="submit" disabled={busy} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Saving…' : 'Save inspection decision'}</button></div>
+            <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Only submit values measured during the real inspection. Pending, recheck-required and rejected records must not unlock pickup.</p>
+            <div className="flex flex-wrap justify-end gap-2"><button type="button" disabled={busy} onClick={() => setSelected(null)} className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700">Cancel</button><button type="submit" disabled={busy || inspectors.length === 0} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Saving…' : 'Save inspection decision'}</button></div>
           </form>
         </section>
       </div>}
