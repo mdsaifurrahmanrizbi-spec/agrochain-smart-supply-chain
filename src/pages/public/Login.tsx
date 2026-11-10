@@ -251,7 +251,6 @@ export const Login: React.FC = () => {
         .auth-night-login .auth-glass-card > .mb-6 { margin-bottom: 1rem !important; }
         .auth-night-login .auth-glass-card h2 { font-size: 2rem !important; }
         @media (max-width: 640px) { .auth-night-login .auth-night-layout { padding: 24px .75rem 2rem !important; } .auth-night-login .auth-glass-card { padding: 1.25rem !important; } }
-      `}
         /* Login field contrast: keep entered text and password bullets readable on white. */
         .auth-night-login input.auth-night-input,
         .auth-night-login input.auth-night-input:focus,
@@ -275,7 +274,7 @@ export const Login: React.FC = () => {
           box-shadow: 0 0 0 1000px #FFFFFF inset !important;
           caret-color: #0F172A !important;
         }
-</style>
+      `}</style>
       <div className="auth-night-layout mx-auto flex items-center justify-center bg-white px-4 py-6 sm:px-6" style={{ backgroundColor: "#F8FAF9", minHeight: "calc(100vh - 80px)" }}>
         <aside className="auth-night-old-aside hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(181,215,122,0.24),transparent_34%),linear-gradient(150deg,#174b34_0%,#0d3025_75%)]" />
