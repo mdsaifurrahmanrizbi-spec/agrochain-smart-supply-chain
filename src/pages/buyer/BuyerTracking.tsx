@@ -110,30 +110,35 @@ export const BuyerTracking: React.FC = () => {
 
     let active = true;
     setDeliveryPasscode({ loading: true, error: '', otp: null, attemptsRemaining: null, verified: false });
-    void agroApi.getBuyerDeliveryPasscode(order.id)
-      .then((result) => {
+    // Use the exact order ID from the tracking URL when it is the order's ID.
+    const requestedOrderId = id === order.id ? id : order.id;
+    void (async () => {
+      try {
+        const data = await agroApi.getBuyerDeliveryPasscode(requestedOrderId);
         if (!active) return;
-        if (String(result.orderId) !== String(order.id)) {
-          throw new Error('The passcode response did not match this order. Please refresh or contact support.');
-        }
-        setDeliveryPasscode({
-          loading: false,
+        // Do not discard a valid OTP because a response orderId differs in formatting or mapping.
+        setDeliveryPasscode((current) => ({
+          ...current,
           error: '',
-          otp: result.deliveryOtp,
-          attemptsRemaining: result.otpAttemptsRemaining,
-          verified: result.isDeliveryVerified,
-        });
-      })
-      .catch((error: unknown) => {
+          otp: data.deliveryOtp == null ? null : String(data.deliveryOtp),
+          attemptsRemaining: data.otpAttemptsRemaining ?? null,
+          verified: data.isDeliveryVerified === true,
+        }));
+      } catch (error: unknown) {
         if (!active) return;
-        setDeliveryPasscode({
-          loading: false,
+        setDeliveryPasscode((current) => ({
+          ...current,
           error: error instanceof Error ? error.message : 'Could not load delivery passcode. Please refresh.',
           otp: null,
           attemptsRemaining: null,
           verified: false,
-        });
-      });
+        }));
+      } finally {
+        if (active) {
+          setDeliveryPasscode((current) => ({ ...current, loading: false }));
+        }
+      }
+    })();
     return () => { active = false; };
   }, [orderLoading, order?.id, order?.buyerId, user?.id, user?.role]);
 
@@ -193,17 +198,17 @@ export const BuyerTracking: React.FC = () => {
                 {deliveryPasscode.verified ? 'Status: VERIFIED' : 'Active Passcode'}
               </span>
 
-              {deliveryPasscode.verified ? (
+              {deliveryPasscode.verified === true ? (
                 <div className="space-y-1">
                   <div className="inline-flex items-center gap-1 text-sm text-emerald-200 font-bold">
                     <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                    <span>Delivered & OTP Verified</span>
+                    <span>Delivered</span>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-1">
                   <div className="font-mono text-3xl font-black text-white tracking-widest bg-emerald-950/60 py-1.5 px-3 rounded-lg border border-emerald-400/40">
-                    {deliveryPasscode.loading ? 'Loading…' : deliveryPasscode.error ? 'Unavailable' : deliveryPasscode.otp || 'Not available'}
+                    {deliveryPasscode.loading ? 'Loading…' : deliveryPasscode.otp ? deliveryPasscode.otp : 'OTP not available'}
                   </div>
                   <div className="text-[10px] text-emerald-200 mt-1">
                     {deliveryPasscode.loading ? 'Checking secure order record…' : deliveryPasscode.error ? deliveryPasscode.error : deliveryPasscode.attemptsRemaining === null ? 'Verification attempts unavailable' : `${deliveryPasscode.attemptsRemaining} verification attempts remaining`}
