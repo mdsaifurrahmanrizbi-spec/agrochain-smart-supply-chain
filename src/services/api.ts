@@ -698,10 +698,6 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     ...batch,
     id: `batch-${Date.now()}`,
     batchCode: code,
-    blockchainHash: `0x${Array.from(
-      { length: 64 },
-      () => Math.floor(Math.random() * 16).toString(16)
-    ).join('')}`,
     qrCodeUrl: `https://agrochain.gov.bd/verify/batch/${code}`,
   };
 
@@ -740,6 +736,17 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     store.products.unshift(newProduct);
     localStorage.setItem('agro_products', JSON.stringify(store.products));
     return newProduct;
+  },
+
+  async updateProduct(id: string, update: Partial<Product>): Promise<Product> {
+    const current = store.products.find((product) => product.id === id);
+    if (!current) throw new Error('Product listing not found');
+    const updated = { ...current, ...update, id };
+    await saveBackendRecord('products', updated);
+    const index = store.products.findIndex((product) => product.id === id);
+    if (index >= 0) store.products[index] = updated;
+    localStorage.setItem('agro_products', JSON.stringify(store.products));
+    return updated;
   },
 
   // Orders
