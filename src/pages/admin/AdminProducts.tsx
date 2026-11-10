@@ -3,7 +3,7 @@ import { agroApi, store } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { CropBatch, Product } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import { Package, Search, Check, X, RefreshCw } from 'lucide-react';
+import { Search, Check, X, RefreshCw } from 'lucide-react';
 
 export const AdminProducts: React.FC = () => {
   const { user } = useAuth();
