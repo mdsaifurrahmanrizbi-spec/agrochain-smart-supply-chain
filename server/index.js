@@ -3113,7 +3113,7 @@ app.get('/api/buyer/orders/:id/delivery-passcode', requireAuth, async (req, res)
         order.otpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
         changed = true;
       }
-      if (!Number.isInteger(Number(order.otpAttemptsRemaining))) {
+      if (order.otpAttemptsRemaining == null || !Number.isInteger(Number(order.otpAttemptsRemaining))) {
         order.otpAttemptsRemaining = 3;
         changed = true;
       }
@@ -4952,7 +4952,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
           : String(randomInt(1000, 10000));
       }
       if (!data.otpExpiresAt) data.otpExpiresAt = existing?.otpExpiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-      if (!Number.isInteger(Number(data.otpAttemptsRemaining))) {
+      if (data.otpAttemptsRemaining == null || !Number.isInteger(Number(data.otpAttemptsRemaining))) {
         data.otpAttemptsRemaining = Number.isInteger(Number(existing?.otpAttemptsRemaining)) ? Number(existing.otpAttemptsRemaining) : 3;
       }
     }
