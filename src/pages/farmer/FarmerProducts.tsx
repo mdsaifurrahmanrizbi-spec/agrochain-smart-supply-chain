@@ -3,7 +3,7 @@ import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { CropBatch, Product } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import { Package, Plus, Search, Check, MapPin, Tag } from 'lucide-react';
+import { Plus, Search, Pencil } from 'lucide-react';
 
 
 const compressProductImage = async (file: File): Promise<string> => {
@@ -43,6 +43,7 @@ export const FarmerProducts: React.FC = () => {
   const [search, setSearch] = useState('');
   const [imageError, setImageError] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -91,41 +92,77 @@ export const FarmerProducts: React.FC = () => {
     }
   };
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedBatch) {
+    if (!editingProduct && !selectedBatch) {
       setImageError('Select one of your registered crop batches before submitting this listing.');
       return;
     }
-    if (!formData.imageUrl) {
+    if (!editingProduct && !formData.imageUrl) {
       setImageError('Please upload a product image before publishing.');
       return;
     }
     setIsPublishing(true);
     setImageError('');
     try {
-      await agroApi.createProduct({
-      ...formData,
-      batchId: selectedBatch.id,
-      cropType: selectedBatch.cropName,
-      variety: selectedBatch.variety,
-      farmName: selectedBatch.farmName,
-      harvestDate: selectedBatch.harvestDate,
-      farmerId: user?.id || 'u-farmer-1',
-      farmerName: user?.name || 'Farmer',
-      qualityStatus: selectedBatch.qualityStatus,
-      listingStatus: 'PENDING_APPROVAL',
-      featured: false,
-      rating: undefined,
-      });
+      if (editingProduct) {
+        await agroApi.updateProduct(editingProduct.id, {
+          name: formData.name,
+          category: formData.category,
+          pricePerUnit: formData.pricePerUnit,
+          unit: formData.unit,
+          availableQuantity: formData.availableQuantity,
+          description: formData.description,
+          imageUrl: formData.imageUrl || editingProduct.imageUrl,
+          isOrganic: formData.isOrganic,
+        });
+      } else if (selectedBatch) {
+        await agroApi.createProduct({
+          ...formData,
+          batchId: selectedBatch.id,
+          cropType: selectedBatch.cropName,
+          variety: selectedBatch.variety,
+          farmName: selectedBatch.farmName,
+          harvestDate: selectedBatch.harvestDate,
+          farmerId: user?.id || 'u-farmer-1',
+          farmerName: user?.name || 'Farmer',
+          qualityStatus: selectedBatch.qualityStatus,
+          listingStatus: 'PENDING_APPROVAL',
+          featured: false,
+          rating: undefined,
+        });
+      }
       setProducts([...store.products]);
       setShowAddModal(false);
+      setEditingProduct(null);
       setFormData((current) => ({ ...current, batchId: '', name: '', variety: '', description: '', imageUrl: '' }));
     } catch (error) {
-      setImageError(error instanceof Error ? error.message : 'Could not publish this product. Please try again.');
+      setImageError(error instanceof Error ? error.message : 'Could not save this product listing. Please try again.');
     } finally {
       setIsPublishing(false);
     }
+  };
+
+  const startEditing = (product: Product) => {
+    setEditingProduct(product);
+    setImageError('');
+    setFormData({
+      name: product.name,
+      batchId: product.batchId,
+      category: product.category,
+      cropType: product.cropType,
+      variety: product.variety,
+      farmName: product.farmName,
+      farmLocation: product.farmLocation || '',
+      description: product.description,
+      pricePerUnit: product.pricePerUnit,
+      unit: product.unit,
+      availableQuantity: product.availableQuantity,
+      harvestDate: product.harvestDate,
+      imageUrl: product.imageUrl || '',
+      isOrganic: product.isOrganic === true,
+    });
+    setShowAddModal(true);
   };
 
   return (
@@ -139,7 +176,7 @@ export const FarmerProducts: React.FC = () => {
         </div>
 
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => { setEditingProduct(null); setImageError(''); setFormData((current) => ({ ...current, name: '', batchId: '', description: '', imageUrl: '' })); setShowAddModal(true); }}
           className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -173,6 +210,7 @@ export const FarmerProducts: React.FC = () => {
                 <th className="py-3 px-4">Harvest Date</th>
                 <th className="py-3 px-4">Quality Status</th>
                 <th className="py-3 px-4">Listing Approval</th>
+                <th className="py-3 px-4">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -198,6 +236,11 @@ export const FarmerProducts: React.FC = () => {
                   <td className="py-3 px-4">
                     <StatusBadge status={p.listingStatus || (p.qualityStatus === 'APPROVED' && batches.find((batch) => batch.id === p.batchId)?.qualityStatus === 'APPROVED' ? 'APPROVED' : 'PENDING_APPROVAL')} size="sm" />
                   </td>
+                  <td className="py-3 px-4">
+                    <button type="button" onClick={() => startEditing(p)} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50" aria-label={`Edit ${p.name}`}>
+                      <Pencil className="h-3.5 w-3.5" /> Edit
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -210,17 +253,18 @@ export const FarmerProducts: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-sm font-bold text-slate-900">List Agricultural Product</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-700 text-sm font-bold">
+              <h3 className="text-sm font-bold text-slate-900">{editingProduct ? "Edit Product Listing" : "List Agricultural Product"}</h3>
+              <button onClick={() => { setShowAddModal(false); setEditingProduct(null); setImageError(""); }} className="text-slate-400 hover:text-slate-700 text-sm font-bold">
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleAdd} className="space-y-3.5 text-xs">
+            <form onSubmit={handleSave} className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Crop Batch</label>
                 <select
                   required
+                  disabled={Boolean(editingProduct)}
                   value={formData.batchId}
                   onChange={(e) => {
                     const batch = batches.find((item) => item.id === e.target.value);
@@ -233,6 +277,7 @@ export const FarmerProducts: React.FC = () => {
                     <option key={batch.id} value={batch.id}>{batch.batchCode} — {batch.cropName} ({batch.variety}) · {batch.qualityStatus}</option>
                   ))}
                 </select>
+                {editingProduct && <p className="mt-1 text-slate-500">The original crop-batch link is locked after submission.</p>}
                 {batches.length === 0 && <p className="mt-1 text-amber-700">Create a Crop Batch first. A product must be linked to a real batch.</p>}
               </div>
               <div>
@@ -267,6 +312,7 @@ export const FarmerProducts: React.FC = () => {
                   <input
                     type="text"
                     required
+                    disabled={Boolean(editingProduct)}
                     placeholder="e.g. BARI Piaz-1"
                     value={formData.variety}
                     onChange={(e) => setFormData({ ...formData, variety: e.target.value })}
@@ -316,11 +362,11 @@ export const FarmerProducts: React.FC = () => {
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  required
+                  required={!editingProduct}
                   onChange={handleImageChange}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg file:mr-3 file:px-3 file:py-1 file:border-0 file:rounded-md file:bg-emerald-100 file:text-emerald-800 file:font-semibold"
                 />
-                <p className="text-[10px] text-slate-500 mt-1">Upload a clear photo of this exact product. JPG, PNG or WebP; optimized before saving.</p>
+                <p className="text-[10px] text-slate-500 mt-1">{editingProduct ? "Upload a new photo only if you want to replace the current image. JPG, PNG or WebP." : "Upload a clear photo of this exact product. JPG, PNG or WebP; optimized before saving."}</p>
                 {formData.imageUrl && (
                   <div className="mt-3 flex items-center gap-3">
                     <img src={formData.imageUrl} alt="Product image preview" className="w-20 h-20 rounded-lg object-cover border border-slate-200" />
@@ -342,20 +388,21 @@ export const FarmerProducts: React.FC = () => {
                 />
               </div>
 
+              {editingProduct?.listingStatus === 'APPROVED' && <p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">Saving listing changes will return this product to Pending Admin Approval.</p>}
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => { setShowAddModal(false); setImageError(''); }}
+                  onClick={() => { setShowAddModal(false); setEditingProduct(null); setImageError(''); }}
                   className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isPublishing || !formData.imageUrl}
+                  disabled={isPublishing || (!editingProduct && !formData.imageUrl)}
                   className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-400 disabled:cursor-not-allowed text-white rounded-lg font-bold shadow-xs"
                 >
-                  {isPublishing ? 'Publishing…' : 'Publish Listing'}
+                  {isPublishing ? 'Saving…' : editingProduct ? 'Save Changes' : 'Publish Listing'}
                 </button>
               </div>
             </form>
