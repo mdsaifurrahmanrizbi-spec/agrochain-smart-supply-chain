@@ -196,7 +196,7 @@ export const FarmerProducts: React.FC = () => {
                     <StatusBadge status={p.qualityStatus} size="sm" />
                   </td>
                   <td className="py-3 px-4">
-                    <StatusBadge status={p.listingStatus || (p.qualityStatus === 'APPROVED' ? 'APPROVED' : 'PENDING_APPROVAL')} size="sm" />
+                    <StatusBadge status={p.listingStatus || (p.qualityStatus === 'APPROVED' && batches.find((batch) => batch.id === p.batchId)?.qualityStatus === 'APPROVED' ? 'APPROVED' : 'PENDING_APPROVAL')} size="sm" />
                   </td>
                 </tr>
               ))}
