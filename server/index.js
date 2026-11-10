@@ -4637,11 +4637,37 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
           return res.status(409).json({ message: 'Select a crop batch registered to your farmer account before listing a product' });
         }
         data.qualityStatus = String(linkedBatch.qualityStatus || 'PENDING');
-        data.listingStatus = existing?.listingStatus || 'PENDING_APPROVAL';
-        data.listingReviewedAt = existing?.listingReviewedAt;
-        data.listingReviewedBy = existing?.listingReviewedBy;
-        data.listingReviewNotes = existing?.listingReviewNotes;
-        data.featured = existing?.featured === true;
+        // Farmer edits are restricted to listing content. Ownership and the
+        // source crop batch remain immutable after the first submission.
+        if (existing) {
+          data.farmerId = existing.farmerId;
+          data.batchId = existing.batchId;
+          data.farmerName = existing.farmerName;
+          data.farmName = existing.farmName;
+          data.farmLocation = existing.farmLocation;
+          data.cropType = existing.cropType;
+          data.harvestDate = existing.harvestDate;
+        }
+        const listingContentFields = [
+          'name', 'category', 'variety', 'pricePerUnit', 'unit',
+          'availableQuantity', 'imageUrl', 'description', 'isOrganic',
+        ];
+        const listingContentChanged = Boolean(existing) && listingContentFields.some(
+          (field) => String(existing[field] ?? '') !== String(data[field] ?? '')
+        );
+        if (listingContentChanged) {
+          data.listingStatus = 'PENDING_APPROVAL';
+          data.listingReviewedAt = null;
+          data.listingReviewedBy = null;
+          data.listingReviewNotes = 'Farmer updated listing details. Awaiting Admin re-approval.';
+          data.featured = false;
+        } else {
+          data.listingStatus = existing?.listingStatus || 'PENDING_APPROVAL';
+          data.listingReviewedAt = existing?.listingReviewedAt;
+          data.listingReviewedBy = existing?.listingReviewedBy;
+          data.listingReviewNotes = existing?.listingReviewNotes;
+          data.featured = existing?.featured === true;
+        }
       } else if (role === 'admin' && data.listingStatus === 'APPROVED') {
         const linkedBatchResult = await client.query(
           "SELECT data FROM agrochain_records WHERE resource = 'batches' AND id = $1 FOR SHARE",
