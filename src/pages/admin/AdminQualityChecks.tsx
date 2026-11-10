@@ -28,15 +28,15 @@ export const AdminQualityChecks: React.FC = () => {
 
   useEffect(() => {
     let active = true;
-    Promise.all([agroApi.getQualityChecks(), agroApi.getOrders(), agroApi.getAdminUsers()])
-      .then(([freshChecks, freshOrders, accounts]) => {
+    Promise.all([agroApi.getQualityChecks(), agroApi.getOrders()])
+      .then(([freshChecks, freshOrders]) => {
         if (!active) return;
         setChecks([...freshChecks]);
         setOrders([...freshOrders]);
       })
       .catch((error) => {
         console.error('Could not load QC audit data:', error);
-        if (active) setLoadError('Could not load QC records or inspector accounts. Refresh and try again.');
+        if (active) setLoadError('Could not load QC records. Refresh and try again.');
       });
     return () => { active = false; };
   }, []);
@@ -129,7 +129,7 @@ export const AdminQualityChecks: React.FC = () => {
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs">
         <div className="overflow-x-auto"><table className="w-full text-left text-xs text-slate-700">
           <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500"><tr>
-            <th className="px-4 py-3">QC Code</th><th className="px-4 py-3">Related Order ID</th><th className="px-4 py-3">Commodity</th><th className="px-4 py-3">Harvest Batch Code</th><th className="px-4 py-3">Origin Farmer</th><th className="px-4 py-3">Inspector / Assign</th><th className="px-4 py-3">Moisture %</th><th className="px-4 py-3">Pesticide Residue</th><th className="px-4 py-3">Classification</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Action</th>
+            <th className="px-4 py-3">QC Code</th><th className="px-4 py-3">Related Order ID</th><th className="px-4 py-3">Commodity</th><th className="px-4 py-3">Harvest Batch Code</th><th className="px-4 py-3">Origin Farmer</th><th className="px-4 py-3">QC Reviewer</th><th className="px-4 py-3">Moisture %</th><th className="px-4 py-3">Pesticide Residue</th><th className="px-4 py-3">Classification</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Action</th>
           </tr></thead>
           <tbody className="divide-y divide-slate-100">{checks.map((c) => {
             const linkedOrder = orders.find((order) => order.id === c.orderId || order.orderNumber === c.orderId);
