@@ -129,7 +129,7 @@ export const AdminQualityChecks: React.FC = () => {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Platform Quality Control Audits</h1>
-          <p className="mt-1 text-xs text-slate-500">Inspect and record real measurements before farm pickup can proceed.</p>
+          <p className="mt-1 text-xs text-slate-500">Admin can inspect crop batches directly without an Inspector account. Order-level QC keeps its existing inspector assignment workflow.</p>
         </div>
         <button type="button" onClick={() => void refresh()} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Refresh QC</button>
       </div>
