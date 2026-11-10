@@ -147,8 +147,10 @@ export const FarmerBatches: React.FC = () => {
               <div className="text-[11px] text-slate-500 mt-1">{selectedBatchForQr.cropName}</div>
             </div>
 
-            <div className="text-[10px] text-slate-500 font-mono text-left bg-slate-100 p-2.5 rounded break-all">
-              Ledger Hash: {selectedBatchForQr.blockchainHash}
+            <div className={`text-xs rounded-lg p-3 text-left ${selectedBatchForQr.qualityStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
+              {selectedBatchForQr.qualityStatus === 'APPROVED'
+                ? 'Quality inspection approved. This batch is eligible for product listing review.'
+                : 'Traceability QR only — this batch is not quality-certified yet. Inspection approval is required before sale.'}
             </div>
 
             <button
