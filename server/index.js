@@ -4651,7 +4651,6 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
           await client.query('ROLLBACK');
           return res.status(409).json({ message: 'Select a crop batch registered to your farmer account before listing a product' });
         }
-        const repairingBatchLink = Boolean(existing && originalBatchId !== requestedBatchId);
         data.batchId = requestedBatchId;
         data.qualityStatus = String(linkedBatch.qualityStatus || 'PENDING');
         data.cropType = String(linkedBatch.cropName || data.cropType || '');
@@ -5263,7 +5262,7 @@ app.delete('/api/records/:resource/:id', requireAuth, async (req, res) => {
                FROM jsonb_array_elements(
                  CASE WHEN jsonb_typeof(order_record.data->'items') = 'array'
                    THEN order_record.data->'items' ELSE '[]'::jsonb END
-               ) AS item
+               ) AS items(item)
                WHERE COALESCE(item->>'productId', item->>'id') = $1
              )
              OR EXISTS (
@@ -5271,7 +5270,7 @@ app.delete('/api/records/:resource/:id', requireAuth, async (req, res) => {
                FROM jsonb_array_elements(
                  CASE WHEN jsonb_typeof(order_record.data->'stockReservations') = 'array'
                    THEN order_record.data->'stockReservations' ELSE '[]'::jsonb END
-               ) AS reservation
+               ) AS reservations(reservation)
                WHERE reservation->>'productId' = $1
              )
            )
