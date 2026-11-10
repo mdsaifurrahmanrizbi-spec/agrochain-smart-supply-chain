@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
-import { store } from '../../services/api';
+import { agroApi, store } from '../../services/api';
 import { useCart } from '../../context/CartContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Search, Filter, MapPin, Check, ShoppingCart, Eye, Sparkles } from 'lucide-react';
@@ -16,6 +16,15 @@ export const Products: React.FC = () => {
   const [selectedLocation, setSelectedLocation] = useState<string>('All');
   const [sortBy, setSortBy] = useState<string>('featured');
   const [notification, setNotification] = useState<string | null>(null);
+  const [catalogRevision, setCatalogRevision] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([agroApi.getProducts(), agroApi.getBatches()]).then(() => {
+      if (active) setCatalogRevision((value) => value + 1);
+    }).catch((error) => console.error('Could not refresh public marketplace:', error));
+    return () => { active = false; };
+  }, []);
 
   const categories = ['All', 'Grains & Cereals', 'Vegetables', 'Fruits', 'Spices', 'Cash Crops'];
   const locations = ['All', 'Bogura', 'Rajshahi'];
@@ -23,6 +32,9 @@ export const Products: React.FC = () => {
   const filteredProducts = useMemo(() => {
     return store.products
       .filter((p) => {
+        const batch = store.batches.find((item) => item.id === p.batchId);
+        const approvedListing = p.listingStatus === 'APPROVED' || (!p.listingStatus && p.qualityStatus === 'APPROVED' && batch?.qualityStatus === 'APPROVED');
+        if (!approvedListing || p.qualityStatus !== 'APPROVED' || batch?.qualityStatus !== 'APPROVED') return false;
         const matchesQuery =
           p.name.toLowerCase().includes(search.toLowerCase()) ||
           p.description.toLowerCase().includes(search.toLowerCase()) ||
@@ -36,7 +48,7 @@ export const Products: React.FC = () => {
         if (sortBy === 'price-high') return b.pricePerUnit - a.pricePerUnit;
         return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
       });
-  }, [search, selectedCategory, selectedLocation, sortBy]);
+  }, [search, selectedCategory, selectedLocation, sortBy, catalogRevision]);
 
   const handleAddToCart = (product: typeof store.products[0]) => {
     addToCart(product, 1);
