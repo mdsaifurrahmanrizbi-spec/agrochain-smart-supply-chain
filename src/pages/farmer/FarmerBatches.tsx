@@ -12,16 +12,22 @@ export const FarmerBatches: React.FC = () => {
   const [selectedBatchForQr, setSelectedBatchForQr] = useState<CropBatch | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  const [formData, setFormData] = useState({
-    cropName: 'Chinigura Aromatic Rice',
-    variety: 'BRRI Dhan-34',
+  const createEmptyFormData = () => ({
+    cropName: '',
+    variety: '',
     farmId: 'farm-1',
     farmName: 'Bogura Green Valley Agro Farm',
     sowingDate: '2025-11-20',
-    harvestDate: '2026-04-12',
+    harvestDate: '',
     estimatedQuantityKg: 5000,
-    actualQuantityKg: 4850,
+    actualQuantityKg: '',
   });
+  const [formData, setFormData] = useState(createEmptyFormData);
+
+  const closeAddModal = () => {
+    setFormData(createEmptyFormData());
+    setShowAddModal(false);
+  };
 
   const myBatches = batches.filter((b) => b.farmerId === farmerId);
 
@@ -29,12 +35,14 @@ export const FarmerBatches: React.FC = () => {
     e.preventDefault();
     const newB = await agroApi.createBatch({
       ...formData,
+      actualQuantityKg: Number(formData.actualQuantityKg),
       cropId: 'crop-1',
       farmerId: user?.id || 'u-farmer-1',
       farmerName: user?.name || 'Md. Rafiqul Islam',
       qualityStatus: 'PENDING',
     });
     setBatches([...store.batches]);
+    setFormData(createEmptyFormData());
     setShowAddModal(false);
   };
 
@@ -49,7 +57,10 @@ export const FarmerBatches: React.FC = () => {
         </div>
 
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => {
+            setFormData(createEmptyFormData());
+            setShowAddModal(true);
+          }}
           className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -148,7 +159,7 @@ export const FarmerBatches: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-sm font-bold text-slate-900">Register New Crop Batch</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-700 font-bold">
+              <button onClick={closeAddModal} className="text-slate-400 hover:text-slate-700 font-bold">
                 ✕
               </button>
             </div>
@@ -193,7 +204,7 @@ export const FarmerBatches: React.FC = () => {
                     type="number"
                     required
                     value={formData.actualQuantityKg}
-                    onChange={(e) => setFormData({ ...formData, actualQuantityKg: Number(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, actualQuantityKg: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden"
                   />
                 </div>
@@ -202,7 +213,7 @@ export const FarmerBatches: React.FC = () => {
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={closeAddModal}
                   className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg font-semibold"
                 >
                   Cancel
