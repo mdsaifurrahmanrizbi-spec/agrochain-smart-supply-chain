@@ -49,15 +49,25 @@ export const BuyerTracking: React.FC = () => {
   }, [order?.id]);
 
   useEffect(() => {
-    let active = true;
     setDeliveryPasscode({ loading: true, error: '', otp: null, attemptsRemaining: null, verified: false });
+
     if (!order?.id || user?.role !== 'buyer' || String(order.buyerId) !== String(user.id)) {
-      setDeliveryPasscode({ loading: false, error: 'Sign in with the buyer account that placed this order to view its delivery passcode.', otp: null, attemptsRemaining: null, verified: false });
-      return () => { active = false; };
+      setDeliveryPasscode({
+        loading: false,
+        error: 'Sign in with the buyer account that placed this order to view its delivery passcode.',
+        otp: null,
+        attemptsRemaining: null,
+        verified: false,
+      });
+      return;
     }
-    agroApi.getBuyerDeliveryPasscode(order.id)
-      .then((result) => {
-        if (!active) return;
+
+    // Always settle the visible loading state when the request resolves. The previous
+    // effect-local active flag could discard a valid response during React effect
+    // cleanup/replay, leaving the OTP card stuck on "Loading…".
+    const loadDeliveryPasscode = async () => {
+      try {
+        const result = await agroApi.getBuyerDeliveryPasscode(order.id);
         setDeliveryPasscode({
           loading: false,
           error: '',
@@ -65,9 +75,7 @@ export const BuyerTracking: React.FC = () => {
           attemptsRemaining: result.otpAttemptsRemaining,
           verified: result.isDeliveryVerified,
         });
-      })
-      .catch((error) => {
-        if (!active) return;
+      } catch (error) {
         setDeliveryPasscode({
           loading: false,
           error: error instanceof Error ? error.message : 'Could not load delivery passcode. Please refresh.',
@@ -75,8 +83,10 @@ export const BuyerTracking: React.FC = () => {
           attemptsRemaining: null,
           verified: false,
         });
-      });
-    return () => { active = false; };
+      }
+    };
+
+    void loadDeliveryPasscode();
   }, [order?.id, order?.buyerId, user?.id, user?.role]);
 
   const farmQc = store.qualityChecks.find((check) =>
