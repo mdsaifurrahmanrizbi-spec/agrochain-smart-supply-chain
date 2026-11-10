@@ -5082,7 +5082,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         pesticideResiduePpm: 0,
         foreignMatterPercent: 0,
         status: 'PENDING',
-        remarks: 'New farmer crop batch submitted. Inspection measurements and remarks must be entered by an assigned inspector before certification.',
+        remarks: 'New farmer crop batch submitted. Inspection measurements and remarks must be entered by an Admin or assigned inspector before certification.',
       };
       await client.query(
         "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('qualityChecks', $1, $2::jsonb, NOW(), NOW()) ON CONFLICT (resource, id) DO NOTHING",
