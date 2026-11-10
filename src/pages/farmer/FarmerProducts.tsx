@@ -3,7 +3,7 @@ import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { CropBatch, Product } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import { Plus, Search, Pencil } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
 
 
 const compressProductImage = async (file: File): Promise<string> => {
@@ -43,6 +43,7 @@ export const FarmerProducts: React.FC = () => {
   const [search, setSearch] = useState('');
   const [imageError, setImageError] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const [formData, setFormData] = useState({
@@ -73,6 +74,7 @@ export const FarmerProducts: React.FC = () => {
   }, [farmerId]);
 
   const selectedBatch = batches.find((batch) => batch.id === formData.batchId);
+  const editingBatchIsLocked = Boolean(editingProduct?.batchId && batches.some((batch) => batch.id === editingProduct.batchId));
   const myProducts = products.filter((p) => p.farmerId === farmerId);
   const displayed = myProducts.filter(
     (p) => p.name.toLowerCase().includes(search.toLowerCase()) || p.variety.toLowerCase().includes(search.toLowerCase())
@@ -94,8 +96,8 @@ export const FarmerProducts: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingProduct && !selectedBatch) {
-      setImageError('Select one of your registered crop batches before submitting this listing.');
+    if ((!editingProduct || !editingBatchIsLocked) && !selectedBatch) {
+      setImageError('Select one of your registered crop batches before saving this listing.');
       return;
     }
     if (!editingProduct && !formData.imageUrl) {
@@ -115,6 +117,13 @@ export const FarmerProducts: React.FC = () => {
           description: formData.description,
           imageUrl: formData.imageUrl || editingProduct.imageUrl,
           isOrganic: formData.isOrganic,
+          batchId: editingBatchIsLocked ? editingProduct.batchId : selectedBatch?.id,
+          ...(editingBatchIsLocked ? {} : {
+            cropType: selectedBatch?.cropName,
+            variety: selectedBatch?.variety,
+            farmName: selectedBatch?.farmName,
+            harvestDate: selectedBatch?.harvestDate,
+          }),
         });
       } else if (selectedBatch) {
         await agroApi.createProduct({
@@ -143,12 +152,27 @@ export const FarmerProducts: React.FC = () => {
     }
   };
 
+  const handleDelete = async (product: Product) => {
+    const confirmed = window.confirm(`Delete "${product.name}"? This cannot be undone. Listings linked to orders cannot be deleted.`);
+    if (!confirmed) return;
+    setDeletingProductId(product.id);
+    setImageError('');
+    try {
+      await agroApi.deleteProduct(product.id);
+      setProducts([...store.products]);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Could not delete this product listing.');
+    } finally {
+      setDeletingProductId(null);
+    }
+  };
+
   const startEditing = (product: Product) => {
     setEditingProduct(product);
     setImageError('');
     setFormData({
       name: product.name,
-      batchId: product.batchId,
+      batchId: batches.some((batch) => batch.id === product.batchId) ? product.batchId : '',
       category: product.category,
       cropType: product.cropType,
       variety: product.variety,
@@ -237,9 +261,14 @@ export const FarmerProducts: React.FC = () => {
                     <StatusBadge status={p.listingStatus || (p.qualityStatus === 'APPROVED' && batches.find((batch) => batch.id === p.batchId)?.qualityStatus === 'APPROVED' ? 'APPROVED' : 'PENDING_APPROVAL')} size="sm" />
                   </td>
                   <td className="py-3 px-4">
-                    <button type="button" onClick={() => startEditing(p)} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50" aria-label={`Edit ${p.name}`}>
-                      <Pencil className="h-3.5 w-3.5" /> Edit
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => startEditing(p)} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50" aria-label={`Edit ${p.name}`}>
+                        <Pencil className="h-3.5 w-3.5" /> Edit
+                      </button>
+                      <button type="button" onClick={() => handleDelete(p)} disabled={deletingProductId === p.id} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50" aria-label={`Delete ${p.name}`}>
+                        <Trash2 className="h-3.5 w-3.5" /> {deletingProductId === p.id ? 'Deleting…' : 'Delete'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -264,7 +293,7 @@ export const FarmerProducts: React.FC = () => {
                 <label className="block text-slate-700 font-semibold mb-1">Crop Batch</label>
                 <select
                   required
-                  disabled={Boolean(editingProduct)}
+                  disabled={Boolean(editingProduct && editingBatchIsLocked)}
                   value={formData.batchId}
                   onChange={(e) => {
                     const batch = batches.find((item) => item.id === e.target.value);
@@ -277,7 +306,8 @@ export const FarmerProducts: React.FC = () => {
                     <option key={batch.id} value={batch.id}>{batch.batchCode} — {batch.cropName} ({batch.variety}) · {batch.qualityStatus}</option>
                   ))}
                 </select>
-                {editingProduct && <p className="mt-1 text-slate-500">The original crop-batch link is locked after submission.</p>}
+                {editingProduct && editingBatchIsLocked && <p className="mt-1 text-slate-500">The original registered crop-batch link is locked after submission.</p>}
+                {editingProduct && !editingBatchIsLocked && <p className="mt-1 text-amber-700">This older listing has no valid linked batch. Select one of your registered crop batches to repair the link.</p>}
                 {batches.length === 0 && <p className="mt-1 text-amber-700">Create a Crop Batch first. A product must be linked to a real batch.</p>}
               </div>
               <div>
