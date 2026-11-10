@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -72,23 +73,29 @@ export const BuyerTracking: React.FC = () => {
       setOtpDiagnostic(`Request started · ${order.id}`);
       try {
         const result = await agroApi.getBuyerDeliveryPasscode(order.id);
-        setOtpDiagnostic(`API resolved · response order=${result.orderId} · OTP present=${Boolean(result.deliveryOtp)} · verified=${result.isDeliveryVerified}`);
-        setDeliveryPasscode({
-          loading: false,
-          error: '',
-          otp: result.deliveryOtp,
-          attemptsRemaining: result.otpAttemptsRemaining,
-          verified: result.isDeliveryVerified,
+        // Commit the resolved passcode immediately so the buyer sees it in the OTP box.
+        // This also avoids leaving stale "Loading…" text visible after the request has resolved.
+        flushSync(() => {
+          setOtpDiagnostic(`API resolved · response order=${result.orderId} · OTP present=${Boolean(result.deliveryOtp)} · verified=${result.isDeliveryVerified}`);
+          setDeliveryPasscode({
+            loading: false,
+            error: '',
+            otp: result.deliveryOtp,
+            attemptsRemaining: result.otpAttemptsRemaining,
+            verified: result.isDeliveryVerified,
+          });
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown request error';
-        setOtpDiagnostic(`Request failed · ${message}`);
-        setDeliveryPasscode({
-          loading: false,
-          error: error instanceof Error ? error.message : 'Could not load delivery passcode. Please refresh.',
-          otp: null,
-          attemptsRemaining: null,
-          verified: false,
+        flushSync(() => {
+          setOtpDiagnostic(`Request failed · ${message}`);
+          setDeliveryPasscode({
+            loading: false,
+            error: error instanceof Error ? error.message : 'Could not load delivery passcode. Please refresh.',
+            otp: null,
+            attemptsRemaining: null,
+            verified: false,
+          });
         });
       }
     };
