@@ -81,6 +81,10 @@ export interface Product {
   harvestDate: string;
   imageUrl: string;
   qualityStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'RECHECK_REQUIRED';
+  listingStatus?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  listingReviewedAt?: string;
+  listingReviewedBy?: string;
+  listingReviewNotes?: string;
   isOrganic?: boolean;
   featured?: boolean;
   rating?: number;
