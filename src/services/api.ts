@@ -749,6 +749,19 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode'>): Promise<CropBatch
     return updated;
   },
 
+  async deleteProduct(id: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/records/products/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.message || `Could not delete product listing (${response.status})`);
+    }
+    store.products = store.products.filter((product) => product.id !== id);
+    localStorage.setItem('agro_products', JSON.stringify(store.products));
+  },
+
   // Orders
   async getOrders(
     userId?: string,

@@ -4623,33 +4623,50 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
           await client.query('ROLLBACK');
           return res.status(403).json({ message: 'A product listing must belong to the authenticated farmer account' });
         }
-        if (existing && String(data.batchId || '') !== String(existing.batchId || '')) {
+        const originalBatchId = String(existing?.batchId || '').trim();
+        const requestedBatchId = String(data.batchId || '').trim();
+        if (!requestedBatchId) {
           await client.query('ROLLBACK');
-          return res.status(409).json({ message: 'A product listing cannot be moved to a different crop batch after submission' });
+          return res.status(409).json({ message: 'Select one of your registered crop batches before saving this listing' });
+        }
+        // A valid original batch is immutable. A legacy listing with no batch
+        // reference (or an orphaned reference whose batch no longer exists)
+        // may be repaired by linking one of this farmer's own registered batches.
+        if (existing && originalBatchId && requestedBatchId !== originalBatchId) {
+          const originalBatchResult = await client.query(
+            "SELECT id FROM agrochain_records WHERE resource = 'batches' AND id = $1 FOR SHARE",
+            [originalBatchId]
+          );
+          if (originalBatchResult.rows[0]) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ message: 'A valid crop-batch link cannot be changed after submission' });
+          }
         }
         const linkedBatchResult = await client.query(
           "SELECT data FROM agrochain_records WHERE resource = 'batches' AND id = $1 FOR SHARE",
-          [String(existing?.batchId || data.batchId || '')]
+          [requestedBatchId]
         );
         const linkedBatch = linkedBatchResult.rows[0]?.data;
         if (!linkedBatch || String(linkedBatch.farmerId || '') !== String(req.auth.sub)) {
           await client.query('ROLLBACK');
           return res.status(409).json({ message: 'Select a crop batch registered to your farmer account before listing a product' });
         }
+        data.batchId = requestedBatchId;
         data.qualityStatus = String(linkedBatch.qualityStatus || 'PENDING');
-        // Farmer edits are restricted to listing content. Ownership and the
-        // source crop batch remain immutable after the first submission.
+        data.cropType = String(linkedBatch.cropName || data.cropType || '');
+        data.variety = String(linkedBatch.variety || data.variety || '');
+        data.farmName = String(linkedBatch.farmName || data.farmName || '');
+        data.harvestDate = String(linkedBatch.harvestDate || data.harvestDate || '');
+        // The authenticated farmer remains the immutable owner. A valid
+        // source batch remains locked; only a missing/orphaned legacy link
+        // can be repaired through this endpoint.
         if (existing) {
           data.farmerId = existing.farmerId;
-          data.batchId = existing.batchId;
           data.farmerName = existing.farmerName;
-          data.farmName = existing.farmName;
-          data.farmLocation = existing.farmLocation;
-          data.cropType = existing.cropType;
-          data.harvestDate = existing.harvestDate;
+          data.farmLocation = existing.farmLocation || data.farmLocation;
         }
         const listingContentFields = [
-          'name', 'category', 'variety', 'pricePerUnit', 'unit',
+          'name', 'category', 'variety', 'batchId', 'pricePerUnit', 'unit',
           'availableQuantity', 'imageUrl', 'description', 'isOrganic',
         ];
         const listingContentChanged = Boolean(existing) && listingContentFields.some(
@@ -5196,15 +5213,87 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     client.release();
   }
 });
-// Delete one record.
+// Delete one record. Farmers may delete only their own product listings,
+// and only when no order history or stock reservation references the listing.
 app.delete('/api/records/:resource/:id', requireAuth, async (req, res) => {
-  if (req.auth.role !== 'admin') {
+  const { resource, id } = req.params;
+  const role = req.auth.role;
+  const farmerProductDelete = role === 'farmer' && resource === 'products';
+  if (role !== 'admin' && !farmerProductDelete) {
     return res.status(403).json({ message: 'Admin access required' });
   }
-  const { resource, id } = req.params;
 
   if (!allowedResources.has(resource)) {
     return res.status(400).json({ message: 'Invalid resource' });
+  }
+
+  if (farmerProductDelete) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+        [resource, id]
+      );
+      const productResult = await client.query(
+        "SELECT data FROM agrochain_records WHERE resource = 'products' AND id = $1 FOR UPDATE",
+        [id]
+      );
+      const product = productResult.rows[0]?.data;
+      if (!product) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Product listing not found' });
+      }
+      if (String(product.farmerId || '') !== String(req.auth.sub)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'You can only delete your own product listings' });
+      }
+      if (Number(product.reservedQuantity || 0) > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'This listing has reserved stock for an order and cannot be deleted' });
+      }
+      const orderReference = await client.query(
+        `SELECT id
+         FROM agrochain_records AS order_record
+         WHERE order_record.resource = 'orders'
+           AND (
+             EXISTS (
+               SELECT 1
+               FROM jsonb_array_elements(
+                 CASE WHEN jsonb_typeof(order_record.data->'items') = 'array'
+                   THEN order_record.data->'items' ELSE '[]'::jsonb END
+               ) AS items(item)
+               WHERE COALESCE(item->>'productId', item->>'id') = $1
+             )
+             OR EXISTS (
+               SELECT 1
+               FROM jsonb_array_elements(
+                 CASE WHEN jsonb_typeof(order_record.data->'stockReservations') = 'array'
+                   THEN order_record.data->'stockReservations' ELSE '[]'::jsonb END
+               ) AS reservations(reservation)
+               WHERE reservation->>'productId' = $1
+             )
+           )
+         LIMIT 1`,
+        [id]
+      );
+      if (orderReference.rowCount > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'This listing is linked to an order record. It cannot be deleted so order history and audit records remain intact.' });
+      }
+      await client.query(
+        "DELETE FROM agrochain_records WHERE resource = 'products' AND id = $1",
+        [id]
+      );
+      await client.query('COMMIT');
+      return res.json({ success: true, id });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error('Could not delete farmer product listing:', error.message);
+      return res.status(500).json({ message: 'Could not delete this product listing' });
+    } finally {
+      client.release();
+    }
   }
 
   try {
