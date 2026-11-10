@@ -59,7 +59,6 @@ export interface CropBatch {
   estimatedQuantityKg: number;
   actualQuantityKg: number;
   qualityStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'RECHECK_REQUIRED';
-  blockchainHash?: string;
   qrCodeUrl?: string;
 }
 
