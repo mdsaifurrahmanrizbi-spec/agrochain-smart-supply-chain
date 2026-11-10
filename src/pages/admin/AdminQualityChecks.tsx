@@ -6,7 +6,6 @@ import { useAuth } from '../../context/AuthContext';
 
 type InspectorAccount = { id: string; name: string; email?: string; role: string; status?: string };
 
-type InspectorAccount = { id: string; name: string; email?: string; role: string; status?: string };
 
 export const AdminQualityChecks: React.FC = () => {
   const { user } = useAuth();
