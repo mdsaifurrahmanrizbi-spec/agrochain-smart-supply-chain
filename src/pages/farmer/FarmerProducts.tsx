@@ -38,6 +38,7 @@ export const FarmerProducts: React.FC = () => {
   const { user } = useAuth();
   const farmerId = user?.id || 'u-farmer-1';
   const [products, setProducts] = useState(store.products);
+  const [batches, setBatches] = useState<CropBatch[]>(store.batches.filter((batch) => batch.farmerId === farmerId));
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState('');
   const [imageError, setImageError] = useState('');
