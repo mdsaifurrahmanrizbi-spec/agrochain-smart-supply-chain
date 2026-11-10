@@ -3974,6 +3974,24 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     const existing = existingResult.rows[0]?.data;
 
+    if (resource === 'batches' && role === 'farmer') {
+      if (existing && String(existing.farmerId || '') !== String(req.auth.sub)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'You can only edit your own crop batches' });
+      }
+      if (!existing && String(data.farmerId || '') !== String(req.auth.sub)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'A crop batch must belong to the authenticated farmer account' });
+      }
+      data.qualityStatus = existing?.qualityStatus || 'PENDING';
+      if (!existing) {
+        data.qualityStatus = 'PENDING';
+        delete data.qualityReviewedAt;
+        delete data.qualityReviewedBy;
+        delete data.qualityCertificateNumber;
+      }
+    }
+
     // Delivery job transitions update the job, order, shipment, tracking event,
     // and partner workload together. Do not allow the generic record endpoint
     // to bypass the dedicated transactional delivery workflow.
@@ -4586,6 +4604,50 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     // product edit must not overwrite the reservation counter or reduce stock
     // below zero. Farmer edits may still adjust the unreserved listing quantity.
     if (resource === 'products') {
+      if (role === 'farmer') {
+        if (existing && String(existing.farmerId || '') !== String(req.auth.sub)) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'You can only manage your own product listings' });
+        }
+        if (!existing && String(data.farmerId || '') !== String(req.auth.sub)) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'A product listing must belong to the authenticated farmer account' });
+        }
+        if (existing && String(data.batchId || '') !== String(existing.batchId || '')) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'A product listing cannot be moved to a different crop batch after submission' });
+        }
+        const linkedBatchResult = await client.query(
+          "SELECT data FROM agrochain_records WHERE resource = 'batches' AND id = $1 FOR SHARE",
+          [String(existing?.batchId || data.batchId || '')]
+        );
+        const linkedBatch = linkedBatchResult.rows[0]?.data;
+        if (!linkedBatch || String(linkedBatch.farmerId || '') !== String(req.auth.sub)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'Select a crop batch registered to your farmer account before listing a product' });
+        }
+        data.qualityStatus = String(linkedBatch.qualityStatus || 'PENDING');
+        data.listingStatus = existing?.listingStatus || 'PENDING_APPROVAL';
+        data.listingReviewedAt = existing?.listingReviewedAt;
+        data.listingReviewedBy = existing?.listingReviewedBy;
+        data.listingReviewNotes = existing?.listingReviewNotes;
+        data.featured = existing?.featured === true;
+      } else if (role === 'admin' && data.listingStatus === 'APPROVED') {
+        const linkedBatchResult = await client.query(
+          "SELECT data FROM agrochain_records WHERE resource = 'batches' AND id = $1 FOR SHARE",
+          [String(data.batchId || '')]
+        );
+        const linkedBatch = linkedBatchResult.rows[0]?.data;
+        if (!existing || !linkedBatch || String(linkedBatch.qualityStatus || '') !== 'APPROVED' ||
+            String(data.qualityStatus || '') !== 'APPROVED') {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'A product can be approved for sale only after its linked crop batch passes quality inspection' });
+        }
+        data.listingReviewedAt = new Date().toISOString();
+        data.listingReviewedBy = req.auth.sub;
+      } else if (role === 'admin' && existing && data.listingStatus === undefined) {
+        data.listingStatus = existing.listingStatus || 'PENDING_APPROVAL';
+      }
       const availableQuantity = data.availableQuantity === undefined && existing
         ? Number(existing.availableQuantity)
         : Number(data.availableQuantity);
@@ -4825,6 +4887,31 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
     // Reserve every product line atomically with the initial order insert. Product
     // rows are locked in stable ID order so concurrent checkouts cannot oversell or
     // deadlock when carts contain multiple products. Existing orders are untouched.
+    if (resource === 'orders' && role === 'buyer' && !existing) {
+      const requestedItems = Array.isArray(data.items) ? data.items : [];
+      if (!requestedItems.length) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'An order must contain at least one product' });
+      }
+      for (const item of requestedItems) {
+        const productResult = await client.query(
+          "SELECT data FROM agrochain_records WHERE resource = 'products' AND id = $1 FOR SHARE",
+          [String(item?.productId || '')]
+        );
+        const product = productResult.rows[0]?.data;
+        const batchResult = product?.batchId
+          ? await client.query("SELECT data FROM agrochain_records WHERE resource = 'batches' AND id = $1 FOR SHARE", [String(product.batchId)])
+          : { rows: [] };
+        const batch = batchResult.rows[0]?.data;
+        const listingApproved = product?.listingStatus === 'APPROVED' ||
+          (!product?.listingStatus && product?.qualityStatus === 'APPROVED' && batch?.qualityStatus === 'APPROVED');
+        if (!product || !listingApproved || product.qualityStatus !== 'APPROVED' || !batch || batch.qualityStatus !== 'APPROVED') {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'This product is not available for purchase. Its crop batch must pass quality inspection and the Admin must approve the listing first.' });
+        }
+      }
+    }
+
     if (resource === 'orders' && role === 'buyer' && !existing && !directWarehouseReservation) {
       const items = Array.isArray(data.items) ? data.items : [];
       if (!items.length) {
@@ -4967,6 +5054,71 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
        RETURNING id, data, created_at, updated_at`,
       [resource, id, JSON.stringify(data)]
     );
+
+    if (resource === 'batches' && role === 'farmer' && !existing) {
+      const pendingBatchQc = {
+        id: `qc-batch-${id}`,
+        batchId: id,
+        batchCode: String(data.batchCode || id),
+        cropName: String(data.cropName || 'Crop batch'),
+        farmerName: String(data.farmerName || ''),
+        farmLocation: String(data.farmName || ''),
+        inspectorId: '',
+        inspectorName: 'Not assigned',
+        inspectionDate: '',
+        inspectionLocation: 'FARM',
+        grade: 'Not graded',
+        moistureContentPercent: 0,
+        pesticideResiduePpm: 0,
+        foreignMatterPercent: 0,
+        status: 'PENDING',
+        remarks: 'New farmer crop batch submitted. Inspection measurements and remarks must be entered by an assigned inspector before certification.',
+      };
+      await client.query(
+        "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('qualityChecks', $1, $2::jsonb, NOW(), NOW()) ON CONFLICT (resource, id) DO NOTHING",
+        [pendingBatchQc.id, JSON.stringify(pendingBatchQc)]
+      );
+    }
+
+    if (resource === 'qualityChecks' && existing && !data.orderId &&
+        ['admin', 'inspector'].includes(role) && data.status !== existing.status && data.batchId) {
+      const batchResult = await client.query(
+        "SELECT id, data FROM agrochain_records WHERE resource = 'batches' AND id = $1 FOR UPDATE",
+        [String(data.batchId)]
+      );
+      const batchRow = batchResult.rows[0];
+      if (batchRow) {
+        const batchData = {
+          ...batchRow.data,
+          qualityStatus: data.status,
+          qualityReviewedAt: new Date().toISOString(),
+          qualityReviewedBy: req.auth.sub,
+          qualityCertificateNumber: data.status === 'APPROVED' ? (data.certificateNumber || null) : null,
+        };
+        await client.query(
+          "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'batches' AND id = $1",
+          [batchRow.id, JSON.stringify(batchData)]
+        );
+        const linkedProducts = await client.query(
+          "SELECT id, data FROM agrochain_records WHERE resource = 'products' AND data->>'batchId' = $1 FOR UPDATE",
+          [String(data.batchId)]
+        );
+        for (const productRow of linkedProducts.rows) {
+          const productData = {
+            ...productRow.data,
+            qualityStatus: data.status,
+            listingStatus: 'PENDING_APPROVAL',
+            listingReviewNotes: data.status === 'APPROVED'
+              ? 'Crop quality passed. Awaiting separate Admin listing approval.'
+              : 'Listing paused because the linked crop batch is not quality-approved.',
+          };
+          await client.query(
+            "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'products' AND id = $1",
+            [productRow.id, JSON.stringify(productData)]
+          );
+        }
+      }
+    }
 
     await client.query('COMMIT');
     return res.json(result.rows[0]);
