@@ -101,7 +101,7 @@ export const ProductDetail: React.FC = () => {
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-slate-900">Crop Batch QR Certificate</h4>
-                  <p className="text-[11px] text-slate-500">Cryptographically verifiable on supply chain ledger</p>
+                  <p className="text-[11px] text-slate-500">Scan to view this batch’s saved origin and quality records</p>
                 </div>
               </div>
 
@@ -270,7 +270,7 @@ export const ProductDetail: React.FC = () => {
           <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <h3 className="text-sm font-bold text-slate-900">Crop Batch Ledger Certificate</h3>
+                <h3 className="text-sm font-bold text-slate-900">Crop Batch Traceability Certificate</h3>
                 <button
                   onClick={() => setShowQrModal(false)}
                   className="text-slate-400 hover:text-slate-700 text-sm font-bold"
@@ -280,12 +280,16 @@ export const ProductDetail: React.FC = () => {
               </div>
 
               <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 text-center space-y-3">
-                <div className="w-32 h-32 mx-auto bg-white p-3 rounded-lg border border-slate-300 shadow-xs flex items-center justify-center">
-                  <QrCode className="w-24 h-24 text-emerald-950" />
+                <div className="w-40 h-40 mx-auto bg-white p-2 rounded-lg border border-slate-300 shadow-xs">
+                  <img
+                    className="w-full h-full object-contain"
+                    alt={`Scannable QR code for batch ${batch.batchCode}`}
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=${encodeURIComponent(`${window.location.origin}/traceability/${encodeURIComponent(batch.batchCode)}`)}`}
+                  />
                 </div>
                 <div className="text-xs font-mono font-bold text-slate-900">{batch.batchCode}</div>
                 <p className="text-[11px] text-slate-500">
-                  Scan to verify harvest timestamp, grower GPS location, and agronomist moisture certificates.
+                  Scan with a phone camera to open this batch’s AgroChain traceability record.
                 </p>
               </div>
 
