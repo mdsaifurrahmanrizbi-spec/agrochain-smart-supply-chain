@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { CropBatch } from '../../types';
@@ -11,6 +11,14 @@ export const FarmerBatches: React.FC = () => {
   const [batches, setBatches] = useState(store.batches);
   const [selectedBatchForQr, setSelectedBatchForQr] = useState<CropBatch | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    agroApi.getBatches(farmerId).then((freshBatches) => {
+      if (active) setBatches([...freshBatches]);
+    }).catch((error) => console.error('Could not refresh farmer crop batches:', error));
+    return () => { active = false; };
+  }, [farmerId]);
 
   const createEmptyFormData = () => ({
     cropName: '',
@@ -41,7 +49,7 @@ export const FarmerBatches: React.FC = () => {
       farmerName: user?.name || 'Md. Rafiqul Islam',
       qualityStatus: 'PENDING',
     });
-    setBatches([...store.batches]);
+    setBatches((current) => [newB, ...current.filter((batch) => batch.id !== newB.id)]);
     setFormData(createEmptyFormData());
     setShowAddModal(false);
   };
@@ -52,7 +60,7 @@ export const FarmerBatches: React.FC = () => {
         <div>
           <h1 className="text-xl font-bold text-slate-900">Crop Batches & Traceability Codes</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Every harvest batch receives a unique consignment code and cryptographic QR fingerprint.
+            Every harvest batch receives a traceability QR. Quality certification is issued only after inspection approval.
           </p>
         </div>
 
