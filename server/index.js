@@ -5090,7 +5090,8 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       );
     }
 
-    if (resource === 'qualityChecks' && existing && !data.orderId &&
+    if (resource === 'qualityChecks' && existing && !existing.orderId && !data.orderId &&
+        String(data.batchId || '') === String(existing.batchId || '') &&
         ['admin', 'inspector'].includes(role) && data.status !== existing.status && data.batchId) {
       if (role === 'admin') {
         const moisture = Number(data.moistureContentPercent);
@@ -5122,7 +5123,11 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         [String(data.batchId)]
       );
       const batchRow = batchResult.rows[0];
-      if (batchRow) {
+      if (!batchRow) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'The crop batch linked to this QC record was not found' });
+      }
+      {
         const batchData = {
           ...batchRow.data,
           qualityStatus: data.status,
