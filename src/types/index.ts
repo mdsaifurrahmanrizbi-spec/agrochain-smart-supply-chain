@@ -377,6 +377,8 @@ export interface QualityCheck {
   farmLocation: string;
   inspectorId: string;
   inspectorName: string;
+  reviewedByRole?: 'ADMIN' | 'INSPECTOR';
+  reviewedByName?: string;
   inspectionDate: string;
   inspectionLocation: 'FARM' | 'WAREHOUSE';
   grade: 'Not graded' | 'Grade A - Premium' | 'Grade B - Standard' | 'Grade C - Commercial';
