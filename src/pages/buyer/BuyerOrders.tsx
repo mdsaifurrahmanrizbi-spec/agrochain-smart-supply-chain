@@ -1,21 +1,54 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { agroApi, store } from '../../services/api';
+import { agroApi } from '../../services/api';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Truck, ArrowRight, XCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 export const BuyerOrders: React.FC = () => {
-  const { user } = useAuth();
+  const { user, authLoading } = useAuth();
   const navigate = useNavigate();
-  const buyerId = user?.id || 'u-buyer-1';
-  const myOrders = store.orders.filter((o) => o.buyerId === buyerId);
+  const [orders, setOrders] = useState<Awaited<ReturnType<typeof agroApi.getOrders>>>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [cancelTarget, setCancelTarget] = useState<{ id: string; orderNumber: string } | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState('');
   const [cancelSuccess, setCancelSuccess] = useState('');
-  const [, setRefresh] = useState(0);
 
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user || user.role !== 'buyer') {
+      setOrders([]);
+      setOrdersError('Sign in with your buyer account to view your orders.');
+      setOrdersLoading(false);
+      return;
+    }
+
+    let active = true;
+    setOrdersLoading(true);
+    setOrdersError('');
+
+    void agroApi.getOrders(user.id, 'buyer', { strict: true })
+      .then((loadedOrders) => {
+        if (active) setOrders(loadedOrders);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setOrders([]);
+          setOrdersError(error instanceof Error ? error.message : 'Could not load your orders. Please try again.');
+        }
+      })
+      .finally(() => {
+        if (active) setOrdersLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [authLoading, user?.id, user?.role, refreshKey]);
+
+  const myOrders = orders;
   const pickupStartedStatuses = ['PICKED_UP', 'IN_TRANSIT', 'IN_TRANSIT_CENTRAL', 'WAREHOUSE_RECEIVED', 'IN_WAREHOUSE', 'GODOWN_ASSIGNED', 'GODOWN_TRANSFER_IN_TRANSIT', 'ARRIVED_LOCAL_GODOWN', 'GODOWN_RECEIVED', 'ARRIVED_REGIONAL_GODOWN', 'DELIVERY_PARTNER_ASSIGNED', 'DELIVERY_ASSIGNMENT_PENDING', 'MANUAL_ROUTING_REQUIRED', 'DELIVERY_ACCEPTED', 'DELIVERY_PARTNER_COLLECTED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'];
   const canCancelOrder = (order: (typeof myOrders)[number]) =>
     !pickupStartedStatuses.includes(String(order.orderStatus).toUpperCase()) &&
@@ -27,7 +60,8 @@ export const BuyerOrders: React.FC = () => {
     try {
       await agroApi.cancelOrder(cancelTarget.id);
       setCancelSuccess(`Order ${cancelTarget.orderNumber} cancelled successfully.`);
-      setCancelTarget(null); setRefresh((value) => value + 1);
+      setCancelTarget(null);
+      setRefreshKey((value) => value + 1);
     } catch (error) {
       setCancelError(error instanceof Error ? error.message : 'Could not cancel this order. Please try again.');
     } finally { setCancelling(false); }
@@ -52,6 +86,15 @@ export const BuyerOrders: React.FC = () => {
         </Link>
       </div>
 
+      {ordersError && (
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-center justify-between gap-3">
+          <span>{ordersError}</span>
+          <button type="button" onClick={() => setRefreshKey((value) => value + 1)} className="shrink-0 rounded border border-red-300 px-3 py-1.5 font-semibold hover:bg-red-100">
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700">
@@ -67,7 +110,13 @@ export const BuyerOrders: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {myOrders.map((ord) => (
+              {ordersLoading ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Loading your orders…</td></tr>
+              ) : ordersError ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Orders could not be loaded. Use Retry above.</td></tr>
+              ) : myOrders.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">No orders found for this buyer account.</td></tr>
+              ) : myOrders.map((ord) => (
                 <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors">
                   <td className="py-3 px-4 font-mono font-bold text-slate-900">{ord.orderNumber}</td>
                   <td className="py-3 px-4">
@@ -92,10 +141,10 @@ export const BuyerOrders: React.FC = () => {
                         <Truck className="w-3.5 h-3.5" /> <span>Track</span>
                       </button>
                       {canCancelOrder(ord) ? (
-                        <button onClick={() => { setCancelError(""); setCancelTarget({ id: ord.id, orderNumber: ord.orderNumber }); }} className="px-2.5 py-1 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 rounded border border-red-200 inline-flex items-center gap-1.5">
+                        <button onClick={() => { setCancelError(''); setCancelTarget({ id: ord.id, orderNumber: ord.orderNumber }); }} className="px-2.5 py-1 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 rounded border border-red-200 inline-flex items-center gap-1.5">
                           <XCircle className="w-3.5 h-3.5" /> <span>Cancel Order</span>
                         </button>
-                      ) : ord.orderStatus === "CANCELLED" ? (
+                      ) : ord.orderStatus === 'CANCELLED' ? (
                         <span className="px-2.5 py-1 text-xs font-semibold text-slate-500 bg-slate-100 rounded border border-slate-200">Cancelled</span>
                       ) : (
                         <span className="px-2.5 py-1 text-[10px] font-medium text-slate-500 bg-slate-50 rounded border border-slate-200">Cancel unavailable after pickup</span>
