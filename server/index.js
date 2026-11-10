@@ -3974,21 +3974,31 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
 
     const existing = existingResult.rows[0]?.data;
 
-    if (resource === 'batches' && role === 'farmer') {
-      if (existing && String(existing.farmerId || '') !== String(req.auth.sub)) {
-        await client.query('ROLLBACK');
-        return res.status(403).json({ message: 'You can only edit your own crop batches' });
-      }
-      if (!existing && String(data.farmerId || '') !== String(req.auth.sub)) {
-        await client.query('ROLLBACK');
-        return res.status(403).json({ message: 'A crop batch must belong to the authenticated farmer account' });
-      }
-      data.qualityStatus = existing?.qualityStatus || 'PENDING';
-      if (!existing) {
-        data.qualityStatus = 'PENDING';
-        delete data.qualityReviewedAt;
-        delete data.qualityReviewedBy;
-        delete data.qualityCertificateNumber;
+    if (resource === 'batches') {
+      if (role === 'farmer') {
+        if (existing && String(existing.farmerId || '') !== String(req.auth.sub)) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'You can only edit your own crop batches' });
+        }
+        if (!existing && String(data.farmerId || '') !== String(req.auth.sub)) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'A crop batch must belong to the authenticated farmer account' });
+        }
+        data.qualityStatus = existing?.qualityStatus || 'PENDING';
+        data.qualityReviewedAt = existing?.qualityReviewedAt;
+        data.qualityReviewedBy = existing?.qualityReviewedBy;
+        data.qualityCertificateNumber = existing?.qualityCertificateNumber;
+      } else if (role === 'admin') {
+        if (!existing) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'Crop batches must be registered by the farmer who owns the harvest' });
+        }
+        // Batch quality status and certificate fields can only be changed by
+        // the linked QC decision transaction, never by a generic batch edit.
+        data.qualityStatus = existing.qualityStatus || 'PENDING';
+        data.qualityReviewedAt = existing.qualityReviewedAt;
+        data.qualityReviewedBy = existing.qualityReviewedBy;
+        data.qualityCertificateNumber = existing.qualityCertificateNumber;
       }
     }
 
