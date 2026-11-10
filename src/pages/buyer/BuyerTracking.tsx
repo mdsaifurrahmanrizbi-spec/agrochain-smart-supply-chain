@@ -30,6 +30,7 @@ export const BuyerTracking: React.FC = () => {
     myOrders[0] ||
     store.orders[0];
 
+  const [otpDiagnostic, setOtpDiagnostic] = useState('Waiting for OTP effect');
   const [deliveryPasscode, setDeliveryPasscode] = useState<{
     loading: boolean;
     error: string;
@@ -49,9 +50,11 @@ export const BuyerTracking: React.FC = () => {
   }, [order?.id]);
 
   useEffect(() => {
+    setOtpDiagnostic(`Effect ran · order=${order?.id || 'missing'} · user=${user?.id || 'missing'} · role=${user?.role || 'missing'}`);
     setDeliveryPasscode({ loading: true, error: '', otp: null, attemptsRemaining: null, verified: false });
 
     if (!order?.id || user?.role !== 'buyer' || String(order.buyerId) !== String(user.id)) {
+      setOtpDiagnostic(`Blocked by ownership check · order=${order?.id || 'missing'} · buyer=${order?.buyerId || 'missing'} · user=${user?.id || 'missing'} · role=${user?.role || 'missing'}`);
       setDeliveryPasscode({
         loading: false,
         error: 'Sign in with the buyer account that placed this order to view its delivery passcode.',
@@ -66,8 +69,10 @@ export const BuyerTracking: React.FC = () => {
     // effect-local active flag could discard a valid response during React effect
     // cleanup/replay, leaving the OTP card stuck on "Loading…".
     const loadDeliveryPasscode = async () => {
+      setOtpDiagnostic(`Request started · ${order.id}`);
       try {
         const result = await agroApi.getBuyerDeliveryPasscode(order.id);
+        setOtpDiagnostic(`API resolved · response order=${result.orderId} · OTP present=${Boolean(result.deliveryOtp)} · verified=${result.isDeliveryVerified}`);
         setDeliveryPasscode({
           loading: false,
           error: '',
@@ -76,6 +81,8 @@ export const BuyerTracking: React.FC = () => {
           verified: result.isDeliveryVerified,
         });
       } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown request error';
+        setOtpDiagnostic(`Request failed · ${message}`);
         setDeliveryPasscode({
           loading: false,
           error: error instanceof Error ? error.message : 'Could not load delivery passcode. Please refresh.',
@@ -147,6 +154,9 @@ export const BuyerTracking: React.FC = () => {
                   </div>
                   <div className="text-[10px] text-emerald-200 mt-1">
                     {deliveryPasscode.loading ? 'Checking secure order record…' : deliveryPasscode.error ? deliveryPasscode.error : deliveryPasscode.attemptsRemaining === null ? 'Verification attempts unavailable' : `${deliveryPasscode.attemptsRemaining} verification attempts remaining`}
+                  </div>
+                  <div className="mt-2 border-t border-white/15 pt-2 text-left text-[9px] leading-relaxed text-emerald-100/80" data-testid="otp-diagnostic" aria-live="polite">
+                    Diagnostic: {otpDiagnostic}
                   </div>
                 </div>
               )}
