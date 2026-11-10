@@ -3,8 +3,36 @@ import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Product } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import { RICE_IMAGE, PRODUCE_IMAGE } from '../../services/mockData';
 import { Package, Plus, Search, Check, MapPin, Tag } from 'lucide-react';
+
+
+const compressProductImage = async (file: File): Promise<string> => {
+  if (!file.type.startsWith('image/')) throw new Error('Please choose an image file.');
+  const bitmap = await createImageBitmap(file);
+  const maxDimension = 1200;
+  const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Could not process this image. Please try another file.');
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+
+  let blob: Blob | null = null;
+  for (const quality of [0.82, 0.72, 0.62, 0.52]) {
+    blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+    if (blob && blob.size <= 650 * 1024) break;
+  }
+  if (!blob || blob.size > 650 * 1024) throw new Error('Image is too large after compression. Please choose a smaller image.');
+
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not read the selected image.'));
+    reader.onerror = () => reject(new Error('Could not read the selected image.'));
+    reader.readAsDataURL(blob);
+  });
+};
 
 export const FarmerProducts: React.FC = () => {
   const { user } = useAuth();
@@ -12,6 +40,8 @@ export const FarmerProducts: React.FC = () => {
   const [products, setProducts] = useState(store.products);
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState('');
+  const [imageError, setImageError] = useState('');
+  const [isPublishing, setIsPublishing] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -25,7 +55,7 @@ export const FarmerProducts: React.FC = () => {
     unit: 'kg' as const,
     availableQuantity: 500,
     harvestDate: '2026-04-10',
-    imageUrl: RICE_IMAGE,
+    imageUrl: '',
     isOrganic: true,
   });
 
@@ -34,9 +64,30 @@ export const FarmerProducts: React.FC = () => {
     (p) => p.name.toLowerCase().includes(search.toLowerCase()) || p.variety.toLowerCase().includes(search.toLowerCase())
   );
 
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageError('');
+    try {
+      const imageUrl = await compressProductImage(file);
+      setFormData((current) => ({ ...current, imageUrl }));
+    } catch (error) {
+      setFormData((current) => ({ ...current, imageUrl: '' }));
+      setImageError(error instanceof Error ? error.message : 'Could not process the selected image.');
+      e.target.value = '';
+    }
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newProd = await agroApi.createProduct({
+    if (!formData.imageUrl) {
+      setImageError('Please upload a product image before publishing.');
+      return;
+    }
+    setIsPublishing(true);
+    setImageError('');
+    try {
+      await agroApi.createProduct({
       ...formData,
       batchId: `batch-2026-${Date.now().toString().slice(-3)}`,
       farmerId: user?.id || 'u-farmer-1',
@@ -44,9 +95,15 @@ export const FarmerProducts: React.FC = () => {
       qualityStatus: 'APPROVED',
       featured: true,
       rating: 4.8,
-    });
-    setProducts([...store.products]);
-    setShowAddModal(false);
+      });
+      setProducts([...store.products]);
+      setShowAddModal(false);
+      setFormData((current) => ({ ...current, name: '', variety: '', description: '', imageUrl: '' }));
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : 'Could not publish this product. Please try again.');
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   return (
@@ -125,7 +182,7 @@ export const FarmerProducts: React.FC = () => {
       {/* Add Product Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-sm font-bold text-slate-900">List Agricultural Product</h3>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-700 text-sm font-bold">
@@ -211,6 +268,25 @@ export const FarmerProducts: React.FC = () => {
               </div>
 
               <div>
+                <label className="block text-slate-700 font-semibold mb-1">Product Image <span className="text-rose-600">*</span></label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  required
+                  onChange={handleImageChange}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg file:mr-3 file:px-3 file:py-1 file:border-0 file:rounded-md file:bg-emerald-100 file:text-emerald-800 file:font-semibold"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Upload a clear photo of this exact product. JPG, PNG or WebP; optimized before saving.</p>
+                {formData.imageUrl && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <img src={formData.imageUrl} alt="Product image preview" className="w-20 h-20 rounded-lg object-cover border border-slate-200" />
+                    <span className="text-[11px] text-emerald-700 font-semibold">Image ready to publish</span>
+                  </div>
+                )}
+                {imageError && <p role="alert" className="text-[11px] text-rose-600 mt-2">{imageError}</p>}
+              </div>
+
+              <div>
                 <label className="block text-slate-700 font-semibold mb-1">Description</label>
                 <textarea
                   rows={2}
@@ -225,16 +301,17 @@ export const FarmerProducts: React.FC = () => {
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => { setShowAddModal(false); setImageError(''); }}
                   className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold shadow-xs"
+                  disabled={isPublishing || !formData.imageUrl}
+                  className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-400 disabled:cursor-not-allowed text-white rounded-lg font-bold shadow-xs"
                 >
-                  Publish Listing
+                  {isPublishing ? 'Publishing…' : 'Publish Listing'}
                 </button>
               </div>
             </form>
