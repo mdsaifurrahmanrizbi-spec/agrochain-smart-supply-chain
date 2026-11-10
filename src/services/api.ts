@@ -1591,7 +1591,7 @@ async getQualityChecks(): Promise<QualityCheck[]> {
         pesticideResiduePpm: 0,
         foreignMatterPercent: 0,
         status: 'PENDING',
-        remarks: 'Inspection not performed yet. Measurements and grade must be entered by the inspector.',
+        remarks: 'Inspection not performed yet. Measurements and grade must be entered by the Admin or assigned inspector.',
       };
       // Keep the pending QC visible in this session even if a backend write fails;
       // log the failure so it can be diagnosed instead of silently losing the queue item.
