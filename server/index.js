@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { pool } from './db.js';
 import bcrypt from 'bcryptjs';
+import { randomInt } from 'node:crypto';
 import { createAuthToken, requireAuth } from './auth.js';
 import rupantorPayRouter from './rupantorpay.js';
 
@@ -3077,38 +3078,64 @@ app.post('/api/delivery/jobs/:jobId/status', requireAuth, async (req, res) => {
 // Server-authoritative delivery confirmation. COD customer payment becomes PAID
 // at the exact moment the assigned delivery partner verifies the customer's OTP.
 // Buyer-only delivery passcode retrieval. Never expose OTP through the general records API.
+// Legacy orders without a passcode receive one exactly once under a row lock.
 app.get('/api/buyer/orders/:id/delivery-passcode', requireAuth, async (req, res) => {
-  if (req.auth.role !== 'buyer') {
-    return res.status(403).json({ message: 'Only the buyer who placed this order can view its delivery passcode' });
-  }
+  if (req.auth.role !== 'buyer') return res.status(403).json({ message: 'Only the buyer who placed this order can view its delivery passcode' });
   const orderKey = String(req.params.id || '').trim();
   if (!orderKey) return res.status(400).json({ message: 'Order reference is required' });
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
-      "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND (id = $1 OR data->>'orderNumber' = $1) LIMIT 1",
+    await client.query('BEGIN');
+    const found = await client.query(
+      "SELECT id, data FROM agrochain_records WHERE resource = 'orders' AND (id = $1 OR data->>'orderNumber' = $1) LIMIT 1 FOR UPDATE",
       [orderKey]
     );
-    const order = result.rows[0]?.data;
+    const row = found.rows[0], order = row?.data;
     if (!order || String(order.buyerId || '') !== String(req.auth.sub)) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Order not found for this customer account' });
     }
+    if (order.isDeliveryVerified || order.orderStatus === 'DELIVERED') {
+      await client.query('COMMIT');
+      return res.set('Cache-Control', 'no-store, private').json({
+        orderId: row.id, isDeliveryVerified: true, deliveryOtp: null,
+        otpAttemptsRemaining: 0, otpExpiresAt: order.otpExpiresAt || null,
+      });
+    }
+    let changed = false;
+    if (typeof order.deliveryOtp !== 'string' || !/^\d{4}$/.test(order.deliveryOtp)) {
+      order.deliveryOtp = String(randomInt(1000, 10000));
+      order.otpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      order.otpAttemptsRemaining = 3;
+      changed = true;
+    } else {
+      if (!order.otpExpiresAt) {
+        order.otpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        changed = true;
+      }
+      if (order.otpAttemptsRemaining == null || !Number.isInteger(Number(order.otpAttemptsRemaining))) {
+        order.otpAttemptsRemaining = 3;
+        changed = true;
+      }
+    }
+    if (changed) {
+      order.updatedAt = new Date().toISOString();
+      await client.query(
+        "UPDATE agrochain_records SET data = $2::jsonb, updated_at = NOW() WHERE resource = 'orders' AND id = $1",
+        [row.id, JSON.stringify(order)]
+      );
+    }
+    await client.query('COMMIT');
     return res.set('Cache-Control', 'no-store, private').json({
-      orderId: result.rows[0].id,
-      isDeliveryVerified: Boolean(order.isDeliveryVerified || order.orderStatus === 'DELIVERED'),
-      deliveryOtp: order.isDeliveryVerified || order.orderStatus === 'DELIVERED'
-        ? null
-        : (typeof order.deliveryOtp === 'string' ? order.deliveryOtp : null),
-      otpAttemptsRemaining: Number.isFinite(Number(order.otpAttemptsRemaining))
-        ? Number(order.otpAttemptsRemaining)
-        : null,
-      otpExpiresAt: order.otpExpiresAt || null,
+      orderId: row.id, isDeliveryVerified: false, deliveryOtp: order.deliveryOtp,
+      otpAttemptsRemaining: Number(order.otpAttemptsRemaining), otpExpiresAt: order.otpExpiresAt,
     });
   } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Buyer delivery passcode lookup failed:', error.message);
     return res.status(500).json({ message: 'Could not load the delivery passcode. Please refresh and try again.' });
-  }
+  } finally { client.release(); }
 });
-
 app.post('/api/orders/:id/confirm-delivery', requireAuth, async (req, res) => {
   if (req.auth.role !== 'delivery') {
     return res.status(403).json({ message: 'Only the assigned delivery partner can confirm delivery' });
@@ -4916,6 +4943,18 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
          ON CONFLICT (resource, id) DO NOTHING`,
         [qcId, JSON.stringify(pendingQc)]
       );
+    }
+
+    if (resource === 'orders' && data.orderStatus !== 'DELIVERED' && !data.isDeliveryVerified) {
+      if (typeof data.deliveryOtp !== 'string' || !/^\d{4}$/.test(data.deliveryOtp)) {
+        data.deliveryOtp = typeof existing?.deliveryOtp === 'string' && /^\d{4}$/.test(existing.deliveryOtp)
+          ? existing.deliveryOtp
+          : String(randomInt(1000, 10000));
+      }
+      if (!data.otpExpiresAt) data.otpExpiresAt = existing?.otpExpiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      if (data.otpAttemptsRemaining == null || !Number.isInteger(Number(data.otpAttemptsRemaining))) {
+        data.otpAttemptsRemaining = Number.isInteger(Number(existing?.otpAttemptsRemaining)) ? Number(existing.otpAttemptsRemaining) : 3;
+      }
     }
 
     const result = await client.query(
