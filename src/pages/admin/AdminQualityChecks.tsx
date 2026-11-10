@@ -13,7 +13,6 @@ export const AdminQualityChecks: React.FC = () => {
   const [checks, setChecks] = useState(store.qualityChecks);
   const [orders, setOrders] = useState(store.orders);
   const [inspectors, setInspectors] = useState<InspectorAccount[]>([]);
-  const [inspectors, setInspectors] = useState<InspectorAccount[]>([]);
   const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -196,7 +195,7 @@ export const AdminQualityChecks: React.FC = () => {
             <div><label className="mb-1 block font-semibold text-slate-700">Inspection remarks</label><textarea required rows={3} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Record actual inspection findings…" /></div>
             <div><label className="mb-1 block font-semibold text-slate-700">Decision</label><select value={form.decision} onChange={(e) => setForm({ ...form, decision: e.target.value as QualityCheck['status'] })} className="w-full rounded-lg border border-slate-300 px-3 py-2"><option value="APPROVED">Approve — unlock pickup</option><option value="RECHECK_REQUIRED">Recheck required — keep on hold</option><option value="REJECTED">Reject — block pickup</option></select></div>
             <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Only submit values measured during the real inspection. Pending, recheck-required and rejected records must not unlock pickup.</p>
-            <div className="flex flex-wrap justify-end gap-2"><button type="button" disabled={busy} onClick={() => setSelected(null)} className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700">Cancel</button><button type="submit" disabled={busy || inspectors.length === 0} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Saving…' : 'Save inspection decision'}</button></div>
+            <div className="flex flex-wrap justify-end gap-2"><button type="button" disabled={busy} onClick={() => setSelected(null)} className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700">Cancel</button><button type="submit" disabled={busy || (Boolean(selected.orderId) && inspectors.length === 0)} className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Saving…' : 'Save inspection decision'}</button></div>
           </form>
         </section>
       </div>}
