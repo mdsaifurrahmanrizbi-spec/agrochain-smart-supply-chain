@@ -139,7 +139,7 @@ export const AdminQualityChecks: React.FC = () => {
               <td className="px-4 py-3 font-bold text-slate-900">{c.cropName}</td>
               <td className="px-4 py-3 font-mono font-semibold text-emerald-800">{c.batchCode || 'Not assigned'}</td>
               <td className="px-4 py-3">{c.farmerName || 'Not available'}{c.farmLocation ? ` (${c.farmLocation})` : ''}</td>
-              <td className="px-4 py-3"><div className="font-medium text-slate-800">{c.reviewedByName || c.inspectorName || 'Admin review required'}</div><div className="mt-1 text-[10px] text-slate-500">{c.reviewedByRole === 'ADMIN' ? 'Admin-managed QC' : c.status === 'PENDING' ? 'Awaiting Admin inspection' : 'Recorded QC reviewer'}</div></td>
+              <td className="px-4 py-3"><div className="font-medium text-slate-800">{c.reviewedByName || (c.status === 'PENDING' ? 'Admin review required' : c.inspectorName || 'Admin review required')}</div><div className="mt-1 text-[10px] text-slate-500">{c.reviewedByRole === 'ADMIN' ? 'Admin-managed QC' : c.status === 'PENDING' ? 'Awaiting Admin inspection' : 'Recorded QC reviewer'}</div></td>
               <td className="px-4 py-3 font-mono tabular-nums">{c.status === 'PENDING' ? 'Not measured' : `${c.moistureContentPercent}%`}</td>
               <td className="px-4 py-3 font-mono tabular-nums">{c.status === 'PENDING' ? 'Not measured' : `${c.pesticideResiduePpm} ppm`}</td>
               <td className="px-4 py-3">{c.status === 'PENDING' ? 'Not graded' : c.grade}</td>
