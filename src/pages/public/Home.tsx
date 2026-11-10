@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { HERO_IMAGE, RICE_IMAGE, PRODUCE_IMAGE, WAREHOUSE_IMAGE } from '../../services/mockData';
-import { store } from '../../services/api';
+import { agroApi, store } from '../../services/api';
 import { useCart } from '../../context/CartContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import {
@@ -26,6 +26,15 @@ export const Home: React.FC = () => {
   const { addToCart } = useCart();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [, setCatalogRevision] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([agroApi.getProducts(), agroApi.getBatches()]).then(() => {
+      if (active) setCatalogRevision((value) => value + 1);
+    }).catch((error) => console.error('Could not refresh featured products:', error));
+    return () => { active = false; };
+  }, []);
 
   const categories = [
     'All',
@@ -36,7 +45,11 @@ export const Home: React.FC = () => {
     'Cash Crops',
   ];
 
-  const featuredProducts = store.products.slice(0, 4);
+  const featuredProducts = store.products.filter((product) => {
+    const batch = store.batches.find((item) => item.id === product.batchId);
+    const approvedListing = product.listingStatus === 'APPROVED' || (!product.listingStatus && product.qualityStatus === 'APPROVED' && batch?.qualityStatus === 'APPROVED');
+    return approvedListing && product.qualityStatus === 'APPROVED' && batch?.qualityStatus === 'APPROVED';
+  }).slice(0, 4);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
