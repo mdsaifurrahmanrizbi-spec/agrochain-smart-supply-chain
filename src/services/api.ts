@@ -925,6 +925,26 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     return newOrder;
   },
 
+  // Retrieve the delivery passcode from the server for the authenticated order owner.
+  async getBuyerDeliveryPasscode(orderId: string): Promise<{
+    orderId: string;
+    isDeliveryVerified: boolean;
+    deliveryOtp: string | null;
+    otpAttemptsRemaining: number | null;
+    otpExpiresAt: string | null;
+  }> {
+    const response = await fetch(
+      `${API_BASE_URL}/buyer/orders/${encodeURIComponent(orderId)}/delivery-passcode`,
+      { headers: authHeaders(), cache: 'no-store' }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || 'Could not load delivery passcode');
+    if (typeof data.orderId !== 'string' || typeof data.isDeliveryVerified !== 'boolean') {
+      throw new Error('The server returned an invalid delivery passcode response');
+    }
+    return data;
+  },
+
   // Tracking Timeline
   async getTrackingEvents(orderId: string): Promise<TrackingEvent[]> {
     try {
