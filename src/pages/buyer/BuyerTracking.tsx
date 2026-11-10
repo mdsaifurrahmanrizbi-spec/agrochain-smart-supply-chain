@@ -212,10 +212,10 @@ export const BuyerTracking: React.FC = () => {
               ) : (
                 <div className="space-y-1">
                   <div className="font-mono text-3xl font-black text-white tracking-widest bg-emerald-950/60 py-1.5 px-3 rounded-lg border border-emerald-400/40">
-                    {deliveryPasscode.loading ? 'Loading…' : deliveryPasscode.otp ? deliveryPasscode.otp : 'OTP not available'}
+                    {deliveryPasscode.otp || (deliveryPasscode.loading ? 'Loading…' : 'OTP not available')}
                   </div>
                   <div className="text-[10px] text-emerald-200 mt-1">
-                    {deliveryPasscode.loading ? 'Checking secure order record…' : deliveryPasscode.error ? deliveryPasscode.error : deliveryPasscode.attemptsRemaining === null ? 'Verification attempts unavailable' : `${deliveryPasscode.attemptsRemaining} verification attempts remaining`}
+                    {deliveryPasscode.otp ? (deliveryPasscode.attemptsRemaining === null ? 'Share this code only when receiving your product.' : `${deliveryPasscode.attemptsRemaining} verification attempts remaining`) : deliveryPasscode.loading ? 'Checking secure order record…' : deliveryPasscode.error ? deliveryPasscode.error : 'OTP not available'}
                   </div>
                 </div>
               )}
