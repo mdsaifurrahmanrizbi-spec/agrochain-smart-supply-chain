@@ -743,12 +743,20 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
   },
 
   // Orders
-  async getOrders(userId?: string, role?: string): Promise<Order[]> {
+  async getOrders(
+    userId?: string,
+    role?: string,
+    options: { strict?: boolean } = {}
+  ): Promise<Order[]> {
     try {
       const backendOrders = await getBackendRecords<Order>('orders');
       store.orders = backendOrders;
       localStorage.setItem('agro_orders', JSON.stringify(backendOrders));
     } catch (error) {
+      // Strict callers (such as the authenticated buyer order history) must
+      // show the request failure instead of silently presenting an empty or
+      // stale local cache as the current database result.
+      if (options.strict) throw error;
       if (role === 'warehouse' || isWarehouseSession()) {
         store.orders = [];
         localStorage.setItem('agro_orders', JSON.stringify([]));
@@ -757,7 +765,7 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
       console.warn('Could not refresh orders from backend; using cached orders for non-warehouse views.', error);
     }
     if (role === 'buyer' && userId) {
-      return store.orders.filter((o) => o.buyerId === userId);
+      return store.orders.filter((o) => String(o.buyerId) === String(userId));
     }
     if (role === 'farmer' && userId) {
       return store.orders.filter((o) => o.items.some((item) => item.farmerId === userId));
