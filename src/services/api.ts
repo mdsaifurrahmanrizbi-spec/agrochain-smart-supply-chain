@@ -1690,8 +1690,8 @@ const events =
           description: `Consignment placed on hold at farm by ${qc.reviewedByName || qc.inspectorName}. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Remarks: ${qc.remarks}. Secondary evaluation required; pickup paused.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
-          actorRole: 'Pickup Person / QC Inspector',
-          actorName: qc.inspectorName,
+          actorRole: qc.reviewedByRole === 'ADMIN' ? 'Admin' : 'Pickup Person / QC Inspector',
+          actorName: qc.reviewedByName || qc.inspectorName,
           status: 'IN_PROGRESS',
         });
       }
