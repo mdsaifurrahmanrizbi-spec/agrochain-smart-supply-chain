@@ -5082,7 +5082,7 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
         pesticideResiduePpm: 0,
         foreignMatterPercent: 0,
         status: 'PENDING',
-        remarks: 'New farmer crop batch submitted. Inspection measurements and remarks must be entered by an assigned inspector before certification.',
+        remarks: 'New farmer crop batch submitted. Inspection measurements and remarks must be entered by an Admin or assigned inspector before certification.',
       };
       await client.query(
         "INSERT INTO agrochain_records (resource, id, data, created_at, updated_at) VALUES ('qualityChecks', $1, $2::jsonb, NOW(), NOW()) ON CONFLICT (resource, id) DO NOTHING",
@@ -5090,14 +5090,44 @@ app.put('/api/records/:resource/:id', requireAuth, async (req, res) => {
       );
     }
 
-    if (resource === 'qualityChecks' && existing && !data.orderId &&
+    if (resource === 'qualityChecks' && existing && !existing.orderId && !data.orderId &&
+        String(data.batchId || '') === String(existing.batchId || '') &&
         ['admin', 'inspector'].includes(role) && data.status !== existing.status && data.batchId) {
+      if (role === 'admin') {
+        const moisture = Number(data.moistureContentPercent);
+        const pesticide = Number(data.pesticideResiduePpm);
+        const foreignMatter = Number(data.foreignMatterPercent);
+        const validGrades = ['Grade A - Premium', 'Grade B - Standard', 'Grade C - Commercial'];
+        if (!['APPROVED', 'REJECTED', 'RECHECK_REQUIRED'].includes(String(data.status)) ||
+            !Number.isFinite(moisture) || moisture < 0 || moisture > 100 ||
+            !Number.isFinite(pesticide) || pesticide < 0 ||
+            !Number.isFinite(foreignMatter) || foreignMatter < 0 || foreignMatter > 100 ||
+            !validGrades.includes(String(data.grade)) ||
+            typeof data.remarks !== 'string' || !data.remarks.trim()) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            message: 'Enter valid QC measurements, a grade classification, and inspection remarks before recording an Admin decision',
+          });
+        }
+        const reviewerResult = await client.query('SELECT name FROM auth_users WHERE id = $1', [req.auth.sub]);
+        data.inspectorId = '';
+        data.inspectorName = 'Admin QC Review';
+        data.reviewedByRole = 'ADMIN';
+        data.reviewedByName = reviewerResult.rows[0]?.name || 'Admin';
+      } else {
+        data.reviewedByRole = 'INSPECTOR';
+        data.reviewedByName = data.inspectorName || 'Inspector';
+      }
       const batchResult = await client.query(
         "SELECT id, data FROM agrochain_records WHERE resource = 'batches' AND id = $1 FOR UPDATE",
         [String(data.batchId)]
       );
       const batchRow = batchResult.rows[0];
-      if (batchRow) {
+      if (!batchRow) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'The crop batch linked to this QC record was not found' });
+      }
+      {
         const batchData = {
           ...batchRow.data,
           qualityStatus: data.status,

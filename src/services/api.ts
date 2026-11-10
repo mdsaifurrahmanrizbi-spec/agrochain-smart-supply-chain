@@ -1591,7 +1591,7 @@ async getQualityChecks(): Promise<QualityCheck[]> {
         pesticideResiduePpm: 0,
         foreignMatterPercent: 0,
         status: 'PENDING',
-        remarks: 'Inspection not performed yet. Measurements and grade must be entered by the inspector.',
+        remarks: 'Inspection not performed yet. Measurements and grade must be entered by the Admin or assigned inspector.',
       };
       // Keep the pending QC visible in this session even if a backend write fails;
       // log the failure so it can be diagnosed instead of silently losing the queue item.
@@ -1663,11 +1663,11 @@ const events =
           id: `trk-${Date.now()}-qc`,
           orderId: order.id,
           title: 'FARM QUALITY CHECK APPROVED',
-          description: `QC passed by ${qc.inspectorName}. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Remarks: ${qc.remarks}. Farm pickup unlocked.`,
+          description: `QC passed by ${qc.reviewedByName || qc.inspectorName}. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Remarks: ${qc.remarks}. Farm pickup unlocked.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
-          actorRole: 'Pickup Person / QC Inspector',
-          actorName: qc.inspectorName,
+          actorRole: qc.reviewedByRole === 'ADMIN' ? 'Admin' : 'Pickup Person / QC Inspector',
+          actorName: qc.reviewedByName || qc.inspectorName,
           status: 'COMPLETED',
         });
       } else if (update.status === 'REJECTED') {
@@ -1675,11 +1675,11 @@ const events =
           id: `trk-${Date.now()}-qcfail`,
           orderId: order.id,
           title: 'FARM QUALITY CHECK REJECTED',
-          description: `QC failed. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Inspector remarks: ${qc.remarks}. Farm pickup BLOCKED.`,
+          description: `QC failed. Reviewed by ${qc.reviewedByName || qc.inspectorName}. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Inspection remarks: ${qc.remarks}. Farm pickup BLOCKED.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
-          actorRole: 'Pickup Person / QC Inspector',
-          actorName: qc.inspectorName,
+          actorRole: qc.reviewedByRole === 'ADMIN' ? 'Admin' : 'Pickup Person / QC Inspector',
+          actorName: qc.reviewedByName || qc.inspectorName,
           status: 'COMPLETED',
         });
       } else if (update.status === 'RECHECK_REQUIRED') {
@@ -1687,11 +1687,11 @@ const events =
           id: `trk-${Date.now()}-qcrecheck`,
           orderId: order.id,
           title: 'FARM QUALITY RECHECK REQUIRED',
-          description: `Consignment placed on hold at farm by ${qc.inspectorName}. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Remarks: ${qc.remarks}. Secondary evaluation required; pickup paused.`,
+          description: `Consignment placed on hold at farm by ${qc.reviewedByName || qc.inspectorName}. Grade: ${qc.grade}; moisture: ${qc.moistureContentPercent}%; pesticide residue: ${qc.pesticideResiduePpm} ppm; foreign matter: ${qc.foreignMatterPercent}%. Remarks: ${qc.remarks}. Secondary evaluation required; pickup paused.`,
           location: qc.farmLocation || 'Farm Origin Gate',
           timestamp: now,
-          actorRole: 'Pickup Person / QC Inspector',
-          actorName: qc.inspectorName,
+          actorRole: qc.reviewedByRole === 'ADMIN' ? 'Admin' : 'Pickup Person / QC Inspector',
+          actorName: qc.reviewedByName || qc.inspectorName,
           status: 'IN_PROGRESS',
         });
       }
