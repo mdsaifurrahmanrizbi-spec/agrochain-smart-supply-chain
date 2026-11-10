@@ -289,11 +289,6 @@ export const ProductDetail: React.FC = () => {
                 </p>
               </div>
 
-              <div className="text-xs space-y-1.5 text-slate-600 bg-slate-50 p-3 rounded-lg font-mono">
-                <div className="text-[10px] uppercase text-slate-400">Blockchain Hash</div>
-                <div className="truncate text-emerald-800">{batch.blockchainHash}</div>
-              </div>
-
               <button
                 onClick={() => setShowQrModal(false)}
                 className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold"
