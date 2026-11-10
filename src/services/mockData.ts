@@ -229,8 +229,7 @@ export const INITIAL_BATCHES: CropBatch[] = [
     estimatedQuantityKg: 4500,
     actualQuantityKg: 4320,
     qualityStatus: 'APPROVED',
-    blockchainHash: '0x8f7c32e19a4b8d0c61239aa85114ef97b5e892c461324810bf298711eec4a091',
-    qrCodeUrl: 'https://agrochain.gov.bd/verify/batch/BOG-CHIN-202603',
+    qrCodeUrl: '/traceability/BOG-CHIN-202603',
   },
   {
     id: 'batch-2026-002',
@@ -247,8 +246,7 @@ export const INITIAL_BATCHES: CropBatch[] = [
     estimatedQuantityKg: 12000,
     actualQuantityKg: 11850,
     qualityStatus: 'APPROVED',
-    blockchainHash: '0x4e12da889f01bc43a78912c9812401f89312ea998bc49281a1004bb912854cf7',
-    qrCodeUrl: 'https://agrochain.gov.bd/verify/batch/BOG-POT-202604',
+    qrCodeUrl: '/traceability/BOG-POT-202604',
   },
   {
     id: 'batch-2026-003',
@@ -265,7 +263,6 @@ export const INITIAL_BATCHES: CropBatch[] = [
     estimatedQuantityKg: 3200,
     actualQuantityKg: 3100,
     qualityStatus: 'PENDING',
-    blockchainHash: '0x19bb8100e47823fca81920ac34910287a98810234a9192bbda31849019283401',
     qrCodeUrl: 'https://agrochain.gov.bd/verify/batch/RAJ-MAN-202605',
   },
   {
@@ -283,8 +280,7 @@ export const INITIAL_BATCHES: CropBatch[] = [
     estimatedQuantityKg: 2800,
     actualQuantityKg: 2750,
     qualityStatus: 'APPROVED',
-    blockchainHash: '0xab4901928038f881902830182498102340810238491028304910293840192834',
-    qrCodeUrl: 'https://agrochain.gov.bd/verify/batch/BOG-TOM-202606',
+    qrCodeUrl: '/traceability/BOG-TOM-202606',
   },
 ];
 

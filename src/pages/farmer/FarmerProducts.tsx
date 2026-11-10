@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Product } from '../../types';
+import { CropBatch, Product } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Package, Plus, Search, Check, MapPin, Tag } from 'lucide-react';
 
@@ -38,6 +38,7 @@ export const FarmerProducts: React.FC = () => {
   const { user } = useAuth();
   const farmerId = user?.id || 'u-farmer-1';
   const [products, setProducts] = useState(store.products);
+  const [batches, setBatches] = useState<CropBatch[]>(store.batches.filter((batch) => batch.farmerId === farmerId));
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState('');
   const [imageError, setImageError] = useState('');
@@ -45,6 +46,7 @@ export const FarmerProducts: React.FC = () => {
 
   const [formData, setFormData] = useState({
     name: '',
+    batchId: '',
     category: 'Grains & Cereals',
     cropType: 'Paddy Rice',
     variety: '',
@@ -59,6 +61,17 @@ export const FarmerProducts: React.FC = () => {
     isOrganic: true,
   });
 
+  useEffect(() => {
+    let active = true;
+    Promise.all([agroApi.getProducts(), agroApi.getBatches(farmerId)]).then(([freshProducts, freshBatches]) => {
+      if (!active) return;
+      setProducts([...freshProducts]);
+      setBatches([...freshBatches]);
+    }).catch((error) => console.error('Could not refresh farmer product data:', error));
+    return () => { active = false; };
+  }, [farmerId]);
+
+  const selectedBatch = batches.find((batch) => batch.id === formData.batchId);
   const myProducts = products.filter((p) => p.farmerId === farmerId);
   const displayed = myProducts.filter(
     (p) => p.name.toLowerCase().includes(search.toLowerCase()) || p.variety.toLowerCase().includes(search.toLowerCase())
@@ -80,6 +93,10 @@ export const FarmerProducts: React.FC = () => {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedBatch) {
+      setImageError('Select one of your registered crop batches before submitting this listing.');
+      return;
+    }
     if (!formData.imageUrl) {
       setImageError('Please upload a product image before publishing.');
       return;
@@ -89,16 +106,21 @@ export const FarmerProducts: React.FC = () => {
     try {
       await agroApi.createProduct({
       ...formData,
-      batchId: `batch-2026-${Date.now().toString().slice(-3)}`,
+      batchId: selectedBatch.id,
+      cropType: selectedBatch.cropName,
+      variety: selectedBatch.variety,
+      farmName: selectedBatch.farmName,
+      harvestDate: selectedBatch.harvestDate,
       farmerId: user?.id || 'u-farmer-1',
-      farmerName: user?.name || 'Md. Rafiqul Islam',
-      qualityStatus: 'APPROVED',
-      featured: true,
-      rating: 4.8,
+      farmerName: user?.name || 'Farmer',
+      qualityStatus: selectedBatch.qualityStatus,
+      listingStatus: 'PENDING_APPROVAL',
+      featured: false,
+      rating: undefined,
       });
       setProducts([...store.products]);
       setShowAddModal(false);
-      setFormData((current) => ({ ...current, name: '', variety: '', description: '', imageUrl: '' }));
+      setFormData((current) => ({ ...current, batchId: '', name: '', variety: '', description: '', imageUrl: '' }));
     } catch (error) {
       setImageError(error instanceof Error ? error.message : 'Could not publish this product. Please try again.');
     } finally {
@@ -150,6 +172,7 @@ export const FarmerProducts: React.FC = () => {
                 <th className="py-3 px-4">Stock</th>
                 <th className="py-3 px-4">Harvest Date</th>
                 <th className="py-3 px-4">Quality Status</th>
+                <th className="py-3 px-4">Listing Approval</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -172,6 +195,9 @@ export const FarmerProducts: React.FC = () => {
                   <td className="py-3 px-4">
                     <StatusBadge status={p.qualityStatus} size="sm" />
                   </td>
+                  <td className="py-3 px-4">
+                    <StatusBadge status={p.listingStatus || (p.qualityStatus === 'APPROVED' && batches.find((batch) => batch.id === p.batchId)?.qualityStatus === 'APPROVED' ? 'APPROVED' : 'PENDING_APPROVAL')} size="sm" />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -191,6 +217,24 @@ export const FarmerProducts: React.FC = () => {
             </div>
 
             <form onSubmit={handleAdd} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Crop Batch</label>
+                <select
+                  required
+                  value={formData.batchId}
+                  onChange={(e) => {
+                    const batch = batches.find((item) => item.id === e.target.value);
+                    setFormData((current) => ({ ...current, batchId: e.target.value, cropType: batch?.cropName || current.cropType, variety: batch?.variety || current.variety, harvestDate: batch?.harvestDate || current.harvestDate }));
+                  }}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-emerald-600"
+                >
+                  <option value="">Select a registered crop batch</option>
+                  {batches.map((batch) => (
+                    <option key={batch.id} value={batch.id}>{batch.batchCode} — {batch.cropName} ({batch.variety}) · {batch.qualityStatus}</option>
+                  ))}
+                </select>
+                {batches.length === 0 && <p className="mt-1 text-amber-700">Create a Crop Batch first. A product must be linked to a real batch.</p>}
+              </div>
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Product Name</label>
                 <input

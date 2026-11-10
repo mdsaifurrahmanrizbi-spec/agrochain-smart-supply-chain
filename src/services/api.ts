@@ -691,18 +691,14 @@ async getBatches(farmerId?: string): Promise<CropBatch[]> {
 
 
   
-async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>): Promise<CropBatch> {
+async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode'>): Promise<CropBatch> {
   const code = `BOG-${batch.cropName.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-6)}`;
 
   const newBatch: CropBatch = {
     ...batch,
     id: `batch-${Date.now()}`,
     batchCode: code,
-    blockchainHash: `0x${Array.from(
-      { length: 64 },
-      () => Math.floor(Math.random() * 16).toString(16)
-    ).join('')}`,
-    qrCodeUrl: `https://agrochain.gov.bd/verify/batch/${code}`,
+    qrCodeUrl: `${window.location.origin}/traceability/${encodeURIComponent(code)}`,
   };
 
   await saveBackendRecord('batches', newBatch);
@@ -740,6 +736,17 @@ async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>)
     store.products.unshift(newProduct);
     localStorage.setItem('agro_products', JSON.stringify(store.products));
     return newProduct;
+  },
+
+  async updateProduct(id: string, update: Partial<Product>): Promise<Product> {
+    const current = store.products.find((product) => product.id === id);
+    if (!current) throw new Error('Product listing not found');
+    const updated = { ...current, ...update, id };
+    await saveBackendRecord('products', updated);
+    const index = store.products.findIndex((product) => product.id === id);
+    if (index >= 0) store.products[index] = updated;
+    localStorage.setItem('agro_products', JSON.stringify(store.products));
+    return updated;
   },
 
   // Orders
@@ -1509,6 +1516,43 @@ async getQualityChecks(): Promise<QualityCheck[]> {
     // Create only a PENDING inspection record; never invent inspection results.
     const backendOrders = await getBackendRecords<Order>('orders');
     store.orders = backendOrders;
+
+    let activeRole = '';
+    try {
+      activeRole = String(JSON.parse(localStorage.getItem('agro_active_user') || '{}').role || '').toLowerCase();
+    } catch {
+      activeRole = '';
+    }
+    // Backfill pending QC queue records for older crop batches created before
+    // automatic batch-to-inspection linking was introduced. Only Admin creates
+    // missing queue records; inspectors only work on assigned records.
+    if (activeRole === 'admin') {
+      const backendBatches = await getBackendRecords<CropBatch>('batches');
+      store.batches = backendBatches;
+      for (const batch of backendBatches) {
+        if (batch.qualityStatus !== 'PENDING' || store.qualityChecks.some((check) => check.batchId === batch.id && !check.orderId)) continue;
+        const pendingBatchQc: QualityCheck = {
+          id: `qc-batch-${batch.id}`,
+          batchId: batch.id,
+          batchCode: batch.batchCode,
+          cropName: batch.cropName,
+          farmerName: batch.farmerName,
+          farmLocation: batch.farmName,
+          inspectorId: '',
+          inspectorName: 'Not assigned',
+          inspectionDate: '',
+          inspectionLocation: 'FARM',
+          grade: 'Not graded',
+          moistureContentPercent: 0,
+          pesticideResiduePpm: 0,
+          foreignMatterPercent: 0,
+          status: 'PENDING',
+          remarks: 'Crop batch awaiting inspection. Enter actual measured values and remarks before approval.',
+        };
+        await saveBackendRecord('qualityChecks', pendingBatchQc);
+        store.qualityChecks.push(pendingBatchQc);
+      }
+    }
     for (const order of backendOrders) {
       if (!['CONFIRMED', 'QC_SCHEDULED', 'PICKUP_ASSIGNED'].includes(String(order.orderStatus || '').toUpperCase())) continue;
 
