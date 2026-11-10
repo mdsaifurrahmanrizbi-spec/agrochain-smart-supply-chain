@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { flushSync } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { store, agroApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -20,18 +19,16 @@ import {
 
 export const BuyerTracking: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
-
-  const buyerId = user?.id || 'u-buyer-1';
-  const myOrders = store.orders.filter((o) => o.buyerId === buyerId);
-
-  // Match order by id, orderNumber, or default to first
-  const order =
-    store.orders.find((o) => o.id === id || o.orderNumber === id) ||
-    myOrders[0] ||
-    store.orders[0];
-
-  const [otpDiagnostic, setOtpDiagnostic] = useState('Waiting for OTP effect');
+  const { user, authLoading } = useAuth();
+  type BuyerOrder = Awaited<ReturnType<typeof agroApi.getOrders>>[number];
+  const [order, setOrder] = useState<BuyerOrder | undefined>(() =>
+    store.orders.find((candidate) =>
+      (candidate.id === id || candidate.orderNumber === id) &&
+      String(candidate.buyerId) === String(user?.id)
+    )
+  );
+  const [orderLoading, setOrderLoading] = useState(true);
+  const [orderError, setOrderError] = useState('');
   const [deliveryPasscode, setDeliveryPasscode] = useState<{
     loading: boolean;
     error: string;
@@ -39,26 +36,71 @@ export const BuyerTracking: React.FC = () => {
     attemptsRemaining: number | null;
     verified: boolean;
   }>({ loading: true, error: '', otp: null, attemptsRemaining: null, verified: false });
-  const [events, setEvents] = useState(store.trackingEvents[order?.id || ''] || []);
+  const [events, setEvents] = useState<Awaited<ReturnType<typeof agroApi.getTrackingEvents>>>([]);
+
+  // Always resolve the requested order from the authenticated buyer's backend order list.
+  // Never substitute another order when the URL contains an unknown or stale ID.
   useEffect(() => {
-    let active = true;
-    if (order?.id) {
-      agroApi.getTrackingEvents(order.id)
-        .then((freshEvents) => { if (active) setEvents(freshEvents); })
-        .catch((error) => console.error('Could not load order tracking history:', error));
+    if (authLoading) return;
+    if (!user || user.role !== 'buyer') {
+      setOrder(undefined);
+      setOrderError('Sign in with your buyer account to view this shipment.');
+      setOrderLoading(false);
+      return;
     }
+    if (!id) {
+      setOrder(undefined);
+      setOrderError('Please open a shipment from My Orders to track the correct order.');
+      setOrderLoading(false);
+      return;
+    }
+
+    let active = true;
+    setOrderLoading(true);
+    setOrderError('');
+    void agroApi.getOrders(user.id, 'buyer', { strict: true })
+      .then((buyerOrders) => {
+        if (!active) return;
+        const exactOrder = buyerOrders.find((candidate) =>
+          candidate.id === id || candidate.orderNumber === id
+        );
+        if (!exactOrder) {
+          setOrder(undefined);
+          setOrderError('This order could not be found in your account. Open My Orders and select Track for the correct order.');
+          return;
+        }
+        setOrder(exactOrder);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setOrder(undefined);
+        setOrderError(error instanceof Error ? error.message : 'Could not load this order. Please try again.');
+      })
+      .finally(() => {
+        if (active) setOrderLoading(false);
+      });
+    return () => { active = false; };
+  }, [authLoading, id, user?.id, user?.role]);
+
+  useEffect(() => {
+    if (!order?.id) {
+      setEvents([]);
+      return;
+    }
+    let active = true;
+    setEvents(store.trackingEvents[order.id] || []);
+    agroApi.getTrackingEvents(order.id)
+      .then((freshEvents) => { if (active) setEvents(freshEvents); })
+      .catch((error) => console.error('Could not load order tracking history:', error));
     return () => { active = false; };
   }, [order?.id]);
 
   useEffect(() => {
-    setOtpDiagnostic(`Effect ran · order=${order?.id || 'missing'} · user=${user?.id || 'missing'} · role=${user?.role || 'missing'}`);
-    setDeliveryPasscode({ loading: true, error: '', otp: null, attemptsRemaining: null, verified: false });
-
-    if (!order?.id || user?.role !== 'buyer' || String(order.buyerId) !== String(user.id)) {
-      setOtpDiagnostic(`Blocked by ownership check · order=${order?.id || 'missing'} · buyer=${order?.buyerId || 'missing'} · user=${user?.id || 'missing'} · role=${user?.role || 'missing'}`);
+    if (orderLoading) return;
+    if (!order || !user || user.role !== 'buyer' || String(order.buyerId) !== String(user.id)) {
       setDeliveryPasscode({
         loading: false,
-        error: 'Sign in with the buyer account that placed this order to view its delivery passcode.',
+        error: 'The requested order could not be verified for this buyer account.',
         otp: null,
         attemptsRemaining: null,
         verified: false,
@@ -66,42 +108,46 @@ export const BuyerTracking: React.FC = () => {
       return;
     }
 
-    // Always settle the visible loading state when the request resolves. The previous
-    // effect-local active flag could discard a valid response during React effect
-    // cleanup/replay, leaving the OTP card stuck on "Loading…".
-    const loadDeliveryPasscode = async () => {
-      setOtpDiagnostic(`Request started · ${order.id}`);
-      try {
-        const result = await agroApi.getBuyerDeliveryPasscode(order.id);
-        // Commit the resolved passcode immediately so the buyer sees it in the OTP box.
-        // This also avoids leaving stale "Loading…" text visible after the request has resolved.
-        flushSync(() => {
-          setOtpDiagnostic(`API resolved · response order=${result.orderId} · OTP present=${Boolean(result.deliveryOtp)} · verified=${result.isDeliveryVerified}`);
-          setDeliveryPasscode({
-            loading: false,
-            error: '',
-            otp: result.deliveryOtp,
-            attemptsRemaining: result.otpAttemptsRemaining,
-            verified: result.isDeliveryVerified,
-          });
+    let active = true;
+    setDeliveryPasscode({ loading: true, error: '', otp: null, attemptsRemaining: null, verified: false });
+    void agroApi.getBuyerDeliveryPasscode(order.id)
+      .then((result) => {
+        if (!active) return;
+        if (String(result.orderId) !== String(order.id)) {
+          throw new Error('The passcode response did not match this order. Please refresh or contact support.');
+        }
+        setDeliveryPasscode({
+          loading: false,
+          error: '',
+          otp: result.deliveryOtp,
+          attemptsRemaining: result.otpAttemptsRemaining,
+          verified: result.isDeliveryVerified,
         });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown request error';
-        flushSync(() => {
-          setOtpDiagnostic(`Request failed · ${message}`);
-          setDeliveryPasscode({
-            loading: false,
-            error: error instanceof Error ? error.message : 'Could not load delivery passcode. Please refresh.',
-            otp: null,
-            attemptsRemaining: null,
-            verified: false,
-          });
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setDeliveryPasscode({
+          loading: false,
+          error: error instanceof Error ? error.message : 'Could not load delivery passcode. Please refresh.',
+          otp: null,
+          attemptsRemaining: null,
+          verified: false,
         });
-      }
-    };
+      });
+    return () => { active = false; };
+  }, [orderLoading, order?.id, order?.buyerId, user?.id, user?.role]);
 
-    void loadDeliveryPasscode();
-  }, [order?.id, order?.buyerId, user?.id, user?.role]);
+  if (authLoading || orderLoading) {
+    return <div className="max-w-4xl mx-auto rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Loading your order…</div>;
+  }
+  if (!order) {
+    return (
+      <div className="max-w-4xl mx-auto rounded-xl border border-amber-200 bg-amber-50 p-6 space-y-3">
+        <p className="text-sm font-semibold text-amber-950">{orderError || 'Order not found.'}</p>
+        <Link to="/buyer/orders" className="inline-flex text-sm font-semibold text-emerald-800 underline">Back to My Orders</Link>
+      </div>
+    );
+  }
 
   const farmQc = store.qualityChecks.find((check) =>
     check.orderId === order?.id || check.id === order?.qualityCheckId
@@ -161,9 +207,6 @@ export const BuyerTracking: React.FC = () => {
                   </div>
                   <div className="text-[10px] text-emerald-200 mt-1">
                     {deliveryPasscode.loading ? 'Checking secure order record…' : deliveryPasscode.error ? deliveryPasscode.error : deliveryPasscode.attemptsRemaining === null ? 'Verification attempts unavailable' : `${deliveryPasscode.attemptsRemaining} verification attempts remaining`}
-                  </div>
-                  <div className="mt-2 border-t border-white/15 pt-2 text-left text-[9px] leading-relaxed text-emerald-100/80" data-testid="otp-diagnostic" aria-live="polite">
-                    Diagnostic: {otpDiagnostic}
                   </div>
                 </div>
               )}
