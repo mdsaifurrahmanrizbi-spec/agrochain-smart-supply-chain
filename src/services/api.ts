@@ -691,7 +691,7 @@ async getBatches(farmerId?: string): Promise<CropBatch[]> {
 
 
   
-async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode' | 'blockchainHash'>): Promise<CropBatch> {
+async createBatch(batch: Omit<CropBatch, 'id' | 'batchCode'>): Promise<CropBatch> {
   const code = `BOG-${batch.cropName.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-6)}`;
 
   const newBatch: CropBatch = {
