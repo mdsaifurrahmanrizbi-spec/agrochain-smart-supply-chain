@@ -138,3 +138,55 @@ html:has(.auth-night-page),body:has(.auth-night-page),#root:has(.auth-night-page
   .auth-night-page{padding:6px!important}
   .auth-glass-card{width:min(100%,420px)!important;max-height:calc(100svh - 12px)!important;padding:10px 12px!important}
 }
+
+
+/* Login-only centering correction: keep the existing card styling unchanged. */
+.auth-night-page.auth-night-login {
+  position: relative !important;
+  width: 100% !important;
+  height: 100dvh !important;
+  min-height: 0 !important;
+  max-height: 100dvh !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.auth-night-login > .auth-night-layout {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.auth-night-login .auth-night-main {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.auth-night-login .auth-glass-card--login {
+  position: relative !important;
+  inset: auto !important;
+  float: none !important;
+  align-self: center !important;
+  margin: 0 auto !important;
+  transform: none !important;
+  flex: 0 1 auto !important;
+}
+@media (max-width: 640px) {
+  .auth-night-login .auth-glass-card--login {
+    width: calc(100% - 16px) !important;
+    max-width: 440px !important;
+    margin: 0 auto !important;
+  }
+}
