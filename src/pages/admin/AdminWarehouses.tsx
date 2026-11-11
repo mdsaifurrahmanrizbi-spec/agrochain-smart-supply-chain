@@ -15,7 +15,8 @@ export const AdminWarehouses: React.FC = () => {
   const [repairRunning, setRepairRunning] = useState(false);
   const [repairError, setRepairError] = useState('');
   const [repairMessage, setRepairMessage] = useState('');
-  const [godownLinkCandidates, setGodownLinkCandidates] = useState<Array<{ warehouseId: string; facilityName: string; code: string; managerId: string; managerName: string; city: string; area: string; existingMatches: Array<{ id: string; warehouseLinked: boolean }> }>>([]);
+  const [godownLinkPreview, setGodownLinkPreview] = useState<{ candidates: Array<{ warehouseId: string; facilityName: string; code: string; managerId: string; managerName: string; city: string; area: string; existingMatches: Array<{ id: string; warehouseLinked: boolean }> }>; count: number }>({ candidates: [], count: 0 });
+  const godownLinkCandidates = godownLinkPreview.candidates;
   const [godownLinkLoading, setGodownLinkLoading] = useState(false);
   const [godownLinkRunning, setGodownLinkRunning] = useState(false);
   const [godownLinkError, setGodownLinkError] = useState('');
@@ -51,7 +52,10 @@ export const AdminWarehouses: React.FC = () => {
       setGodownLinkError('');
       try {
         const result = await agroApi.previewGodownLinkRepair();
-        if (active) setGodownLinkCandidates(result.candidates);
+        if (active) {
+          if (result.count !== result.candidates.length) throw new Error('The godown-link preview count does not match its candidate list. Refresh and try again.');
+          setGodownLinkPreview({ candidates: result.candidates, count: result.count });
+        }
       } catch (loadError) {
         if (active) setGodownLinkError(loadError instanceof Error ? loadError.message : 'Could not load operational godown-link preview.');
       } finally {
@@ -70,10 +74,16 @@ export const AdminWarehouses: React.FC = () => {
       if (isInitialLoad) setLoading(true);
       else setRefreshing(true);
       setError('');
+      let warehouseTimeoutId: number | undefined;
       try {
         // Always request authenticated backend records. Never render local
         // demo seed data as if it were the live warehouse network.
-        const records = await agroApi.getWarehouses({ strict: true });
+        const records = await Promise.race([
+          agroApi.getWarehouses({ strict: true }),
+          new Promise<Warehouse[]>((_, reject) => {
+            warehouseTimeoutId = window.setTimeout(() => reject(new Error('Warehouse list did not respond in time. Check the backend connection and use Refresh warehouses to retry.')), 18000);
+          }),
+        ]);
         if (active) setWarehouses(records);
       } catch (loadError) {
         if (active) {
@@ -83,6 +93,7 @@ export const AdminWarehouses: React.FC = () => {
           setError(loadError instanceof Error ? loadError.message : 'Unable to load warehouse records.');
         }
       } finally {
+        if (warehouseTimeoutId !== undefined) window.clearTimeout(warehouseTimeoutId);
         if (active) {
           hasLoadedRef.current = true;
           setLoading(false);
@@ -197,7 +208,7 @@ export const AdminWarehouses: React.FC = () => {
             type="button"
             disabled={godownLinkLoading || godownLinkRunning || godownLinkCandidates.length === 0}
             onClick={async () => {
-              const confirmed = window.confirm(`Create or link ${godownLinkCandidates.length} operational godown record(s) for the listed regional warehouse facilities? This writes only the missing facility associations.`);
+              const confirmed = window.confirm(`Create or link ${godownLinkPreview.count} operational godown record(s) for the listed regional warehouse facilities? The server will re-check current records inside a transaction before writing.`);
               if (!confirmed) return;
               setGodownLinkRunning(true);
               setGodownLinkError('');
@@ -214,11 +225,11 @@ export const AdminWarehouses: React.FC = () => {
             }}
             className="rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {godownLinkRunning ? 'Linking...' : `Repair ${godownLinkCandidates.length} godown link(s)`}
+            {godownLinkRunning ? 'Linking...' : `Repair ${godownLinkPreview.count} godown link(s)`}
           </button>
         </div>
         {godownLinkLoading && <p className="text-xs text-slate-500">Checking regional godown links...</p>}
-        {!godownLinkLoading && !godownLinkError && <p className="text-xs font-semibold text-slate-700">{godownLinkCandidates.length} regional warehouse facility link(s) need attention.</p>}
+        {!godownLinkLoading && !godownLinkError && <p className="text-xs font-semibold text-slate-700">{godownLinkPreview.count} regional warehouse facility link(s) need attention.</p>}
         {godownLinkCandidates.length > 0 && (
           <div className="overflow-x-auto rounded-lg border border-sky-200 bg-white">
             <table className="min-w-full text-left text-xs">
